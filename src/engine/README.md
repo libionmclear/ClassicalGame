@@ -2,6 +2,8 @@
 
 This folder contains a deterministic, headless simulation core designed to stay independent from any renderer.
 
+TypeScript is now the primary implementation target for the engine (`*.ts` files in this folder).
+
 ## Current capabilities
 
 - Pure state transitions via `applyAction(state, action)`
@@ -16,7 +18,8 @@ This folder contains a deterministic, headless simulation core designed to stay 
 ## Run tests
 
 ```bash
-npm run test:engine
+npm run test:engine:ts
+npm run typecheck
 ```
 
 ## Main API

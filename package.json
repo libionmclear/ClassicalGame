@@ -2,7 +2,15 @@
   "private": true,
   "scripts": {
     "test": "node --test",
-    "test:engine": "node --test test/engine.test.js"
+    "test:engine": "node --test test/engine.test.js",
+    "test:engine:ts": "node --import tsx --test test/engine.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build:engine": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.14",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
   },
   "dependencies": {
     "jose": "^5.9.0",
