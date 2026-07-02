@@ -100,6 +100,23 @@ button {
   font-size: 0.86rem;
 }
 
+#clear-selection-btn {
+  width: 100%;
+  margin-bottom: 8px;
+  background: #8b6a42;
+  color: var(--text);
+}
+
+.turn-checklist {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #dbc7a8;
+}
+
+.turn-checklist-item {
+  margin-bottom: 4px;
+}
+
 .panel-group {
   border-top: 1px solid #4a3829;
   padding-top: 8px;
@@ -167,6 +184,10 @@ button {
 
 .tile.attackable {
   box-shadow: inset 0 0 0 2px rgba(248, 113, 113, 0.9);
+}
+
+.tile.path-preview {
+  box-shadow: inset 0 0 0 2px rgba(125, 211, 252, 0.9);
 }
 
 .tile.terrain-plains { background: #5f6f42; }

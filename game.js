@@ -11,6 +11,8 @@
   const endTurnBtn = document.getElementById("end-turn-btn");
   const selectionLineEl = document.getElementById("selection-line");
   const actionLogEl = document.getElementById("action-log");
+  const clearSelectionBtn = document.getElementById("clear-selection-btn");
+  const turnChecklistEl = document.getElementById("turn-checklist");
   const foundCityBtn = document.getElementById("found-city-btn");
   const buildWarriorBtn = document.getElementById("build-warrior-btn");
   const buildArcherBtn = document.getElementById("build-archer-btn");
@@ -23,6 +25,7 @@
   let selectedUnitId = null;
   let selectedCityId = null;
   let actionLog = [];
+  let hoveredPathKeys = new Set();
   const defaultHintText = "Hint: Select your unit, then click a tile to move or attack.";
 
   function logAction(message) {
@@ -39,6 +42,16 @@
       item.className = "log-entry";
       item.textContent = line;
       actionLogEl.appendChild(item);
+    }
+  }
+
+  function renderChecklist(items) {
+    turnChecklistEl.innerHTML = "";
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "turn-checklist-item";
+      row.textContent = item;
+      turnChecklistEl.appendChild(row);
     }
   }
 
@@ -121,9 +134,49 @@
     return hints;
   }
 
+  function computePathPreviewKeys(q, r, visibility) {
+    const keys = new Set();
+    if (!selectedUnitId) return keys;
+    const unit = state.map.units[selectedUnitId];
+    if (!unit) return keys;
+
+    const key = q + "," + r;
+    if (!visibility.visible.has(key)) return keys;
+
+    const unitDef = engine.UNITS[unit.type];
+    if (!unitDef) return keys;
+
+    const path = engine.findPath(
+      state,
+      { ownerId: unit.ownerId, domain: unitDef.domain, mounted: unitDef.mounted },
+      unit.position,
+      { q, r }
+    );
+
+    if (!path || path.length < 2) return keys;
+
+    let totalCost = 0;
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const stepCost = engine.movementCost(
+        state,
+        { ownerId: unit.ownerId, domain: unitDef.domain, mounted: unitDef.mounted },
+        path[i],
+        path[i + 1]
+      );
+      totalCost += stepCost;
+      if (totalCost > unit.movementRemaining) {
+        return new Set();
+      }
+      keys.add(path[i + 1].q + "," + path[i + 1].r);
+    }
+
+    return keys;
+  }
+
   function clearSelection() {
     selectedUnitId = null;
     selectedCityId = null;
+    hoveredPathKeys = new Set();
   }
 
   function createCityId() {
@@ -275,6 +328,9 @@
     if (hints.attackable.has(key)) {
       btn.classList.add("attackable");
     }
+    if (hoveredPathKeys.has(key)) {
+      btn.classList.add("path-preview");
+    }
 
     if (selectedUnitId) {
       const selected = state.map.units[selectedUnitId];
@@ -334,9 +390,13 @@
       onTileClick(q, r);
     });
     btn.addEventListener("mouseenter", function () {
+      hoveredPathKeys = computePathPreviewKeys(q, r, visibility);
+      render();
       hintLineEl.textContent = hoverHint || defaultHintText;
     });
     btn.addEventListener("mouseleave", function () {
+      hoveredPathKeys = new Set();
+      render();
       hintLineEl.textContent = defaultHintText;
     });
 
@@ -364,6 +424,14 @@
     buildSettlerBtn.disabled = !(isTurn && selectedCity);
     researchBronzeBtn.disabled = !isTurn;
     researchArcheryBtn.disabled = !isTurn;
+    clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
+
+    const checklist = [];
+    checklist.push(selectedUnit || selectedCity ? "Selection: ready" : "Selection: choose a unit or city");
+    checklist.push(isTurn ? "Turn: issue commands or end turn" : "Turn: waiting for AI" );
+    checklist.push(state.playersById.rome.unitIds.length < 4 ? "Army: consider building more units" : "Army: field force established");
+    checklist.push(state.playersById.rome.cityIds.length < 2 ? "Expansion: found a second city" : "Expansion: multiple cities online");
+    renderChecklist(checklist);
   }
 
   function render() {
@@ -412,6 +480,11 @@
   endTurnBtn.addEventListener("click", function () {
     if (!isHumanTurn()) return;
     apply({ type: "END_TURN", playerId: "rome" });
+  });
+
+  clearSelectionBtn.addEventListener("click", function () {
+    clearSelection();
+    render();
   });
 
   foundCityBtn.addEventListener("click", function () {
