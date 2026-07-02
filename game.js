@@ -19,8 +19,7 @@
   const buildWarriorBtn = document.getElementById("build-warrior-btn");
   const buildArcherBtn = document.getElementById("build-archer-btn");
   const buildSettlerBtn = document.getElementById("build-settler-btn");
-  const researchBronzeBtn = document.getElementById("research-bronze-btn");
-  const researchArcheryBtn = document.getElementById("research-archery-btn");
+  const techTreeEl = document.getElementById("tech-tree");
   const hintLineEl = document.getElementById("hint-line");
   const resourceBarEl = document.getElementById("resource-bar");
   const weatherBarEl = document.getElementById("weather-bar");
@@ -96,6 +95,51 @@
 
   function human() {
     return state.playersById[HUMAN_ID];
+  }
+
+  const AGE_LABELS = {
+    1: "Age I — Villages",
+    2: "Age II — Kingdoms",
+    3: "Age III — Empires"
+  };
+  // Display name + one-line sourced history note (the educational layer).
+  const TECH_INFO = {
+    "bronze-working": { name: "Bronze Working", note: "Alloying copper and tin armed the first city militias (~3000 BC onward)." },
+    sailing: { name: "Sailing", note: "Coast-hugging galleys opened Mediterranean trade and colonization." },
+    writing: { name: "Writing", note: "Administration and law become possible — from cuneiform to the alphabet." },
+    masonry: { name: "Masonry", note: "Dressed stone means real city walls and lasting monuments." },
+    archery: { name: "Archery", note: "Massed bowmen — the skirmish and ambush school of war." },
+    irrigation: { name: "Irrigation", note: "Canals and basins multiplied river-valley harvests." },
+    "phalanx-doctrine": { name: "Phalanx Doctrine", note: "FORK: heavy spear-line, shields locked — the Greek hoplite way." },
+    "skirmish-doctrine": { name: "Skirmish Doctrine", note: "FORK: mobility, javelins and bows — hit and fade." },
+    "temple-economy": { name: "Temple Economy", note: "FORK: faith and culture fund the state — Egypt's model." },
+    coinage: { name: "Coinage", note: "FORK: struck coin (Lydia ~600 BC) makes rush-buying cheap." },
+    "iron-working": { name: "Iron Working", note: "Cheaper, harder blades put swords in every soldier's hand." },
+    "open-sea-sailing": { name: "Open-Sea Sailing", note: "Leaving sight of land — the deep sea becomes navigable." },
+    engineering: { name: "Engineering", note: "Bridges, fords and siege works — Roman practicality." },
+    "horseback-riding": { name: "Horseback Riding", note: "True cavalry replaces the chariot on open ground." },
+    "mountain-paths": { name: "Mountain Paths", note: "Passes and switchbacks let armies cross the ranges." },
+    "caravan-logistics": { name: "Caravan Logistics", note: "Water and supply discipline defeat desert attrition." },
+    republic: { name: "Republic", note: "FORK: elected magistrates and a Senate — Rome after 509 BC." },
+    monarchy: { name: "Monarchy", note: "FORK: one crowned ruler — the Hellenistic kingdoms." },
+    "ramming-fleets": { name: "Ramming Fleets", note: "FORK: the bronze ram and the trireme — Salamis, 480 BC." },
+    "merchant-marine": { name: "Merchant Marine", note: "FORK: cargo hulls and sea-trade wealth — Carthage, Phoenicia." },
+    "roads-logistics": { name: "Roads & Logistics", note: "The Via Appia (312 BC): legions marching 25 miles a day." },
+    siegecraft: { name: "Siegecraft", note: "Ballistae and towers crack the strongest walls." },
+    medicine: { name: "Medicine", note: "Army physicians and hygiene keep veterans in the field." },
+    "law-administration": { name: "Law & Administration", note: "Codified law binds a sprawling empire together." },
+    "currency-reform": { name: "Currency Reform", note: "Standardized coinage steadies trade across provinces." },
+    cartography: { name: "Cartography", note: "Sea charts and itineraries extend reach and vision." },
+    assimilation: { name: "Assimilation", note: "FORK: extend citizenship — captured cities become your own." },
+    "tribute-empire": { name: "Tribute Empire", note: "FORK: satrapies pay heavy tribute but stay restless." }
+  };
+
+  function canResearchSafe(player, techId) {
+    try {
+      return engine.canResearch(player, techId);
+    } catch {
+      return false;
+    }
   }
 
   function hexSize() {
@@ -532,15 +576,11 @@
     buildWarriorBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.warrior;
     buildArcherBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.archer;
     buildSettlerBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.settler;
-    researchBronzeBtn.disabled = !isTurn;
-    researchArcheryBtn.disabled = !isTurn;
     clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
 
     buildWarriorBtn.textContent = `Build Warrior (${unitCosts.warrior})`;
     buildArcherBtn.textContent = `Build Archer (${unitCosts.archer})`;
     buildSettlerBtn.textContent = `Build Settler (${unitCosts.settler})`;
-    researchBronzeBtn.textContent = `Research Bronze Working${rome.techs.includes("bronze-working") ? " (Done)" : ""}`;
-    researchArcheryBtn.textContent = `Research Archery${rome.techs.includes("archery") ? " (Done)" : ""}`;
 
     const checklist = [];
     checklist.push(selectedUnit || selectedCity ? "Selection: ready" : "Selection: choose a unit or city");
@@ -594,9 +634,68 @@
     endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
     renderHud();
     renderLegend();
+    renderTechTree(victory);
     updatePanelState(victory);
     renderLog();
     showResultModal(victory);
+  }
+
+  function renderTechTree(victory) {
+    if (!techTreeEl) return;
+    const techs = engine.TECHS || {};
+    const player = human();
+    const canAct = isHumanTurn() && !victory.winnerId;
+    techTreeEl.innerHTML = "";
+
+    for (const age of [1, 2, 3]) {
+      const ids = Object.keys(techs).filter((id) => techs[id].age === age);
+      if (!ids.length) continue;
+
+      const title = document.createElement("div");
+      title.className = "tech-age-title";
+      title.textContent = AGE_LABELS[age] || "Age " + age;
+      techTreeEl.appendChild(title);
+
+      for (const id of ids) {
+        const rule = techs[id];
+        const info = TECH_INFO[id] || { name: id, note: "" };
+        const researched = player.techs.includes(id);
+        const available = !researched && canResearchSafe(player, id);
+        const forkClosed =
+          !researched &&
+          !available &&
+          rule.forkGroup &&
+          player.forkChoices[rule.forkGroup] &&
+          player.forkChoices[rule.forkGroup] !== rule.forkBranch;
+
+        const item = document.createElement("button");
+        item.className =
+          "tech-item " +
+          (researched ? "done" : available ? "avail" : forkClosed ? "closed" : "locked") +
+          (rule.forkGroup ? " is-fork" : "");
+        item.disabled = !(available && canAct);
+        item.title = info.note;
+
+        const stateLabel = researched
+          ? "✓ known"
+          : available
+            ? rule.forkGroup
+              ? "choose"
+              : "research"
+            : forkClosed
+              ? "path closed"
+              : "locked";
+        item.innerHTML =
+          '<span class="tech-name">' + info.name + "</span>" +
+          '<span class="tech-state">' + stateLabel + "</span>";
+
+        item.addEventListener("click", function () {
+          if (item.disabled) return;
+          apply({ type: "RESEARCH_TECH", playerId: HUMAN_ID, techId: id });
+        });
+        techTreeEl.appendChild(item);
+      }
+    }
   }
 
   function renderHud() {
@@ -736,14 +835,6 @@
       unitType: "settler",
       unitId: createUnitId("settler")
     });
-  });
-
-  researchBronzeBtn.addEventListener("click", function () {
-    apply({ type: "RESEARCH_TECH", playerId: "rome", techId: "bronze-working" });
-  });
-
-  researchArcheryBtn.addEventListener("click", function () {
-    apply({ type: "RESEARCH_TECH", playerId: "rome", techId: "archery" });
   });
 
   resultNewGameBtn.addEventListener("click", newGame);
