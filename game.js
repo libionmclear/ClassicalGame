@@ -17,11 +17,13 @@
   const buildSettlerBtn = document.getElementById("build-settler-btn");
   const researchBronzeBtn = document.getElementById("research-bronze-btn");
   const researchArcheryBtn = document.getElementById("research-archery-btn");
+  const hintLineEl = document.getElementById("hint-line");
 
   let state = null;
   let selectedUnitId = null;
   let selectedCityId = null;
   let actionLog = [];
+  const defaultHintText = "Hint: Select your unit, then click a tile to move or attack.";
 
   function logAction(message) {
     actionLog.unshift(message);
@@ -132,13 +134,47 @@
     return `rome_${unitType}_${state.turn}_${Date.now().toString().slice(-4)}`;
   }
 
+  function snapshotRomeState() {
+    const rome = state.playersById.rome;
+    return {
+      food: rome.food,
+      production: rome.production,
+      gold: rome.gold,
+      cities: rome.cityIds.length,
+      units: rome.unitIds.length
+    };
+  }
+
+  function formatSignedDelta(value) {
+    if (value > 0) return `+${value}`;
+    return String(value);
+  }
+
   function apply(action) {
     try {
+      const beforeSummary = action.type === "END_TURN" && action.playerId === "rome" ? snapshotRomeState() : null;
       state = engine.applyAction(state, action);
       clearSelection();
       logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
       render();
       runAiUntilHuman();
+
+      if (beforeSummary) {
+        const afterSummary = snapshotRomeState();
+        logAction(
+          "End turn summary | Food " +
+            formatSignedDelta(afterSummary.food - beforeSummary.food) +
+            " | Prod " +
+            formatSignedDelta(afterSummary.production - beforeSummary.production) +
+            " | Gold " +
+            formatSignedDelta(afterSummary.gold - beforeSummary.gold) +
+            " | Cities " +
+            formatSignedDelta(afterSummary.cities - beforeSummary.cities) +
+            " | Units " +
+            formatSignedDelta(afterSummary.units - beforeSummary.units)
+        );
+        renderLog();
+      }
     } catch (err) {
       console.error(err);
       logAction("Action failed: " + err.message);
@@ -270,9 +306,38 @@
       btn.classList.add("owner-" + units[0].ownerId);
     }
 
+    let hoverHint = "";
+    if (isVisible && selectedUnitId) {
+      const selected = state.map.units[selectedUnitId];
+      if (selected) {
+        const enemyUnit = units.find((u) => u.ownerId !== selected.ownerId);
+        if (enemyUnit) {
+          try {
+            const preview = engine.computeCombatPreview(state, selected.id, enemyUnit.id);
+            hoverHint =
+              "Preview: enemy -" +
+              preview.damageToDefender +
+              " HP, your unit -" +
+              preview.damageToAttacker +
+              " HP";
+          } catch {
+            hoverHint = "Target currently out of range.";
+          }
+        } else if (city && city.ownerId !== selected.ownerId) {
+          hoverHint = "Siege target: " + city.id + " HP " + city.hp;
+        }
+      }
+    }
+
     btn.textContent = lines.join(" | ");
     btn.addEventListener("click", function () {
       onTileClick(q, r);
+    });
+    btn.addEventListener("mouseenter", function () {
+      hintLineEl.textContent = hoverHint || defaultHintText;
+    });
+    btn.addEventListener("mouseleave", function () {
+      hintLineEl.textContent = defaultHintText;
     });
 
     return btn;
@@ -339,6 +404,7 @@
     state = engine.createInitialGameState(scenario.config);
     clearSelection();
     actionLog = ["New game started: Italia scenario"];
+    hintLineEl.textContent = defaultHintText;
     render();
   }
 
