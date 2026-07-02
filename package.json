@@ -1,5 +1,9 @@
 {
   "private": true,
+  "scripts": {
+    "test": "node --test",
+    "test:engine": "node --test test/engine.test.js"
+  },
   "dependencies": {
     "jose": "^5.9.0",
     "@upstash/redis": "^1.34.0"
