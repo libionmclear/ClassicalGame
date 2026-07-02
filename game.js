@@ -63,6 +63,62 @@
     return Object.values(state.map.cities).find((c) => c.position.q === q && c.position.r === r) || null;
   }
 
+  function getTileHintsForSelectedUnit(visibility) {
+    const hints = {
+      reachable: new Set(),
+      attackable: new Set()
+    };
+
+    if (!selectedUnitId) return hints;
+    const unit = state.map.units[selectedUnitId];
+    if (!unit) return hints;
+
+    const unitDef = engine.UNITS[unit.type];
+    if (!unitDef) return hints;
+
+    for (const key of visibility.visible) {
+      const [q, r] = key.split(",").map(Number);
+      const destination = { q, r };
+
+      const path = engine.findPath(
+        state,
+        { ownerId: unit.ownerId, domain: unitDef.domain, mounted: unitDef.mounted },
+        unit.position,
+        destination
+      );
+
+      if (path && path.length >= 2) {
+        let totalCost = 0;
+        for (let i = 0; i < path.length - 1; i += 1) {
+          totalCost += engine.movementCost(
+            state,
+            { ownerId: unit.ownerId, domain: unitDef.domain, mounted: unitDef.mounted },
+            path[i],
+            path[i + 1]
+          );
+        }
+
+        const occupiedByEnemyUnit = getUnitsAt(q, r).some((u) => u.ownerId !== unit.ownerId);
+        const occupiedByFriendlyUnit = getUnitsAt(q, r).some((u) => u.ownerId === unit.ownerId);
+        if (totalCost <= unit.movementRemaining && !occupiedByEnemyUnit && !occupiedByFriendlyUnit) {
+          hints.reachable.add(key);
+        }
+      }
+
+      const dist = engine.distance(unit.position, destination);
+      if (dist <= unitDef.range) {
+        const hasEnemyUnit = getUnitsAt(q, r).some((u) => u.ownerId !== unit.ownerId);
+        const city = getCityAt(q, r);
+        const enemyCity = city && city.ownerId !== unit.ownerId;
+        if (hasEnemyUnit || enemyCity) {
+          hints.attackable.add(key);
+        }
+      }
+    }
+
+    return hints;
+  }
+
   function clearSelection() {
     selectedUnitId = null;
     selectedCityId = null;
@@ -157,7 +213,7 @@
     });
   }
 
-  function renderTile(q, r, visibility) {
+  function renderTile(q, r, visibility, hints) {
     const key = q + "," + r;
     const tile = state.map.tiles[key];
     const isVisible = visibility.visible.has(key);
@@ -175,6 +231,13 @@
       if (isDiscovered) {
         btn.classList.add("discovered");
       }
+    }
+
+    if (hints.reachable.has(key)) {
+      btn.classList.add("reachable");
+    }
+    if (hints.attackable.has(key)) {
+      btn.classList.add("attackable");
     }
 
     if (selectedUnitId) {
@@ -257,11 +320,12 @@
       : "No winner yet.";
 
     const visibility = getHumanVisibility();
+    const hints = getTileHintsForSelectedUnit(visibility);
 
     boardEl.innerHTML = "";
     for (let r = 0; r < state.map.height; r += 1) {
       for (let q = 0; q < state.map.width; q += 1) {
-        boardEl.appendChild(renderTile(q, r, visibility));
+        boardEl.appendChild(renderTile(q, r, visibility, hints));
       }
     }
 
