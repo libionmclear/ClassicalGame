@@ -20,6 +20,10 @@
   const researchBronzeBtn = document.getElementById("research-bronze-btn");
   const researchArcheryBtn = document.getElementById("research-archery-btn");
   const hintLineEl = document.getElementById("hint-line");
+  const resultModalEl = document.getElementById("result-modal");
+  const resultTitleEl = document.getElementById("result-title");
+  const resultBodyEl = document.getElementById("result-body");
+  const resultNewGameBtn = document.getElementById("result-new-game-btn");
 
   let state = null;
   let selectedUnitId = null;
@@ -27,6 +31,7 @@
   let actionLog = [];
   let hoveredPathKeys = new Set();
   const defaultHintText = "Hint: Select your unit, then click a tile to move or attack.";
+  const unitCosts = { warrior: 12, archer: 14, settler: 18 };
 
   function logAction(message) {
     actionLog.unshift(message);
@@ -53,6 +58,20 @@
       row.textContent = item;
       turnChecklistEl.appendChild(row);
     }
+  }
+
+  function showResultModal(victory) {
+    if (!victory || !victory.winnerId) {
+      resultModalEl.classList.add("hidden");
+      return;
+    }
+
+    const humanWon = victory.winnerId === "rome";
+    resultTitleEl.textContent = humanWon ? "Victory" : "Defeat";
+    resultBodyEl.textContent = humanWon
+      ? "Rome controls all capitals. The republic has prevailed."
+      : `Carthage has taken the upper hand. ${victory.reason || "Try another campaign."}`;
+    resultModalEl.classList.remove("hidden");
   }
 
   function getHumanVisibility() {
@@ -407,6 +426,7 @@
     const isTurn = isHumanTurn() && !victory.winnerId;
     const selectedUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
     const selectedCity = selectedCityId ? state.map.cities[selectedCityId] : null;
+    const rome = state.playersById.rome;
 
     if (selectedUnit) {
       selectionLineEl.textContent =
@@ -419,12 +439,18 @@
     }
 
     foundCityBtn.disabled = !(isTurn && selectedUnit && selectedUnit.type === "settler");
-    buildWarriorBtn.disabled = !(isTurn && selectedCity);
-    buildArcherBtn.disabled = !(isTurn && selectedCity);
-    buildSettlerBtn.disabled = !(isTurn && selectedCity);
+    buildWarriorBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.warrior;
+    buildArcherBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.archer;
+    buildSettlerBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.settler;
     researchBronzeBtn.disabled = !isTurn;
     researchArcheryBtn.disabled = !isTurn;
     clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
+
+    buildWarriorBtn.textContent = `Build Warrior (${unitCosts.warrior})`;
+    buildArcherBtn.textContent = `Build Archer (${unitCosts.archer})`;
+    buildSettlerBtn.textContent = `Build Settler (${unitCosts.settler})`;
+    researchBronzeBtn.textContent = `Research Bronze Working${rome.techs.includes("bronze-working") ? " (Done)" : ""}`;
+    researchArcheryBtn.textContent = `Research Archery${rome.techs.includes("archery") ? " (Done)" : ""}`;
 
     const checklist = [];
     checklist.push(selectedUnit || selectedCity ? "Selection: ready" : "Selection: choose a unit or city");
@@ -465,6 +491,7 @@
     endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
     updatePanelState(victory);
     renderLog();
+    showResultModal(victory);
   }
 
   function newGame() {
@@ -473,6 +500,7 @@
     clearSelection();
     actionLog = ["New game started: Italia scenario"];
     hintLineEl.textContent = defaultHintText;
+    resultModalEl.classList.add("hidden");
     render();
   }
 
@@ -539,6 +567,8 @@
   researchArcheryBtn.addEventListener("click", function () {
     apply({ type: "RESEARCH_TECH", playerId: "rome", techId: "archery" });
   });
+
+  resultNewGameBtn.addEventListener("click", newGame);
 
   newGame();
 })();

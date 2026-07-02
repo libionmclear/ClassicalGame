@@ -102,7 +102,7 @@ function findBuildUnitAction(state: GameState, player: Player): GameAction | nul
     const city = state.map.cities[cityId];
     if (!city) continue;
 
-    const desiredUnit = player.unitIds.length < player.cityIds.length * 2 ? "warrior" : "archer";
+    const desiredUnit = player.unitIds.length < player.cityIds.length * 3 ? "warrior" : "archer";
     const cost = UNIT_BUILD_COSTS[desiredUnit];
     if (player.production < cost) continue;
 
@@ -191,12 +191,13 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => findFoundCityAction(state, player),
     () => findAttackAction(state, player),
     () => findBuildUnitAction(state, player),
+    () => findAdvanceAction(state, player),
     () => {
       const techId = firstBuildableTech(player);
       if (!techId) return null;
       return { type: "RESEARCH_TECH", playerId: player.id, techId };
     },
-    () => findAdvanceAction(state, player)
+    () => null
   ];
 
   for (const pick of actions) {
