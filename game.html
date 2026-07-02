@@ -22,7 +22,37 @@
       <div id="hint-line">Hint: Select your unit, then click a tile to move or attack.</div>
     </section>
 
-    <section id="board" class="board"></section>
+    <section class="play-area">
+      <section id="board" class="board"></section>
+
+      <aside class="control-panel">
+        <h2>Command Panel</h2>
+        <div id="selection-line" class="selection-line">Nothing selected.</div>
+
+        <div class="panel-group">
+          <h3>Unit Actions</h3>
+          <button id="found-city-btn">Found City</button>
+        </div>
+
+        <div class="panel-group">
+          <h3>City Actions</h3>
+          <button id="build-warrior-btn">Build Warrior</button>
+          <button id="build-archer-btn">Build Archer</button>
+          <button id="build-settler-btn">Build Settler</button>
+        </div>
+
+        <div class="panel-group">
+          <h3>Statecraft</h3>
+          <button id="research-bronze-btn">Research Bronze Working</button>
+          <button id="research-archery-btn">Research Archery</button>
+        </div>
+
+        <div class="panel-group">
+          <h3>Action Log</h3>
+          <div id="action-log" class="action-log"></div>
+        </div>
+      </aside>
+    </section>
   </main>
 
   <script src="web/engine.bundle.js"></script>

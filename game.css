@@ -77,6 +77,66 @@ button {
   gap: 6px;
 }
 
+.play-area {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 12px;
+}
+
+.control-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 10px;
+}
+
+.control-panel h2 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.selection-line {
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-size: 0.86rem;
+}
+
+.panel-group {
+  border-top: 1px solid #4a3829;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.panel-group h3 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.panel-group button {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.panel-group button:disabled,
+#end-turn-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.action-log {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid #4a3829;
+  background: #231a14;
+  padding: 6px;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.log-entry {
+  margin-bottom: 4px;
+  color: #ddc7a5;
+}
+
 .tile {
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -122,6 +182,10 @@ button {
 }
 
 @media (max-width: 760px) {
+  .play-area {
+    grid-template-columns: 1fr;
+  }
+
   .board {
     grid-template-columns: repeat(8, minmax(34px, 1fr));
     gap: 4px;

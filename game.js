@@ -9,9 +9,36 @@
   const victoryEl = document.getElementById("victory-line");
   const newGameBtn = document.getElementById("new-game-btn");
   const endTurnBtn = document.getElementById("end-turn-btn");
+  const selectionLineEl = document.getElementById("selection-line");
+  const actionLogEl = document.getElementById("action-log");
+  const foundCityBtn = document.getElementById("found-city-btn");
+  const buildWarriorBtn = document.getElementById("build-warrior-btn");
+  const buildArcherBtn = document.getElementById("build-archer-btn");
+  const buildSettlerBtn = document.getElementById("build-settler-btn");
+  const researchBronzeBtn = document.getElementById("research-bronze-btn");
+  const researchArcheryBtn = document.getElementById("research-archery-btn");
 
   let state = null;
   let selectedUnitId = null;
+  let selectedCityId = null;
+  let actionLog = [];
+
+  function logAction(message) {
+    actionLog.unshift(message);
+    if (actionLog.length > 24) {
+      actionLog = actionLog.slice(0, 24);
+    }
+  }
+
+  function renderLog() {
+    actionLogEl.innerHTML = "";
+    for (const line of actionLog) {
+      const item = document.createElement("div");
+      item.className = "log-entry";
+      item.textContent = line;
+      actionLogEl.appendChild(item);
+    }
+  }
 
   function getHumanVisibility() {
     if (!state) {
@@ -36,14 +63,30 @@
     return Object.values(state.map.cities).find((c) => c.position.q === q && c.position.r === r) || null;
   }
 
+  function clearSelection() {
+    selectedUnitId = null;
+    selectedCityId = null;
+  }
+
+  function createCityId() {
+    return `rome_city_${state.turn}_${Date.now().toString().slice(-4)}`;
+  }
+
+  function createUnitId(unitType) {
+    return `rome_${unitType}_${state.turn}_${Date.now().toString().slice(-4)}`;
+  }
+
   function apply(action) {
     try {
       state = engine.applyAction(state, action);
-      selectedUnitId = null;
+      clearSelection();
+      logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
       render();
       runAiUntilHuman();
     } catch (err) {
       console.error(err);
+      logAction("Action failed: " + err.message);
+      renderLog();
     }
   }
 
@@ -51,6 +94,9 @@
     while (state.players[state.currentPlayerIndex].id !== "rome") {
       const active = state.players[state.currentPlayerIndex].id;
       const result = engine.runAiTurn(state, active, 8);
+      for (const action of result.actions) {
+        logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
+      }
       state = result.state;
       const victory = engine.getVictoryStatus(state);
       if (victory.winnerId) break;
@@ -72,6 +118,14 @@
       const ownUnit = clickedUnits.find((u) => u.ownerId === "rome");
       if (ownUnit) {
         selectedUnitId = ownUnit.id;
+        selectedCityId = null;
+        render();
+        return;
+      }
+
+      if (clickedCity && clickedCity.ownerId === "rome") {
+        selectedCityId = clickedCity.id;
+        selectedUnitId = null;
         render();
       }
       return;
@@ -79,7 +133,7 @@
 
     const selected = state.map.units[selectedUnitId];
     if (!selected) {
-      selectedUnitId = null;
+      clearSelection();
       render();
       return;
     }
@@ -130,6 +184,13 @@
       }
     }
 
+    if (selectedCityId) {
+      const citySelected = state.map.cities[selectedCityId];
+      if (citySelected && citySelected.position.q === q && citySelected.position.r === r) {
+        btn.classList.add("selected");
+      }
+    }
+
     const lines = [];
     lines.push("(" + q + "," + r + ")");
     if (!isVisible) {
@@ -152,6 +213,29 @@
     });
 
     return btn;
+  }
+
+  function updatePanelState(victory) {
+    const isTurn = isHumanTurn() && !victory.winnerId;
+    const selectedUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
+    const selectedCity = selectedCityId ? state.map.cities[selectedCityId] : null;
+
+    if (selectedUnit) {
+      selectionLineEl.textContent =
+        `Unit selected: ${selectedUnit.type} (${selectedUnit.id}) HP ${selectedUnit.hp}, Move ${selectedUnit.movementRemaining}`;
+    } else if (selectedCity) {
+      selectionLineEl.textContent =
+        `City selected: ${selectedCity.id}, Pop ${selectedCity.population}, HP ${selectedCity.hp}`;
+    } else {
+      selectionLineEl.textContent = "Nothing selected.";
+    }
+
+    foundCityBtn.disabled = !(isTurn && selectedUnit && selectedUnit.type === "settler");
+    buildWarriorBtn.disabled = !(isTurn && selectedCity);
+    buildArcherBtn.disabled = !(isTurn && selectedCity);
+    buildSettlerBtn.disabled = !(isTurn && selectedCity);
+    researchBronzeBtn.disabled = !isTurn;
+    researchArcheryBtn.disabled = !isTurn;
   }
 
   function render() {
@@ -182,12 +266,15 @@
     }
 
     endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
+    updatePanelState(victory);
+    renderLog();
   }
 
   function newGame() {
     const scenario = engine.loadScenario("italia");
     state = engine.createInitialGameState(scenario.config);
-    selectedUnitId = null;
+    clearSelection();
+    actionLog = ["New game started: Italia scenario"];
     render();
   }
 
@@ -195,6 +282,59 @@
   endTurnBtn.addEventListener("click", function () {
     if (!isHumanTurn()) return;
     apply({ type: "END_TURN", playerId: "rome" });
+  });
+
+  foundCityBtn.addEventListener("click", function () {
+    const unit = selectedUnitId ? state.map.units[selectedUnitId] : null;
+    if (!unit || unit.type !== "settler") return;
+
+    apply({
+      type: "FOUND_CITY",
+      playerId: "rome",
+      settlerId: unit.id,
+      cityId: createCityId()
+    });
+  });
+
+  buildWarriorBtn.addEventListener("click", function () {
+    if (!selectedCityId) return;
+    apply({
+      type: "BUILD_UNIT",
+      playerId: "rome",
+      cityId: selectedCityId,
+      unitType: "warrior",
+      unitId: createUnitId("warrior")
+    });
+  });
+
+  buildArcherBtn.addEventListener("click", function () {
+    if (!selectedCityId) return;
+    apply({
+      type: "BUILD_UNIT",
+      playerId: "rome",
+      cityId: selectedCityId,
+      unitType: "archer",
+      unitId: createUnitId("archer")
+    });
+  });
+
+  buildSettlerBtn.addEventListener("click", function () {
+    if (!selectedCityId) return;
+    apply({
+      type: "BUILD_UNIT",
+      playerId: "rome",
+      cityId: selectedCityId,
+      unitType: "settler",
+      unitId: createUnitId("settler")
+    });
+  });
+
+  researchBronzeBtn.addEventListener("click", function () {
+    apply({ type: "RESEARCH_TECH", playerId: "rome", techId: "bronze-working" });
+  });
+
+  researchArcheryBtn.addEventListener("click", function () {
+    apply({ type: "RESEARCH_TECH", playerId: "rome", techId: "archery" });
   });
 
   newGame();
