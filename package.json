@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "build:engine": "tsc -p tsconfig.json",
     "simulate:italia": "node --import tsx src/simulate-italia.ts",
-    "build:web": "esbuild src/engine/browser-entry.ts --bundle --format=iife --global-name=HegemonEngine --platform=browser --outfile=web/engine.bundle.js",
+    "build:web": "node scripts/build-web.mjs",
     "play:web": "npm run build:web",
     "vercel-build": "npm run build:web"
   },
