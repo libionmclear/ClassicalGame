@@ -10,7 +10,8 @@
     "simulate:italia": "node --import tsx src/simulate-italia.ts",
     "build:web": "node scripts/build-web.mjs",
     "play:web": "npm run build:web",
-    "vercel-build": "npm run build:web"
+    "vercel-build": "npm run build:web",
+    "push:auto": "node scripts/publish-auto.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.14",

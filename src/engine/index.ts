@@ -2,6 +2,7 @@ import { TECHS, TERRAIN, UNITS, UNIT_BUILD_COSTS, WEATHER_STATES } from "./data"
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
+import { computeVisibility } from "./visibility";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -610,6 +611,7 @@ export function replayActions(initialState: GameState, actions: GameAction[]): G
 }
 
 export {
+  computeVisibility,
   movementCost,
   findPath,
   keyOf,

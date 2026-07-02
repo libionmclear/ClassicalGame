@@ -87,6 +87,16 @@ button {
   color: var(--text);
 }
 
+.tile.fog {
+  background: #1f1a18;
+  color: #82715d;
+  border-color: #3c332b;
+}
+
+.tile.discovered {
+  filter: saturate(0.2) brightness(0.75);
+}
+
 .tile.selected {
   outline: 2px solid #f2cc69;
 }

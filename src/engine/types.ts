@@ -188,6 +188,11 @@ export interface VictoryStatus {
   reason: string | null;
 }
 
+export interface VisibilityResult {
+  visibleTiles: string[];
+  discoveredTiles: string[];
+}
+
 export interface CombatPreview {
   damageToDefender: number;
   damageToAttacker: number;

@@ -13,6 +13,17 @@
   let state = null;
   let selectedUnitId = null;
 
+  function getHumanVisibility() {
+    if (!state) {
+      return { visible: new Set(), discovered: new Set() };
+    }
+    const visibility = engine.computeVisibility(state, "rome");
+    return {
+      visible: new Set(visibility.visibleTiles),
+      discovered: new Set(visibility.discoveredTiles)
+    };
+  }
+
   function isHumanTurn() {
     return state.players[state.currentPlayerIndex].id === "rome";
   }
@@ -49,6 +60,10 @@
 
   function onTileClick(q, r) {
     if (!isHumanTurn()) return;
+
+    const key = q + "," + r;
+    const visibility = getHumanVisibility();
+    if (!visibility.visible.has(key)) return;
 
     const clickedUnits = getUnitsAt(q, r);
     const clickedCity = getCityAt(q, r);
@@ -88,15 +103,25 @@
     });
   }
 
-  function renderTile(q, r) {
+  function renderTile(q, r, visibility) {
     const key = q + "," + r;
     const tile = state.map.tiles[key];
-    const units = getUnitsAt(q, r);
-    const city = getCityAt(q, r);
+    const isVisible = visibility.visible.has(key);
+    const isDiscovered = visibility.discovered.has(key);
+
+    const units = isVisible ? getUnitsAt(q, r) : [];
+    const city = isVisible ? getCityAt(q, r) : null;
 
     const btn = document.createElement("button");
     btn.className = "tile terrain-" + tile.terrain;
     btn.dataset.key = key;
+
+    if (!isVisible) {
+      btn.classList.add("fog");
+      if (isDiscovered) {
+        btn.classList.add("discovered");
+      }
+    }
 
     if (selectedUnitId) {
       const selected = state.map.units[selectedUnitId];
@@ -107,6 +132,9 @@
 
     const lines = [];
     lines.push("(" + q + "," + r + ")");
+    if (!isVisible) {
+      lines.push(isDiscovered ? "Shrouded" : "Unknown");
+    }
     if (city) {
       lines.push("City: " + city.id + " HP " + city.hp);
       btn.classList.add("owner-" + city.ownerId);
@@ -144,10 +172,12 @@
       ? "Victory: " + victory.type + " by " + victory.winnerId
       : "No winner yet.";
 
+    const visibility = getHumanVisibility();
+
     boardEl.innerHTML = "";
     for (let r = 0; r < state.map.height; r += 1) {
       for (let q = 0; q < state.map.width; q += 1) {
-        boardEl.appendChild(renderTile(q, r));
+        boardEl.appendChild(renderTile(q, r, visibility));
       }
     }
 
