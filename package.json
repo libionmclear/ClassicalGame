@@ -4,8 +4,10 @@
     "test": "node --test",
     "test:engine": "node --test test/engine.test.js",
     "test:engine:ts": "node --import tsx --test test/engine.test.ts",
+    "test:game:ts": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "build:engine": "tsc -p tsconfig.json"
+    "build:engine": "tsc -p tsconfig.json",
+    "simulate:italia": "node --import tsx src/simulate-italia.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.14",

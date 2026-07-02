@@ -67,6 +67,8 @@ export interface City {
   ownerId: string;
   position: Coord;
   population: number;
+  hp: number;
+  maxHp: number;
 }
 
 export interface Player {
@@ -147,12 +149,29 @@ export interface EndTurnAction {
   playerId: string;
 }
 
+export interface FoundCityAction {
+  type: "FOUND_CITY";
+  playerId: string;
+  settlerId: string;
+  cityId: string;
+}
+
+export interface BuildUnitAction {
+  type: "BUILD_UNIT";
+  playerId: string;
+  cityId: string;
+  unitType: string;
+  unitId: string;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
   | ResearchTechAction
   | ChooseForkAction
-  | EndTurnAction;
+  | EndTurnAction
+  | FoundCityAction
+  | BuildUnitAction;
 
 export interface CombatPreview {
   damageToDefender: number;
@@ -170,7 +189,10 @@ export interface CreateGameConfig {
     tiles?: Record<string, Partial<Tile>>;
     rivers?: Record<string, boolean>;
     regions?: string[];
-    cities?: Record<string, City>;
+    cities?: Record<
+      string,
+      Partial<City> & Pick<City, "id" | "ownerId" | "position" | "population">
+    >;
     units?: Record<string, Partial<Unit> & Pick<Unit, "id" | "type" | "ownerId" | "position">>;
   };
 }

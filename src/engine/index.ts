@@ -1,4 +1,4 @@
-import { TECHS, TERRAIN, UNITS, WEATHER_STATES } from "./data";
+import { TECHS, TERRAIN, UNITS, UNIT_BUILD_COSTS, WEATHER_STATES } from "./data";
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
@@ -7,10 +7,13 @@ import type {
   CombatPreview,
   Coord,
   CreateGameConfig,
+  City,
   EndTurnAction,
   GameAction,
   GameMap,
   GameState,
+  BuildUnitAction,
+  FoundCityAction,
   MoveUnitAction,
   Player,
   ResearchTechAction,
@@ -89,7 +92,19 @@ function normalizeMap(configMap: NonNullable<CreateGameConfig["map"]> | undefine
     tiles,
     rivers: configMap?.rivers ?? {},
     regions: configMap?.regions ?? Array.from(new Set(Object.values(tiles).map((t) => t.region))),
-    cities: configMap?.cities ?? {},
+    cities: Object.fromEntries(
+      Object.entries(configMap?.cities ?? {}).map(([id, city]) => [
+        id,
+        {
+          id: city.id,
+          ownerId: city.ownerId,
+          position: city.position,
+          population: city.population,
+          hp: city.hp ?? 40,
+          maxHp: city.maxHp ?? 40
+        }
+      ])
+    ),
     units
   };
 }
@@ -150,6 +165,12 @@ function unitAt(state: GameState, unitId: string): Unit {
   const unit = state.map.units[unitId];
   if (!unit) throw new Error(`Unknown unit ${unitId}`);
   return unit;
+}
+
+function cityAt(state: GameState, cityId: string): City {
+  const city = state.map.cities[cityId];
+  if (!city) throw new Error(`Unknown city ${cityId}`);
+  return city;
 }
 
 function movementBudgetFor(unit: Unit): number {
@@ -394,6 +415,62 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   }
 }
 
+function applyFoundCity(state: GameState, action: FoundCityAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const settler = unitAt(state, action.settlerId);
+  if (settler.ownerId !== action.playerId) throw new Error("Cannot use enemy settler");
+  if (settler.type !== "settler") throw new Error("Only settler can found a city");
+  if (state.map.cities[action.cityId]) throw new Error(`City id ${action.cityId} already exists`);
+
+  for (const city of Object.values(state.map.cities)) {
+    if (city.position.q === settler.position.q && city.position.r === settler.position.r) {
+      throw new Error("A city already exists on this tile");
+    }
+  }
+
+  state.map.cities[action.cityId] = {
+    id: action.cityId,
+    ownerId: action.playerId,
+    position: { ...settler.position },
+    population: 1,
+    hp: 40,
+    maxHp: 40
+  };
+
+  delete state.map.units[settler.id];
+  syncOwnershipIndexes(state);
+}
+
+function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const city = cityAt(state, action.cityId);
+  if (city.ownerId !== action.playerId) throw new Error("Cannot build from enemy city");
+  if (state.map.units[action.unitId]) throw new Error(`Unit id ${action.unitId} already exists`);
+  if (!UNITS[action.unitType]) throw new Error(`Unknown unit type ${action.unitType}`);
+
+  const player = state.playersById[action.playerId];
+  const cost = UNIT_BUILD_COSTS[action.unitType] ?? 9999;
+  if (player.production < cost) {
+    throw new Error(`Insufficient production: needs ${cost}, has ${player.production}`);
+  }
+
+  player.production -= cost;
+
+  const unitDef = UNITS[action.unitType];
+  state.map.units[action.unitId] = {
+    id: action.unitId,
+    type: action.unitType,
+    ownerId: action.playerId,
+    position: { ...city.position },
+    hp: unitDef.maxHp,
+    maxHp: unitDef.maxHp,
+    movementRemaining: 0,
+    veterancy: "recruit"
+  };
+
+  syncOwnershipIndexes(state);
+}
+
 export function createInitialGameState(config: CreateGameConfig = {}): GameState {
   const players = normalizePlayers(config.players);
   const map = normalizeMap(config.map);
@@ -419,6 +496,7 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
 
 export function applyAction(inputState: GameState, action: GameAction): GameState {
   const state = deepClone(inputState);
+  state.playersById = makePlayersById(state.players);
 
   switch (action.type) {
     case "MOVE_UNIT":
@@ -435,6 +513,12 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "END_TURN":
       applyEndTurn(state, action);
+      break;
+    case "FOUND_CITY":
+      applyFoundCity(state, action);
+      break;
+    case "BUILD_UNIT":
+      applyBuildUnit(state, action);
       break;
     default: {
       const unknownAction: never = action;

@@ -111,3 +111,12 @@ export const UNITS: Record<string, UnitRule> = {
   merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1 },
   settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1 }
 };
+
+export const UNIT_BUILD_COSTS: Record<string, number> = {
+  warrior: 12,
+  archer: 14,
+  horseman: 20,
+  trireme: 22,
+  merchant: 16,
+  settler: 18
+};
