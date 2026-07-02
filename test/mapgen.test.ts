@@ -18,6 +18,37 @@ test("different seeds produce different maps", () => {
   assert.notDeepEqual(a.map?.tiles, b.map?.tiles);
 });
 
+test("generateMap places N dispersed capitals, all reachable from player 0", () => {
+  for (const playerCount of [2, 3, 4, 5, 6]) {
+    const config = generateMap({ size: "large", seed: `mp-${playerCount}`, playerCount });
+    const capitals = Object.values(config.map?.cities ?? {}).filter((c) => c.isCapital);
+    assert.equal(capitals.length, playerCount, `${playerCount} players -> ${capitals.length} capitals`);
+
+    // Each rival capital must be reachable by a land unit from Rome's capital.
+    const state = createInitialGameState(config);
+    const rome = capitals.find((c) => c.ownerId === "rome");
+    assert.ok(rome, "rome capital present");
+    const warrior = UNITS.warrior;
+    for (const other of capitals) {
+      if (other.ownerId === "rome") continue;
+      const path = findPath(
+        state,
+        { ownerId: "rome", domain: warrior.domain, mounted: warrior.mounted },
+        rome!.position,
+        other.position
+      );
+      assert.ok(path && path.length >= 2, `no path rome -> ${other.ownerId} with ${playerCount} players`);
+    }
+  }
+});
+
+test("generateMap clamps player count to the roster range", () => {
+  const tooMany = generateMap({ size: "medium", seed: "clamp-hi", playerCount: 99 });
+  assert.equal(Object.values(tooMany.map?.cities ?? {}).filter((c) => c.isCapital).length, 6);
+  const tooFew = generateMap({ size: "medium", seed: "clamp-lo", playerCount: 1 });
+  assert.equal(Object.values(tooFew.map?.cities ?? {}).filter((c) => c.isCapital).length, 2);
+});
+
 for (const size of SIZES) {
   test(`generateMap(${size}) has correct dimensions and full tile coverage`, () => {
     const spec = MAP_SIZES[size];

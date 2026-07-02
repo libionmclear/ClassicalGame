@@ -21,7 +21,28 @@ export const MAP_SIZES: Record<MapSize, SizeSpec> = {
 export interface GenerateMapOptions {
   size?: MapSize;
   seed?: string;
+  playerCount?: number;
 }
+
+// Player 0 is always the human (Rome). Rivals are drawn in order.
+export const CIV_ROSTER: ReadonlyArray<{ id: string; civ: string }> = [
+  { id: "rome", civ: "Rome" },
+  { id: "carthage", civ: "Carthage" },
+  { id: "greece", civ: "Greece" },
+  { id: "egypt", civ: "Egypt" },
+  { id: "gaul", civ: "Gaul" },
+  { id: "parthia", civ: "Parthia" }
+];
+
+export const MAX_PLAYERS = CIV_ROSTER.length;
+
+// Sensible default rival count per map size (still user-overridable).
+export const DEFAULT_PLAYERS: Record<MapSize, number> = {
+  small: 2,
+  medium: 3,
+  large: 4,
+  xl: 5
+};
 
 // Land tiles a basic (unteched) land unit can traverse — used for connectivity so
 // the two capitals are always joined by a walkable route (domination stays possible).
@@ -169,6 +190,30 @@ function farthestPair(keys: string[]): [string, string] | null {
   return best;
 }
 
+// Greedy farthest-point dispersion: seed with the two most distant candidates,
+// then repeatedly add the candidate maximizing distance to the nearest chosen one.
+function pickDispersed(pool: string[], n: number): string[] {
+  const pair = farthestPair(pool);
+  if (!pair) return pool.slice(0, n);
+  const chosen = [pair[0], pair[1]];
+  while (chosen.length < n) {
+    let best: string | null = null;
+    let bestMin = -1;
+    for (const k of pool) {
+      if (chosen.includes(k)) continue;
+      let nearest = Infinity;
+      for (const c of chosen) nearest = Math.min(nearest, distance(parseKey(k), parseKey(c)));
+      if (nearest > bestMin) {
+        bestMin = nearest;
+        best = k;
+      }
+    }
+    if (!best) break;
+    chosen.push(best);
+  }
+  return chosen.slice(0, n);
+}
+
 function placeStarters(
   capitalKey: string,
   tiles: Record<string, { terrain: TerrainType; region: string }>,
@@ -187,67 +232,57 @@ function placeStarters(
   return { warrior, settler };
 }
 
-function tryGenerate(seed: string, spec: SizeSpec): CreateGameConfig | null {
+function tryGenerate(seed: string, spec: SizeSpec, playerCount: number): CreateGameConfig | null {
   const { tiles, regions } = buildTerrain(seed, spec);
   const component = largestWalkableComponent(tiles, spec);
-  const minComponent = Math.max(8, Math.floor(spec.width * spec.height * 0.15));
+  const minComponent = Math.max(8, playerCount * 3, Math.floor(spec.width * spec.height * 0.15));
   if (component.length < minComponent) return null;
 
   const preferred = component.filter((k) => CAPITAL_TERRAIN.has(tiles[k].terrain));
-  const pool = preferred.length >= 2 ? preferred : component;
-  const pair = farthestPair(pool);
-  if (!pair) return null;
+  const pool = preferred.length >= playerCount ? preferred : component;
+  if (pool.length < playerCount) return null;
 
-  const [romeKey, carthageKey] = pair;
-  const minSeparation = Math.max(4, Math.floor((spec.width + spec.height) / 4));
-  if (distance(parseKey(romeKey), parseKey(carthageKey)) < minSeparation) return null;
+  const capitalKeys = pickDispersed(pool, playerCount);
+  if (capitalKeys.length < playerCount) return null;
 
-  const taken = new Set<string>([romeKey, carthageKey]);
-  const romeStart = placeStarters(romeKey, tiles, spec, taken);
-  const carthageStart = placeStarters(carthageKey, tiles, spec, taken);
+  // Reject cramped layouts: the two closest capitals must be reasonably apart.
+  const minSeparation = Math.max(3, Math.floor((spec.width + spec.height) / (playerCount + 2)));
+  let closest = Infinity;
+  for (let i = 0; i < capitalKeys.length; i += 1) {
+    for (let j = i + 1; j < capitalKeys.length; j += 1) {
+      closest = Math.min(closest, distance(parseKey(capitalKeys[i]), parseKey(capitalKeys[j])));
+    }
+  }
+  if (closest < minSeparation) return null;
 
-  const romePos = parseKey(romeKey);
-  const carthagePos = parseKey(carthageKey);
+  const taken = new Set<string>(capitalKeys);
+  const players: CreateGameConfig["players"] = [];
+  const cities: NonNullable<CreateGameConfig["map"]>["cities"] = {};
+  const units: NonNullable<CreateGameConfig["map"]>["units"] = {};
+
+  for (let i = 0; i < playerCount; i += 1) {
+    const { id, civ } = CIV_ROSTER[i];
+    const capitalKey = capitalKeys[i];
+    const position = parseKey(capitalKey);
+    players.push({ id, civ, food: 8, production: 30, gold: 20 });
+    cities[`${id}_capital`] = {
+      id: `${id}_capital`,
+      ownerId: id,
+      position,
+      population: 2,
+      hp: 40,
+      maxHp: 40,
+      isCapital: true
+    };
+    const start = placeStarters(capitalKey, tiles, spec, taken);
+    units[`${id}_warrior`] = { id: `${id}_warrior`, type: "warrior", ownerId: id, position: start.warrior };
+    units[`${id}_settler`] = { id: `${id}_settler`, type: "settler", ownerId: id, position: start.settler };
+  }
 
   return {
     seed,
-    players: [
-      { id: "rome", civ: "Rome", food: 8, production: 30, gold: 20 },
-      { id: "carthage", civ: "Carthage", food: 8, production: 30, gold: 20 }
-    ],
-    map: {
-      width: spec.width,
-      height: spec.height,
-      regions,
-      rivers: {},
-      tiles,
-      cities: {
-        rome_capital: {
-          id: "rome_capital",
-          ownerId: "rome",
-          position: romePos,
-          population: 2,
-          hp: 40,
-          maxHp: 40,
-          isCapital: true
-        },
-        carthage_capital: {
-          id: "carthage_capital",
-          ownerId: "carthage",
-          position: carthagePos,
-          population: 2,
-          hp: 40,
-          maxHp: 40,
-          isCapital: true
-        }
-      },
-      units: {
-        r_warrior: { id: "r_warrior", type: "warrior", ownerId: "rome", position: romeStart.warrior },
-        r_settler: { id: "r_settler", type: "settler", ownerId: "rome", position: romeStart.settler },
-        c_warrior: { id: "c_warrior", type: "warrior", ownerId: "carthage", position: carthageStart.warrior },
-        c_settler: { id: "c_settler", type: "settler", ownerId: "carthage", position: carthageStart.settler }
-      }
-    }
+    players,
+    map: { width: spec.width, height: spec.height, regions, rivers: {}, tiles, cities, units }
   };
 }
 
@@ -256,14 +291,15 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   const spec = MAP_SIZES[size];
   if (!spec) throw new Error(`Unknown map size ${size}`);
   const baseSeed = options.seed ?? "hegemon-map";
+  const playerCount = Math.max(2, Math.min(MAX_PLAYERS, Math.floor(options.playerCount ?? 2)));
 
   // Deterministic retries: a few noise variants until one yields a big enough
-  // landmass with two well-separated capitals.
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  // landmass with well-separated capitals for every player.
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     const seed = attempt === 0 ? baseSeed : `${baseSeed}#${attempt}`;
-    const config = tryGenerate(seed, spec);
+    const config = tryGenerate(seed, spec, playerCount);
     if (config) return config;
   }
 
-  throw new Error(`Map generation failed for size ${size} (seed ${baseSeed})`);
+  throw new Error(`Map generation failed for size ${size} with ${playerCount} players (seed ${baseSeed})`);
 }

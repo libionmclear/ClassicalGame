@@ -337,11 +337,27 @@ button:hover:not(:disabled) {
 }
 
 .tile.owner-rome {
-  box-shadow: inset 0 0 0 2.5px var(--rome), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px #d06b36, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-carthage {
-  box-shadow: inset 0 0 0 2.5px var(--carthage), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px #4f9ecb, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+}
+
+.tile.owner-greece {
+  box-shadow: inset 0 0 0 2.5px #6ec1a8, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+}
+
+.tile.owner-egypt {
+  box-shadow: inset 0 0 0 2.5px #d8b23a, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+}
+
+.tile.owner-gaul {
+  box-shadow: inset 0 0 0 2.5px #9b6bd0, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+}
+
+.tile.owner-parthia {
+  box-shadow: inset 0 0 0 2.5px #cf5b7a, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 /* ===== Command panel ===== */

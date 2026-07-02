@@ -10,6 +10,7 @@
   const newGameBtn = document.getElementById("new-game-btn");
   const endTurnBtn = document.getElementById("end-turn-btn");
   const mapSizeSelectEl = document.getElementById("map-size-select");
+  const playerCountSelectEl = document.getElementById("player-count-select");
   const selectionLineEl = document.getElementById("selection-line");
   const actionLogEl = document.getElementById("action-log");
   const clearSelectionBtn = document.getElementById("clear-selection-btn");
@@ -83,6 +84,19 @@
     storm: { icon: "⛈️", label: "storm" },
     heat: { icon: "🔥", label: "heat" }
   };
+  const HUMAN_ID = "rome";
+  const CIV_COLORS = {
+    rome: "#d06b36",
+    carthage: "#4f9ecb",
+    greece: "#6ec1a8",
+    egypt: "#d8b23a",
+    gaul: "#9b6bd0",
+    parthia: "#cf5b7a"
+  };
+
+  function human() {
+    return state.playersById[HUMAN_ID];
+  }
 
   function hexSize() {
     if (!state) return 28;
@@ -127,11 +141,13 @@
       return;
     }
 
-    const humanWon = victory.winnerId === "rome";
+    const humanWon = victory.winnerId === HUMAN_ID;
+    const winner = state.playersById[victory.winnerId];
+    const winnerName = winner ? winner.civ || winner.id : victory.winnerId;
     resultTitleEl.textContent = humanWon ? "Victory" : "Defeat";
     resultBodyEl.textContent = humanWon
-      ? "Rome controls all capitals. The republic has prevailed."
-      : `Carthage has taken the upper hand. ${victory.reason || "Try another campaign."}`;
+      ? "Rome controls every capital. The republic has prevailed."
+      : `${winnerName} controls every capital. ${victory.reason || "Try another campaign."}`;
     resultModalEl.classList.remove("hidden");
   }
 
@@ -139,7 +155,7 @@
     if (!state) {
       return { visible: new Set(), discovered: new Set() };
     }
-    const visibility = engine.computeVisibility(state, "rome");
+    const visibility = engine.computeVisibility(state, HUMAN_ID);
     return {
       visible: new Set(visibility.visibleTiles),
       discovered: new Set(visibility.discoveredTiles)
@@ -147,7 +163,7 @@
   }
 
   function isHumanTurn() {
-    return state.players[state.currentPlayerIndex].id === "rome";
+    return state.players[state.currentPlayerIndex].id === HUMAN_ID;
   }
 
   function getUnitsAt(q, r) {
@@ -316,7 +332,7 @@
   }
 
   function runAiUntilHuman() {
-    while (state.players[state.currentPlayerIndex].id !== "rome") {
+    while (state.players[state.currentPlayerIndex].id !== HUMAN_ID) {
       const active = state.players[state.currentPlayerIndex].id;
       const result = engine.runAiTurn(state, active, 8);
       for (const action of result.actions) {
@@ -538,15 +554,18 @@
     const current = state.players[state.currentPlayerIndex];
     const victory = engine.getVictoryStatus(state);
 
-    statusEl.textContent =
-      "Turn " +
-      state.turn +
-      " | Active: " +
-      current.id +
-      " | Rome cities " +
-      state.playersById.rome.cityIds.length +
-      " | Carthage cities " +
-      state.playersById.carthage.cityIds.length;
+    const standings = state.players
+      .map((p) => {
+        const color = CIV_COLORS[p.id] || "#ccc";
+        const active = p.id === current.id ? "font-weight:700;text-decoration:underline" : "";
+        const eliminated = p.cityIds.length === 0 ? "opacity:0.5" : "";
+        return (
+          '<span style="color:' + color + ";" + active + ";" + eliminated + '">' +
+          (p.civ || p.id) + " " + p.cityIds.length + "</span>"
+        );
+      })
+      .join(" · ");
+    statusEl.innerHTML = "Turn " + state.turn + " · Cities — " + standings;
 
     victoryEl.textContent = victory.winnerId
       ? "Victory: " + victory.type + " by " + victory.winnerId
@@ -634,9 +653,11 @@
       label = "Italia scenario";
     } else {
       const seed = "map-" + choice + "-" + Date.now();
-      config = engine.generateMap({ size: choice, seed: seed });
+      const playerCount = playerCountSelectEl ? parseInt(playerCountSelectEl.value, 10) || 2 : 2;
+      config = engine.generateMap({ size: choice, seed: seed, playerCount: playerCount });
       const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
-      label = sizeLabel + " random map (" + config.map.width + "×" + config.map.height + ")";
+      label = sizeLabel + " random map (" + config.map.width + "×" + config.map.height + "), " +
+        config.players.length + " civs";
     }
     state = engine.createInitialGameState(config);
     clearSelection();
@@ -647,6 +668,21 @@
   }
 
   newGameBtn.addEventListener("click", newGame);
+
+  if (mapSizeSelectEl && playerCountSelectEl) {
+    mapSizeSelectEl.addEventListener("change", function () {
+      const size = mapSizeSelectEl.value;
+      if (size === "italia") {
+        playerCountSelectEl.value = "2";
+        playerCountSelectEl.disabled = true;
+      } else {
+        playerCountSelectEl.disabled = false;
+        const def = (engine.DEFAULT_PLAYERS && engine.DEFAULT_PLAYERS[size]) || 3;
+        playerCountSelectEl.value = String(def);
+      }
+    });
+  }
+
   endTurnBtn.addEventListener("click", function () {
     if (!isHumanTurn()) return;
     apply({ type: "END_TURN", playerId: "rome" });
