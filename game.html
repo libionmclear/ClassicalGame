@@ -11,7 +11,17 @@
     <header class="topbar">
       <h1>HEGEMON Prototype</h1>
       <div class="controls">
-        <button id="new-game-btn">New Italia Scenario</button>
+        <label class="map-picker">
+          Map
+          <select id="map-size-select">
+            <option value="italia">Italia (authored)</option>
+            <option value="small">Small</option>
+            <option value="medium" selected>Medium</option>
+            <option value="large">Large</option>
+            <option value="xl">XL</option>
+          </select>
+        </label>
+        <button id="new-game-btn">New Game</button>
         <button id="end-turn-btn">End Turn</button>
       </div>
     </header>
@@ -19,11 +29,16 @@
     <section class="status-panel">
       <div id="status-line"></div>
       <div id="victory-line"></div>
+      <div id="resource-bar" class="res-bar"></div>
+      <div id="weather-bar" class="weather-bar"></div>
       <div id="hint-line">Hint: Select your unit, then click a tile to move or attack.</div>
     </section>
 
     <section class="play-area">
-      <section id="board" class="board"></section>
+      <div class="board-wrap">
+        <section id="board" class="board"></section>
+        <div id="legend" class="legend"></div>
+      </div>
 
       <aside class="control-panel">
         <h2>Command Panel</h2>

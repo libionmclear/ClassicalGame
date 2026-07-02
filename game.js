@@ -9,6 +9,7 @@
   const victoryEl = document.getElementById("victory-line");
   const newGameBtn = document.getElementById("new-game-btn");
   const endTurnBtn = document.getElementById("end-turn-btn");
+  const mapSizeSelectEl = document.getElementById("map-size-select");
   const selectionLineEl = document.getElementById("selection-line");
   const actionLogEl = document.getElementById("action-log");
   const clearSelectionBtn = document.getElementById("clear-selection-btn");
@@ -20,6 +21,9 @@
   const researchBronzeBtn = document.getElementById("research-bronze-btn");
   const researchArcheryBtn = document.getElementById("research-archery-btn");
   const hintLineEl = document.getElementById("hint-line");
+  const resourceBarEl = document.getElementById("resource-bar");
+  const weatherBarEl = document.getElementById("weather-bar");
+  const legendEl = document.getElementById("legend");
   const resultModalEl = document.getElementById("result-modal");
   const resultTitleEl = document.getElementById("result-title");
   const resultBodyEl = document.getElementById("result-body");
@@ -32,6 +36,63 @@
   let hoveredPathKeys = new Set();
   const defaultHintText = "Hint: Select your unit, then click a tile to move or attack.";
   const unitCosts = { warrior: 12, archer: 14, settler: 18 };
+
+  // ----- Presentation lookups -----
+  const SQRT3 = Math.sqrt(3);
+  const UNIT_GLYPHS = {
+    warrior: "⚔️",
+    archer: "🏹",
+    horseman: "🐎",
+    trireme: "⛵",
+    merchant: "🪙",
+    settler: "🛠️"
+  };
+  const TERRAIN_LABELS = {
+    plains: "Plains",
+    valley: "Valley",
+    forest: "Forest",
+    hills: "Hills",
+    mountains: "Mountains",
+    desert: "Desert",
+    coast: "Coast",
+    sea: "Sea"
+  };
+  // Faint glyphs on empty tiles so the map reads like terrain at a glance.
+  const TERRAIN_GLYPHS = {
+    valley: "🌾",
+    forest: "🌲",
+    hills: "⛰️",
+    mountains: "🏔️",
+    desert: "🏜️",
+    coast: "〰️",
+    sea: "🌊"
+  };
+  const TERRAIN_SWATCH = {
+    plains: "#6f7d47",
+    valley: "#7d9749",
+    forest: "#33553a",
+    hills: "#7a6a4a",
+    desert: "#b79860",
+    coast: "#3f7387",
+    sea: "#2f4f77"
+  };
+  const WEATHER_INFO = {
+    clear: { icon: "☀️", label: "clear" },
+    rain: { icon: "🌧️", label: "rain" },
+    fog: { icon: "🌫️", label: "fog" },
+    storm: { icon: "⛈️", label: "storm" },
+    heat: { icon: "🔥", label: "heat" }
+  };
+
+  function hexSize() {
+    if (!state) return 28;
+    const cols = state.map.width;
+    const rows = state.map.height;
+    const extentW = cols + (rows - 1) / 2;
+    const avail = Math.max(280, Math.min((window.innerWidth || 1000) - 360, 760));
+    const size = Math.floor(avail / (extentW * SQRT3));
+    return Math.max(14, Math.min(30, size));
+  }
 
   function logAction(message) {
     actionLog.unshift(message);
@@ -321,7 +382,7 @@
     });
   }
 
-  function renderTile(q, r, visibility, hints) {
+  function renderTile(q, r, visibility, hints, geom) {
     const key = q + "," + r;
     const tile = state.map.tiles[key];
     const isVisible = visibility.visible.has(key);
@@ -334,77 +395,82 @@
     btn.className = "tile terrain-" + tile.terrain;
     btn.dataset.key = key;
 
+    // Hex layout (pointy-top, axial -> pixel) so on-screen adjacency == engine adjacency.
+    btn.style.width = geom.hexW + "px";
+    btn.style.height = geom.hexH + "px";
+    btn.style.left = geom.hexW * (q + r / 2) + "px";
+    btn.style.top = geom.vSpace * r + "px";
+
     if (!isVisible) {
       btn.classList.add("fog");
-      if (isDiscovered) {
-        btn.classList.add("discovered");
-      }
+      if (isDiscovered) btn.classList.add("discovered");
+    }
+    if (hints.reachable.has(key)) btn.classList.add("reachable");
+    if (hints.attackable.has(key)) btn.classList.add("attackable");
+    if (hoveredPathKeys.has(key)) btn.classList.add("path-preview");
+
+    const selectedUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
+    if (selectedUnit && selectedUnit.position.q === q && selectedUnit.position.r === r) {
+      btn.classList.add("selected");
+    }
+    const citySelected = selectedCityId ? state.map.cities[selectedCityId] : null;
+    if (citySelected && citySelected.position.q === q && citySelected.position.r === r) {
+      btn.classList.add("selected");
     }
 
-    if (hints.reachable.has(key)) {
-      btn.classList.add("reachable");
-    }
-    if (hints.attackable.has(key)) {
-      btn.classList.add("attackable");
-    }
-    if (hoveredPathKeys.has(key)) {
-      btn.classList.add("path-preview");
-    }
+    // Build compact visual content + a rich tooltip.
+    const tip = ["(" + q + "," + r + ") " + (TERRAIN_LABELS[tile.terrain] || tile.terrain)];
+    let inner = '<span class="coord">' + q + "," + r + "</span>";
 
-    if (selectedUnitId) {
-      const selected = state.map.units[selectedUnitId];
-      if (selected && selected.position.q === q && selected.position.r === r) {
-        btn.classList.add("selected");
-      }
-    }
-
-    if (selectedCityId) {
-      const citySelected = state.map.cities[selectedCityId];
-      if (citySelected && citySelected.position.q === q && citySelected.position.r === r) {
-        btn.classList.add("selected");
-      }
-    }
-
-    const lines = [];
-    lines.push("(" + q + "," + r + ")");
     if (!isVisible) {
-      lines.push(isDiscovered ? "Shrouded" : "Unknown");
-    }
-    if (city) {
-      lines.push("City: " + city.id + " HP " + city.hp);
+      inner += '<span class="glyph">' + (isDiscovered ? "▒" : "?") + "</span>";
+      tip.push(isDiscovered ? "Shrouded (last seen)" : "Unexplored");
+    } else if (city) {
       btn.classList.add("owner-" + city.ownerId);
-    }
-    if (units.length > 0) {
+      inner += '<span class="glyph">' + (city.isCapital ? "🏛️" : "🏘️") + "</span>";
+      inner += hpBar(city.hp, city.maxHp);
+      tip.push((city.isCapital ? "Capital " : "City ") + city.id + " — " + city.ownerId);
+      tip.push("Pop " + city.population + " · HP " + city.hp + "/" + city.maxHp);
+      if (units.length > 0) tip.push("Garrison: " + units.map((u) => u.type).join(", "));
+    } else if (units.length > 0) {
+      const top = units[0];
+      btn.classList.add("owner-" + top.ownerId);
+      inner += '<span class="glyph">' + (UNIT_GLYPHS[top.type] || "•") + "</span>";
+      inner += hpBar(top.hp, top.maxHp);
+      if (units.length > 1) inner += '<span class="stack">+' + (units.length - 1) + "</span>";
       for (const u of units) {
-        lines.push(u.ownerId + " " + u.type + " HP " + u.hp);
+        tip.push(
+          u.ownerId + " " + u.type + " — HP " + u.hp + "/" + u.maxHp +
+          " · move " + u.movementRemaining +
+          (u.veterancy && u.veterancy !== "recruit" ? " · " + u.veterancy : "")
+        );
       }
-      btn.classList.add("owner-" + units[0].ownerId);
+    } else if (TERRAIN_GLYPHS[tile.terrain]) {
+      inner += '<span class="glyph tglyph">' + TERRAIN_GLYPHS[tile.terrain] + "</span>";
     }
 
     let hoverHint = "";
-    if (isVisible && selectedUnitId) {
-      const selected = state.map.units[selectedUnitId];
-      if (selected) {
-        const enemyUnit = units.find((u) => u.ownerId !== selected.ownerId);
-        if (enemyUnit) {
-          try {
-            const preview = engine.computeCombatPreview(state, selected.id, enemyUnit.id);
-            hoverHint =
-              "Preview: enemy -" +
-              preview.damageToDefender +
-              " HP, your unit -" +
-              preview.damageToAttacker +
-              " HP";
-          } catch {
-            hoverHint = "Target currently out of range.";
-          }
-        } else if (city && city.ownerId !== selected.ownerId) {
-          hoverHint = "Siege target: " + city.id + " HP " + city.hp;
+    if (isVisible && selectedUnit) {
+      const enemyUnit = units.find((u) => u.ownerId !== selectedUnit.ownerId);
+      if (enemyUnit) {
+        try {
+          const preview = engine.computeCombatPreview(state, selectedUnit.id, enemyUnit.id);
+          hoverHint =
+            "⚔️ Attack " + enemyUnit.type + ": enemy −" + preview.damageToDefender +
+            " HP (→" + preview.defenderRemainingHp + "), you −" + preview.damageToAttacker +
+            " HP (→" + preview.attackerRemainingHp + ")";
+        } catch {
+          hoverHint = "Target out of range.";
         }
+      } else if (city && city.ownerId !== selectedUnit.ownerId) {
+        hoverHint = "🏛️ Siege " + city.id + " (HP " + city.hp + "/" + city.maxHp + ")";
+      } else if (hints.reachable.has(key)) {
+        hoverHint = "Move here";
       }
     }
 
-    btn.textContent = lines.join(" | ");
+    btn.innerHTML = inner;
+    btn.title = tip.join("\n");
     btn.addEventListener("click", function () {
       onTileClick(q, r);
     });
@@ -420,6 +486,14 @@
     });
 
     return btn;
+  }
+
+  function hpBar(hp, maxHp) {
+    const pct = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
+    let cls = "hpbar";
+    if (pct <= 25) cls += " crit";
+    else if (pct <= 55) cls += " low";
+    return '<span class="' + cls + '"><span style="width:' + pct + '%"></span></span>';
   }
 
   function updatePanelState(victory) {
@@ -481,24 +555,92 @@
     const visibility = getHumanVisibility();
     const hints = getTileHintsForSelectedUnit(visibility);
 
+    const size = hexSize();
+    const geom = {
+      hexW: SQRT3 * size,
+      hexH: 2 * size,
+      vSpace: size * 1.5
+    };
+    const extentW = state.map.width + (state.map.height - 1) / 2;
+    boardEl.style.width = geom.hexW * extentW + "px";
+    boardEl.style.height = geom.vSpace * (state.map.height - 1) + geom.hexH + "px";
+
     boardEl.innerHTML = "";
     for (let r = 0; r < state.map.height; r += 1) {
       for (let q = 0; q < state.map.width; q += 1) {
-        boardEl.appendChild(renderTile(q, r, visibility, hints));
+        boardEl.appendChild(renderTile(q, r, visibility, hints, geom));
       }
     }
 
     endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
+    renderHud();
+    renderLegend();
     updatePanelState(victory);
     renderLog();
     showResultModal(victory);
   }
 
+  function renderHud() {
+    const rome = state.playersById.rome;
+    const resources = [
+      { ico: "🌾", val: rome.food, lbl: "food" },
+      { ico: "⚒️", val: rome.production, lbl: "prod" },
+      { ico: "🪙", val: rome.gold, lbl: "gold" },
+      { ico: "📜", val: rome.techs.length, lbl: "techs" }
+    ];
+    resourceBarEl.innerHTML = resources
+      .map(
+        (r) =>
+          '<span class="res"><span class="res-ico">' + r.ico +
+          '</span><span class="res-val">' + r.val +
+          '</span><span class="res-lbl">' + r.lbl + "</span></span>"
+      )
+      .join("");
+
+    // Weather is the game's only luck — surface current + forecast per region.
+    const regions = state.map.regions || [];
+    weatherBarEl.innerHTML = regions
+      .map((region) => {
+        const now = WEATHER_INFO[state.weather.current[region]] || WEATHER_INFO.clear;
+        const next = WEATHER_INFO[state.weather.forecast[region]] || WEATHER_INFO.clear;
+        return (
+          '<span class="weather-chip"><span class="wx-region">' + region +
+          "</span> " + now.icon + " " + now.label +
+          ' <span class="wx-next">→ ' + next.icon + "</span></span>"
+        );
+      })
+      .join("");
+  }
+
+  function renderLegend() {
+    const terrains = Object.keys(TERRAIN_SWATCH);
+    const parts = terrains.map(
+      (t) =>
+        '<span class="legend-item"><span class="legend-swatch" style="background:' +
+        TERRAIN_SWATCH[t] + '"></span>' + (TERRAIN_LABELS[t] || t) + "</span>"
+    );
+    parts.push('<span class="legend-item"><span class="legend-swatch" style="background:#f2cc69"></span>Selected</span>');
+    parts.push('<span class="legend-item"><span class="legend-swatch" style="background:#7ed957"></span>Reachable</span>');
+    parts.push('<span class="legend-item"><span class="legend-swatch" style="background:#e0533d"></span>Attackable</span>');
+    legendEl.innerHTML = parts.join("");
+  }
+
   function newGame() {
-    const scenario = engine.loadScenario("italia");
-    state = engine.createInitialGameState(scenario.config);
+    const choice = (mapSizeSelectEl && mapSizeSelectEl.value) || "medium";
+    let config;
+    let label;
+    if (choice === "italia") {
+      config = engine.loadScenario("italia").config;
+      label = "Italia scenario";
+    } else {
+      const seed = "map-" + choice + "-" + Date.now();
+      config = engine.generateMap({ size: choice, seed: seed });
+      const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
+      label = sizeLabel + " random map (" + config.map.width + "×" + config.map.height + ")";
+    }
+    state = engine.createInitialGameState(config);
     clearSelection();
-    actionLog = ["New game started: Italia scenario"];
+    actionLog = ["New game started: " + label];
     hintLineEl.textContent = defaultHintText;
     resultModalEl.classList.add("hidden");
     render();
@@ -569,6 +711,14 @@
   });
 
   resultNewGameBtn.addEventListener("click", newGame);
+
+  let resizeTimer = null;
+  window.addEventListener("resize", function () {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (state) render();
+    }, 120);
+  });
 
   newGame();
 })();

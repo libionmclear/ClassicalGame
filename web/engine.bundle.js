@@ -21,14 +21,30 @@ var HegemonEngine = (() => {
   // src/engine/browser-entry.ts
   var browser_entry_exports = {};
   __export(browser_entry_exports, {
+    MAP_SIZES: () => MAP_SIZES,
+    TECHS: () => TECHS,
+    TERRAIN: () => TERRAIN,
+    UNITS: () => UNITS,
+    WEATHER_STATES: () => WEATHER_STATES,
     applyAction: () => applyAction,
+    canResearch: () => canResearch,
     chooseAiAction: () => chooseAiAction,
+    computeCombatPreview: () => computeCombatPreview,
+    computeVisibility: () => computeVisibility,
     createInitialGameState: () => createInitialGameState,
+    deserializeState: () => deserializeState,
+    distance: () => distance,
+    findPath: () => findPath,
+    generateMap: () => generateMap,
     getVictoryStatus: () => getVictoryStatus,
     keyOf: () => keyOf,
     listScenarios: () => listScenarios,
     loadScenario: () => loadScenario,
-    runAiTurn: () => runAiTurn
+    movementCost: () => movementCost,
+    parseKey: () => parseKey,
+    replayActions: () => replayActions,
+    runAiTurn: () => runAiTurn,
+    serializeState: () => serializeState
   });
 
   // src/engine/data.ts
@@ -41,6 +57,13 @@ var HegemonEngine = (() => {
     desert: { moveCost: 2, yields: { food: 0, production: 0, gold: 0 }, defense: 0, vision: 0 },
     coast: { moveCost: 1, yields: { food: 1, production: 0, gold: 1 }, defense: 0, vision: 0, navalOnly: true },
     sea: { moveCost: 1, yields: { food: 0, production: 0, gold: 0 }, defense: 0, vision: 0, navalOnly: true, requiresTech: "open-sea-sailing" }
+  };
+  var WEATHER_STATES = {
+    clear: {},
+    rain: { mountedMovePenalty: 1, riverCrossingExtra: 1 },
+    fog: { visionPenalty: 1, ambushMultiplier: 2 },
+    storm: { deepSeaDamage: 2, deepSeaEntryBlocked: true },
+    heat: { desertAttritionMultiplier: 2 }
   };
   var TECHS = {
     "bronze-working": { age: 1, prerequisites: [] },
@@ -258,6 +281,58 @@ var HegemonEngine = (() => {
   function seededRandom(seed, salt) {
     const seedFn = xmur3(`${seed}:${salt}`);
     return mulberry32(seedFn());
+  }
+
+  // src/engine/visibility.ts
+  var discoveredByPlayer = /* @__PURE__ */ new Map();
+  function clampMin(value, minValue) {
+    return value < minValue ? minValue : value;
+  }
+  function tileVisionBonus(state, coord) {
+    const key = `${coord.q},${coord.r}`;
+    const tile = state.map.tiles[key];
+    if (!tile) return 0;
+    if (tile.terrain === "hills") return 1;
+    return 0;
+  }
+  function weatherVisionPenalty(state, coord) {
+    const key = `${coord.q},${coord.r}`;
+    const tile = state.map.tiles[key];
+    if (!tile) return 0;
+    return state.weather.current[tile.region] === "fog" ? 1 : 0;
+  }
+  function addVisibilityFromSource(state, source, baseRange, visible) {
+    const sourceBonus = tileVisionBonus(state, source);
+    const weatherPenalty = weatherVisionPenalty(state, source);
+    const radius = clampMin(baseRange + sourceBonus - weatherPenalty, 1);
+    for (const key of Object.keys(state.map.tiles)) {
+      const target = parseKey(key);
+      if (distance(source, target) <= radius) {
+        visible.add(key);
+      }
+    }
+  }
+  function computeVisibility(state, playerId) {
+    const visible = /* @__PURE__ */ new Set();
+    for (const city of Object.values(state.map.cities)) {
+      if (city.ownerId !== playerId) continue;
+      addVisibilityFromSource(state, city.position, 2, visible);
+    }
+    for (const unit of Object.values(state.map.units)) {
+      if (unit.ownerId !== playerId) continue;
+      const unitDef = UNITS[unit.type];
+      const baseRange = unitDef.range > 1 ? 3 : 2;
+      addVisibilityFromSource(state, unit.position, baseRange, visible);
+    }
+    const discovered = discoveredByPlayer.get(playerId) ?? /* @__PURE__ */ new Set();
+    for (const key of visible) {
+      discovered.add(key);
+    }
+    discoveredByPlayer.set(playerId, discovered);
+    return {
+      visibleTiles: [...visible],
+      discoveredTiles: [...discovered]
+    };
   }
 
   // src/engine/index.ts
@@ -743,6 +818,15 @@ var HegemonEngine = (() => {
     });
     return state;
   }
+  function serializeState(state) {
+    return JSON.stringify(state);
+  }
+  function deserializeState(serialized) {
+    return JSON.parse(serialized);
+  }
+  function replayActions(initialState, actions) {
+    return actions.reduce((state, action) => applyAction(state, action), deepClone(initialState));
+  }
 
   // src/engine/ai.ts
   function firstBuildableTech(player) {
@@ -826,7 +910,7 @@ var HegemonEngine = (() => {
     for (const cityId of player.cityIds) {
       const city = state.map.cities[cityId];
       if (!city) continue;
-      const desiredUnit = player.unitIds.length < player.cityIds.length * 2 ? "warrior" : "archer";
+      const desiredUnit = player.unitIds.length < player.cityIds.length * 3 ? "warrior" : "archer";
       const cost = UNIT_BUILD_COSTS[desiredUnit];
       if (player.production < cost) continue;
       let counter = 1;
@@ -900,12 +984,13 @@ var HegemonEngine = (() => {
       () => findFoundCityAction(state, player),
       () => findAttackAction(state, player),
       () => findBuildUnitAction(state, player),
+      () => findAdvanceAction(state, player),
       () => {
         const techId = firstBuildableTech(player);
         if (!techId) return null;
         return { type: "RESEARCH_TECH", playerId: player.id, techId };
       },
-      () => findAdvanceAction(state, player)
+      () => null
     ];
     for (const pick of actions) {
       const action = pick();
@@ -1026,6 +1111,207 @@ var HegemonEngine = (() => {
       throw new Error(`Unknown scenario ${id}`);
     }
     return JSON.parse(JSON.stringify(scenario));
+  }
+
+  // src/engine/mapgen.ts
+  var MAP_SIZES = {
+    small: { width: 9, height: 7, bands: 2, label: "Small" },
+    medium: { width: 13, height: 10, bands: 2, label: "Medium" },
+    large: { width: 18, height: 13, bands: 3, label: "Large" },
+    xl: { width: 24, height: 17, bands: 3, label: "XL" }
+  };
+  var WALKABLE = /* @__PURE__ */ new Set([
+    "plains",
+    "valley",
+    "forest",
+    "hills",
+    "desert"
+  ]);
+  var CAPITAL_TERRAIN = /* @__PURE__ */ new Set(["plains", "valley", "hills"]);
+  function smooth(t) {
+    return t * t * (3 - 2 * t);
+  }
+  function lattice(seed, salt, x, y) {
+    return seededRandom(seed, `${salt}:${x}:${y}`)();
+  }
+  function valueNoise(seed, salt, x, y, cell) {
+    const gx = x / cell;
+    const gy = y / cell;
+    const x0 = Math.floor(gx);
+    const y0 = Math.floor(gy);
+    const fx = gx - x0;
+    const fy = gy - y0;
+    const v00 = lattice(seed, salt, x0, y0);
+    const v10 = lattice(seed, salt, x0 + 1, y0);
+    const v01 = lattice(seed, salt, x0, y0 + 1);
+    const v11 = lattice(seed, salt, x0 + 1, y0 + 1);
+    const sx = smooth(fx);
+    const sy = smooth(fy);
+    const top = v00 + (v10 - v00) * sx;
+    const bottom = v01 + (v11 - v01) * sx;
+    return top + (bottom - top) * sy;
+  }
+  function fbm(seed, salt, x, y) {
+    return 0.55 * valueNoise(seed, salt, x, y, 5.5) + 0.3 * valueNoise(seed, salt, x, y, 2.7) + 0.15 * valueNoise(seed, salt, x, y, 1.4);
+  }
+  function terrainFor(elev, moist) {
+    if (elev < 0.3) return "sea";
+    if (elev < 0.38) return "coast";
+    if (elev > 0.83) return "mountains";
+    if (elev > 0.7) return "hills";
+    if (moist < 0.3) return "desert";
+    if (moist > 0.68 && elev < 0.55) return "valley";
+    if (moist > 0.52) return "forest";
+    return "plains";
+  }
+  function bandName(r, height, bands) {
+    const idx = Math.min(bands - 1, Math.floor(r / height * bands));
+    if (bands <= 2) return idx === 0 ? "north" : "south";
+    return ["north", "central", "south"][idx];
+  }
+  function buildTerrain(seed, spec) {
+    const { width, height, bands } = spec;
+    const tiles = {};
+    const regionSet = /* @__PURE__ */ new Set();
+    for (let r = 0; r < height; r += 1) {
+      for (let q = 0; q < width; q += 1) {
+        let elev = fbm(seed, "elev", q, r) + 0.06;
+        const nx = width <= 1 ? 0 : q / (width - 1) * 2 - 1;
+        const ny = height <= 1 ? 0 : r / (height - 1) * 2 - 1;
+        const edge = Math.max(Math.abs(nx), Math.abs(ny));
+        elev -= 0.55 * Math.pow(edge, 3);
+        const moist = fbm(seed, "moist", q, r) - 0.22 * (height <= 1 ? 0 : r / (height - 1));
+        const region = bandName(r, height, bands);
+        regionSet.add(region);
+        tiles[keyOf({ q, r })] = { terrain: terrainFor(elev, moist), region };
+      }
+    }
+    const order = ["north", "central", "south"];
+    const regions = order.filter((name) => regionSet.has(name));
+    return { tiles, regions };
+  }
+  function largestWalkableComponent(tiles, spec) {
+    const inBounds = (c) => c.q >= 0 && c.r >= 0 && c.q < spec.width && c.r < spec.height;
+    const isWalkable = (key) => tiles[key] && WALKABLE.has(tiles[key].terrain);
+    const seen = /* @__PURE__ */ new Set();
+    let best = [];
+    for (const startKey of Object.keys(tiles)) {
+      if (seen.has(startKey) || !isWalkable(startKey)) continue;
+      const component = [];
+      const queue = [startKey];
+      seen.add(startKey);
+      while (queue.length > 0) {
+        const key = queue.pop();
+        component.push(key);
+        for (const n of neighborsOf(parseKey(key))) {
+          if (!inBounds(n)) continue;
+          const nk = keyOf(n);
+          if (!seen.has(nk) && isWalkable(nk)) {
+            seen.add(nk);
+            queue.push(nk);
+          }
+        }
+      }
+      if (component.length > best.length) best = component;
+    }
+    return best;
+  }
+  function farthestPair(keys) {
+    if (keys.length < 2) return null;
+    let best = null;
+    let bestDist = -1;
+    for (let i = 0; i < keys.length; i += 1) {
+      for (let j = i + 1; j < keys.length; j += 1) {
+        const d = distance(parseKey(keys[i]), parseKey(keys[j]));
+        if (d > bestDist) {
+          bestDist = d;
+          best = [keys[i], keys[j]];
+        }
+      }
+    }
+    return best;
+  }
+  function placeStarters(capitalKey, tiles, spec, taken) {
+    const cap = parseKey(capitalKey);
+    const inBounds = (c) => c.q >= 0 && c.r >= 0 && c.q < spec.width && c.r < spec.height;
+    const free = neighborsOf(cap).filter(
+      (c) => inBounds(c) && tiles[keyOf(c)] && WALKABLE.has(tiles[keyOf(c)].terrain) && !taken.has(keyOf(c))
+    );
+    const warrior = free[0] ?? cap;
+    taken.add(keyOf(warrior));
+    const settler = free.find((c) => keyOf(c) !== keyOf(warrior)) ?? cap;
+    taken.add(keyOf(settler));
+    return { warrior, settler };
+  }
+  function tryGenerate(seed, spec) {
+    const { tiles, regions } = buildTerrain(seed, spec);
+    const component = largestWalkableComponent(tiles, spec);
+    const minComponent = Math.max(8, Math.floor(spec.width * spec.height * 0.15));
+    if (component.length < minComponent) return null;
+    const preferred = component.filter((k) => CAPITAL_TERRAIN.has(tiles[k].terrain));
+    const pool = preferred.length >= 2 ? preferred : component;
+    const pair = farthestPair(pool);
+    if (!pair) return null;
+    const [romeKey, carthageKey] = pair;
+    const minSeparation = Math.max(4, Math.floor((spec.width + spec.height) / 4));
+    if (distance(parseKey(romeKey), parseKey(carthageKey)) < minSeparation) return null;
+    const taken = /* @__PURE__ */ new Set([romeKey, carthageKey]);
+    const romeStart = placeStarters(romeKey, tiles, spec, taken);
+    const carthageStart = placeStarters(carthageKey, tiles, spec, taken);
+    const romePos = parseKey(romeKey);
+    const carthagePos = parseKey(carthageKey);
+    return {
+      seed,
+      players: [
+        { id: "rome", civ: "Rome", food: 8, production: 30, gold: 20 },
+        { id: "carthage", civ: "Carthage", food: 8, production: 30, gold: 20 }
+      ],
+      map: {
+        width: spec.width,
+        height: spec.height,
+        regions,
+        rivers: {},
+        tiles,
+        cities: {
+          rome_capital: {
+            id: "rome_capital",
+            ownerId: "rome",
+            position: romePos,
+            population: 2,
+            hp: 40,
+            maxHp: 40,
+            isCapital: true
+          },
+          carthage_capital: {
+            id: "carthage_capital",
+            ownerId: "carthage",
+            position: carthagePos,
+            population: 2,
+            hp: 40,
+            maxHp: 40,
+            isCapital: true
+          }
+        },
+        units: {
+          r_warrior: { id: "r_warrior", type: "warrior", ownerId: "rome", position: romeStart.warrior },
+          r_settler: { id: "r_settler", type: "settler", ownerId: "rome", position: romeStart.settler },
+          c_warrior: { id: "c_warrior", type: "warrior", ownerId: "carthage", position: carthageStart.warrior },
+          c_settler: { id: "c_settler", type: "settler", ownerId: "carthage", position: carthageStart.settler }
+        }
+      }
+    };
+  }
+  function generateMap(options = {}) {
+    const size = options.size ?? "medium";
+    const spec = MAP_SIZES[size];
+    if (!spec) throw new Error(`Unknown map size ${size}`);
+    const baseSeed = options.seed ?? "hegemon-map";
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const seed = attempt === 0 ? baseSeed : `${baseSeed}#${attempt}`;
+      const config = tryGenerate(seed, spec);
+      if (config) return config;
+    }
+    throw new Error(`Map generation failed for size ${size} (seed ${baseSeed})`);
   }
   return __toCommonJS(browser_entry_exports);
 })();
