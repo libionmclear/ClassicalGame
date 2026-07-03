@@ -37,34 +37,44 @@ const modalVisible = await page
   .evaluate((el) => getComputedStyle(el).display !== "none");
 if (modalVisible) fail("result modal is covering the board on a fresh game");
 
+// 1b) A fresh game auto-selects the capital, so the build menu is live immediately.
+const startSel = await page.locator("#selection-line").textContent();
+if (!/City:/.test(startSel || "")) fail("capital was not auto-selected on new game: " + startSel);
+const startBuild = await page.locator("#build-menu .build-item:not([disabled])").count();
+if (startBuild < 1) fail("build menu has no enabled options on a fresh game");
+
 // 2) Clicking one of the human's own tiles must select something.
-const before = await page.locator("#selection-line").textContent();
+// 2) Clicking a unit tile selects that unit.
 const owned = page.locator(".tile.owner-rome");
 if ((await owned.count()) === 0) fail("no owner-rome tiles rendered");
-await owned.first().scrollIntoViewIfNeeded();
-await owned.first().click({ timeout: 3000 });
-const after = await page.locator("#selection-line").textContent();
-if (before === after) fail("clicking an owned tile did not change the selection");
+const unitTiles = owned.filter({ has: page.locator(".figures") });
+if ((await unitTiles.count()) === 0) fail("no rome unit tiles rendered");
+await unitTiles.first().scrollIntoViewIfNeeded();
+await unitTiles.first().click({ timeout: 3000 });
+let sel = await page.locator("#selection-line").textContent();
+if (!/Unit selected/.test(sel || "")) fail("clicking a unit tile did not select a unit: " + sel);
 
-// 3) Selecting a unit and clicking a reachable tile must issue a move.
+// 3) With a unit selected, clicking a reachable tile issues a move.
 let moved = false;
-const unitTiles = owned;
-const n = await unitTiles.count();
-for (let i = 0; i < n; i += 1) {
-  await unitTiles.nth(i).click();
-  const sel = await page.locator("#selection-line").textContent();
-  if (sel && sel.includes("Unit selected")) {
-    const reachable = page.locator(".tile.reachable");
+const reachable = page.locator(".tile.reachable");
+if ((await reachable.count()) > 0) {
+  const logBefore = await page.locator("#action-log").textContent();
+  await reachable.first().click();
+  const logAfter = await page.locator("#action-log").textContent();
+  moved = logAfter !== logBefore;
+} else {
+  // Try another unit if the first had no room (rare on open maps).
+  const n = await unitTiles.count();
+  for (let i = 1; i < n && !moved; i += 1) {
+    await unitTiles.nth(i).click();
     if ((await reachable.count()) > 0) {
       const logBefore = await page.locator("#action-log").textContent();
       await reachable.first().click();
-      const logAfter = await page.locator("#action-log").textContent();
-      moved = logAfter !== logBefore;
+      moved = (await page.locator("#action-log").textContent()) !== logBefore;
     }
-    break;
   }
 }
-if (!moved) fail("could not select a unit and move it to a reachable tile");
+if (!moved) fail("could not move a unit to a reachable tile");
 
 if (errors.length) fail("page errors: " + errors.slice(0, 3).join(" || "));
 

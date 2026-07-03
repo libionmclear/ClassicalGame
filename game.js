@@ -33,7 +33,7 @@
   let actionLog = [];
   let hoveredPathKeys = new Set();
   let pendingRecenter = true;
-  const defaultHintText = "Hint: Select your unit, then click a tile to move or attack.";
+  const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
   const BUILDABLE = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "settler"];
@@ -212,7 +212,8 @@
         ? Math.max(280, wrap.clientWidth - 28)
         : Math.max(280, Math.min((window.innerWidth || 1000) - 340, 820));
     const size = Math.floor(avail / (extentW * SQRT3));
-    return Math.max(13, Math.min(30, size));
+    // Keep hexes comfortably clickable; big maps scroll (view auto-centres on start).
+    return Math.max(20, Math.min(34, size));
   }
 
   function logAction(message) {
@@ -989,6 +990,12 @@
 
     state = engine.createInitialGameState(config);
     clearSelection();
+    // Pre-select the capital so the command panel is immediately actionable
+    // (build menu live, city highlighted) — makes it obvious you can play.
+    const capital =
+      Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
+      Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
+    if (capital) selectedCityId = capital.id;
     actionLog = ["New game started: " + label];
     hintLineEl.textContent = defaultHintText;
     pendingRecenter = true;
