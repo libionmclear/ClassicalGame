@@ -124,6 +124,8 @@ export interface GameState {
   version: number;
   seed: string;
   turn: number;
+  /** Match ends and score is tallied once turn passes this. */
+  turnLimit: number;
   currentPlayerIndex: number;
   players: Player[];
   playersById: Record<string, Player>;
@@ -229,7 +231,7 @@ export type GameAction =
 
 export interface VictoryStatus {
   winnerId: string | null;
-  type: "domination" | null;
+  type: "domination" | "score" | null;
   reason: string | null;
 }
 
@@ -249,6 +251,7 @@ export interface CombatPreview {
 
 export interface CreateGameConfig {
   seed?: string;
+  turnLimit?: number;
   players?: Partial<Player>[];
   map?: {
     width?: number;

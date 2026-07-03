@@ -437,10 +437,34 @@
     const humanWon = victory.winnerId === HUMAN_ID;
     const winner = state.playersById[victory.winnerId];
     const winnerName = winner ? winner.civ || winner.id : victory.winnerId;
-    resultTitleEl.textContent = humanWon ? "Victory" : "Defeat";
-    resultBodyEl.textContent = humanWon
-      ? "Rome controls every capital. The republic has prevailed."
-      : `${winnerName} controls every capital. ${victory.reason || "Try another campaign."}`;
+    const byScore = victory.type === "score";
+
+    resultTitleEl.textContent = humanWon
+      ? (byScore ? "Victory — Hegemony" : "Victory")
+      : "Defeat";
+
+    if (byScore) {
+      // Show the final standings so the score win is legible.
+      let standings = "";
+      try {
+        const scores = engine.computeScores ? engine.computeScores(state) : {};
+        standings = state.players
+          .map((p) => ({ id: p.id, name: p.civ || p.id, score: scores[p.id] || 0 }))
+          .sort((a, b) => b.score - a.score)
+          .map((e, i) => `${i + 1}. ${e.name} — ${e.score}`)
+          .join("   ");
+      } catch (err) {
+        standings = "";
+      }
+      const lead = humanWon
+        ? `Rome held the greatest realm when the age closed (turn ${state.turnLimit}).`
+        : `${winnerName} held the greatest realm when the age closed (turn ${state.turnLimit}).`;
+      resultBodyEl.textContent = standings ? `${lead}   ${standings}` : lead;
+    } else {
+      resultBodyEl.textContent = humanWon
+        ? "Rome controls every capital. The republic has prevailed."
+        : `${winnerName} controls every capital. ${victory.reason || "Try another campaign."}`;
+    }
     resultModalEl.classList.remove("hidden");
   }
 
@@ -1083,8 +1107,11 @@
 
     try {
       const activeColor = CIV_COLORS[current.id] || "#ccc";
+      const turnLabel = state.turnLimit
+        ? "Turn " + state.turn + " / " + state.turnLimit
+        : "Turn " + state.turn;
       statusEl.innerHTML =
-        "Turn " + state.turn + " — " +
+        turnLabel + " — " +
         '<span style="color:' + activeColor + ';font-weight:700">' + (current.civ || current.id) + "</span>" +
         (current.id === HUMAN_ID ? " (your move)" : " is moving…");
 

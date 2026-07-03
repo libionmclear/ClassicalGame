@@ -2,6 +2,7 @@ import type { CreateGameConfig } from "../types";
 
 export const italiaScenario: CreateGameConfig = {
   seed: "italia-264bc",
+  turnLimit: 40,
   players: [
     { id: "rome", civ: "Rome", food: 8, production: 30, gold: 20 },
     { id: "carthage", civ: "Carthage", food: 8, production: 30, gold: 20 }

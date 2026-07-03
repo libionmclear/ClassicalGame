@@ -203,3 +203,29 @@ test("city can be captured and domination victory is detected", () => {
   assert.equal(victory.type, "domination");
   assert.equal(victory.winnerId, "p1");
 });
+
+test("no winner while both capitals stand before the turn limit", () => {
+  const state = buildState();
+  state.map.cities.c1.isCapital = true;
+  state.map.cities.c2.isCapital = true;
+  state.turnLimit = 40;
+  state.turn = 5;
+
+  const victory = getVictoryStatus(state);
+  assert.equal(victory.winnerId, null);
+  assert.equal(victory.type, null);
+});
+
+test("score victory is awarded to the leader once the turn limit passes", () => {
+  const state = buildState();
+  // Both capitals still standing so no domination winner.
+  state.map.cities.c1.isCapital = true;
+  state.map.cities.c2.isCapital = true;
+  state.turnLimit = 40;
+  state.turn = 41;
+
+  // p1 owns two cities and three units in buildState, so it leads on score.
+  const victory = getVictoryStatus(state);
+  assert.equal(victory.type, "score");
+  assert.equal(victory.winnerId, "p1");
+});

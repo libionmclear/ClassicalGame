@@ -794,6 +794,7 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
     version: 1,
     seed: String(config.seed || "hegemon-seed"),
     turn: 1,
+    turnLimit: config.turnLimit ?? 60,
     currentPlayerIndex: 0,
     players,
     playersById: makePlayersById(players),
@@ -870,21 +871,33 @@ export function computeScores(state: GameState): Record<string, number> {
 
 export function getVictoryStatus(state: GameState): VictoryStatus {
   const capitals = Object.values(state.map.cities).filter((city) => city.isCapital);
-  if (capitals.length === 0) {
-    return { winnerId: null, type: null, reason: null };
+
+  // Domination: one player holds every capital.
+  if (capitals.length > 0) {
+    const owner = capitals[0].ownerId;
+    if (capitals.every((city) => city.ownerId === owner)) {
+      return { winnerId: owner, type: "domination", reason: `${owner} controls all capitals` };
+    }
   }
 
-  const owner = capitals[0].ownerId;
-  const allOwnedBySamePlayer = capitals.every((city) => city.ownerId === owner);
-  if (!allOwnedBySamePlayer) {
-    return { winnerId: null, type: null, reason: null };
+  // Score victory: once the turn limit is passed, the highest score wins.
+  if (state.turnLimit && state.turn > state.turnLimit) {
+    const scores = computeScores(state);
+    let bestId: string | null = null;
+    let best = -Infinity;
+    for (const player of state.players) {
+      const s = scores[player.id] ?? 0;
+      if (s > best) {
+        best = s;
+        bestId = player.id;
+      }
+    }
+    if (bestId) {
+      return { winnerId: bestId, type: "score", reason: `${bestId} led on score at the turn limit (${state.turnLimit})` };
+    }
   }
 
-  return {
-    winnerId: owner,
-    type: "domination",
-    reason: `${owner} controls all capitals`
-  };
+  return { winnerId: null, type: null, reason: null };
 }
 
 export function applyAction(inputState: GameState, action: GameAction): GameState {

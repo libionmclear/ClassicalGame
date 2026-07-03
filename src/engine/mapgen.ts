@@ -371,6 +371,7 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   if (!spec) throw new Error(`Unknown map size ${size}`);
   const baseSeed = options.seed ?? "hegemon-map";
   const requested = Math.max(2, Math.min(MAX_PLAYERS, Math.floor(options.playerCount ?? 2)));
+  const turnLimit = TURN_LIMITS[size] ?? 60;
 
   // Deterministic retries: a few noise variants until one yields a big enough
   // landmass with well-separated capitals. If a small map genuinely can't seat
@@ -379,13 +380,25 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
     for (let attempt = 0; attempt < 12; attempt += 1) {
       const seed = attempt === 0 ? baseSeed : `${baseSeed}#${attempt}`;
       const config = tryGenerate(seed, spec, playerCount);
-      if (config) return config;
+      if (config) {
+        config.turnLimit = turnLimit;
+        return config;
+      }
     }
   }
 
   // Last resort: a flat 2-player fallback so the caller always gets a playable map.
-  return tryGenerate(`${baseSeed}#fallback`, spec, 2) ?? buildFlatFallback(spec, baseSeed);
+  const fallback = tryGenerate(`${baseSeed}#fallback`, spec, 2) ?? buildFlatFallback(spec, baseSeed);
+  fallback.turnLimit = turnLimit;
+  return fallback;
 }
+
+export const TURN_LIMITS: Record<MapSize, number> = {
+  small: 40,
+  medium: 60,
+  large: 80,
+  xl: 100
+};
 
 // A guaranteed-valid map: all plains rectangle, two capitals on opposite sides.
 function buildFlatFallback(spec: SizeSpec, seed: string): CreateGameConfig {
