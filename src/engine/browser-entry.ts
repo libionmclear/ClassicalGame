@@ -26,7 +26,7 @@ import {
 } from "./index";
 import { chooseAiAction, runAiTurn } from "./ai";
 import { loadScenario, listScenarios } from "./scenarios";
-import { generateMap, MAP_SIZES, CIV_ROSTER, DEFAULT_PLAYERS, MAX_PLAYERS } from "./mapgen";
+import { generateMap, MAP_SIZES, TURN_LIMITS, CIV_ROSTER, DEFAULT_PLAYERS, MAX_PLAYERS } from "./mapgen";
 import { EVENTS, getEvent } from "./events";
 
 // Every symbol the browser demo (game.js) reads off window.HegemonEngine must be
@@ -62,6 +62,7 @@ export {
   listScenarios,
   generateMap,
   MAP_SIZES,
+  TURN_LIMITS,
   CIV_ROSTER,
   DEFAULT_PLAYERS,
   MAX_PLAYERS,

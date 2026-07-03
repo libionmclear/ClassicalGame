@@ -11,6 +11,9 @@
   const endTurnBtn = document.getElementById("end-turn-btn");
   const mapSizeSelectEl = document.getElementById("map-size-select");
   const playerCountSelectEl = document.getElementById("player-count-select");
+  const victoryModeSelectEl = document.getElementById("victory-mode-select");
+  const turnsInputEl = document.getElementById("turns-input");
+  const turnsPickerEl = document.getElementById("turns-picker");
   const selectionLineEl = document.getElementById("selection-line");
   const actionLogEl = document.getElementById("action-log");
   const clearSelectionBtn = document.getElementById("clear-selection-btn");
@@ -1343,6 +1346,21 @@
       label = "Italia scenario (fallback)";
     }
 
+    // Victory mode: "domination" removes the turn limit (win by holding every
+    // capital); "quick" ends the age at a player-chosen turn count and awards
+    // the score win. This overrides whatever limit the map/scenario carried.
+    const mode = (victoryModeSelectEl && victoryModeSelectEl.value) || "quick";
+    if (mode === "domination") {
+      config.turnLimit = 0;
+      label += " — Domination (hold every capital)";
+    } else {
+      let turns = turnsInputEl ? parseInt(turnsInputEl.value, 10) : 60;
+      if (!Number.isFinite(turns) || turns < 10) turns = 10;
+      if (turns > 300) turns = 300;
+      config.turnLimit = turns;
+      label += " — Quick (" + turns + " turns)";
+    }
+
     state = engine.createInitialGameState(config);
     clearSelection();
     // Pre-select the capital so the command panel is immediately actionable
@@ -1379,6 +1397,19 @@
 
   newGameBtn.addEventListener("click", newGame);
 
+  // Suggest the map's recommended length in the turns box (player can override).
+  function recommendedTurnsForSize(size) {
+    if (size === "italia") return 40;
+    return (engine.TURN_LIMITS && engine.TURN_LIMITS[size]) || 60;
+  }
+
+  // Show the turns box only in Quick mode; hide it for Domination.
+  function syncVictoryControls() {
+    if (!turnsPickerEl || !victoryModeSelectEl) return;
+    const domination = victoryModeSelectEl.value === "domination";
+    turnsPickerEl.classList.toggle("hidden", domination);
+  }
+
   if (mapSizeSelectEl && playerCountSelectEl) {
     mapSizeSelectEl.addEventListener("change", function () {
       const size = mapSizeSelectEl.value;
@@ -1390,7 +1421,16 @@
         const def = (engine.DEFAULT_PLAYERS && engine.DEFAULT_PLAYERS[size]) || 3;
         playerCountSelectEl.value = String(def);
       }
+      if (turnsInputEl) turnsInputEl.value = String(recommendedTurnsForSize(size));
     });
+  }
+
+  if (victoryModeSelectEl) {
+    victoryModeSelectEl.addEventListener("change", syncVictoryControls);
+    syncVictoryControls();
+  }
+  if (turnsInputEl && mapSizeSelectEl) {
+    turnsInputEl.value = String(recommendedTurnsForSize(mapSizeSelectEl.value));
   }
 
   endTurnBtn.addEventListener("click", function () {

@@ -31,6 +31,17 @@
             <option value="6">6</option>
           </select>
         </label>
+        <label class="map-picker">
+          Victory
+          <select id="victory-mode-select">
+            <option value="quick" selected>Quick (turn limit)</option>
+            <option value="domination">Domination</option>
+          </select>
+        </label>
+        <label class="map-picker" id="turns-picker">
+          Turns
+          <input id="turns-input" type="number" min="10" max="300" step="5" value="60" />
+        </label>
         <button id="new-game-btn">New Game</button>
         <button id="end-turn-btn">End Turn</button>
         <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖 Codex</button>
