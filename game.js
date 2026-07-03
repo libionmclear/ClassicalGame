@@ -161,6 +161,30 @@
     } catch (e) {}
   }
 
+  // ===== Auto-save / resume (the whole state is serializable JSON) =====
+  const SAVE_KEY = "hegemon_save_v1";
+
+  function saveGame() {
+    try {
+      if (state) window.localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  function loadGame() {
+    try {
+      const raw = window.localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      if (!s || !s.map || !s.map.tiles || !Array.isArray(s.players)) return null;
+      // Re-link playersById to the SAME player objects (JSON breaks the sharing).
+      s.playersById = {};
+      for (const p of s.players) s.playersById[p.id] = p;
+      return s;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function hexToRgba(hex, a) {
     const h = (hex || "#888888").replace("#", "");
     const r = parseInt(h.slice(0, 2), 16);
@@ -627,6 +651,7 @@
       logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
       render();
       runAiUntilHuman();
+      saveGame();
 
       if (beforeSummary) {
         const afterSummary = snapshotRomeState();
@@ -1303,6 +1328,26 @@
     hintLineEl.textContent = defaultHintText;
     pendingRecenter = true;
     render();
+    saveGame();
+  }
+
+  // Resume a saved game if one exists; otherwise start fresh.
+  function resumeOrNew() {
+    const saved = loadGame();
+    if (!saved) {
+      newGame();
+      return;
+    }
+    state = saved;
+    clearSelection();
+    const capital =
+      Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
+      Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
+    if (capital) selectedCityId = capital.id;
+    actionLog = ["Resumed your saved game — turn " + state.turn];
+    hintLineEl.textContent = defaultHintText;
+    pendingRecenter = true;
+    render();
   }
 
   newGameBtn.addEventListener("click", newGame);
@@ -1504,6 +1549,7 @@
   }
 
   loadSavedColors();
+  // Note: the actual first render happens via resumeOrNew() at the very end.
 
   let resizeTimer = null;
   window.addEventListener("resize", function () {
@@ -1513,5 +1559,5 @@
     }, 120);
   });
 
-  newGame();
+  resumeOrNew();
 })();
