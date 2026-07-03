@@ -700,6 +700,59 @@ button:hover:not(:disabled) {
   padding: 2px 2px 4px;
 }
 
+/* ===== Build queue ===== */
+.build-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #16283f;
+  font-size: 0.8rem;
+}
+
+.queue-item.active {
+  border-color: var(--accent);
+  background: #1a3252;
+}
+
+.queue-item .qi-pos {
+  color: var(--muted);
+  width: 12px;
+  text-align: right;
+}
+
+.queue-item .qi-name {
+  flex: 1;
+}
+
+.queue-item .qi-prog {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-item .qi-remove {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.queue-item .qi-remove:hover {
+  color: #e0533d;
+}
+
 .build-item.locked .bi-cost {
   color: #b98bd8;
 }

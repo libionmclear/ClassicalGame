@@ -167,23 +167,23 @@ function buildAction(state: GameState, player: Player): GameAction | null {
   const canBuild = (type: string): boolean => {
     const rule = UNITS[type];
     if (!rule) return false;
-    if (rule.requiresTech && !player.techs.includes(rule.requiresTech)) return false;
-    return player.production >= (UNIT_BUILD_COSTS[type] ?? Infinity);
+    return !rule.requiresTech || player.techs.includes(rule.requiresTech);
   };
 
   for (const city of cities) {
+    // Don't over-queue; production banks and builds these over turns.
+    if ((city.queue?.length ?? 0) >= 2) continue;
     let chosen: string | null = null;
-    if (wantSettler && canBuild("settler")) chosen = "settler";
+    if (wantSettler && canBuild("settler") && !(city.queue ?? []).includes("settler")) chosen = "settler";
     if (!chosen) chosen = militaryPref.find(canBuild) ?? null;
     if (!chosen) continue;
-
-    let counter = 1;
-    let unitId = `${player.id}_${chosen}_${state.turn}_${city.id}_${counter}`;
-    while (state.map.units[unitId]) {
-      counter += 1;
-      unitId = `${player.id}_${chosen}_${state.turn}_${city.id}_${counter}`;
-    }
-    return { type: "BUILD_UNIT", playerId: player.id, cityId: city.id, unitType: chosen, unitId };
+    return {
+      type: "BUILD_UNIT",
+      playerId: player.id,
+      cityId: city.id,
+      unitType: chosen,
+      unitId: `${player.id}_${chosen}_${state.turn}_${city.id}`
+    };
   }
   return null;
 }
@@ -192,11 +192,11 @@ function buildingAction(state: GameState, player: Player): GameAction | null {
   for (const cityId of player.cityIds) {
     const city = state.map.cities[cityId];
     if (!city) continue;
-    const built = new Set(city.buildings ?? []);
+    if ((city.queue?.length ?? 0) >= 3) continue;
+    const built = new Set([...(city.buildings ?? []), ...(city.queue ?? [])]);
     for (const [id, b] of Object.entries(BUILDINGS)) {
       if (built.has(id)) continue;
       if (b.requiresTech && !player.techs.includes(b.requiresTech)) continue;
-      if (player.production < b.cost) continue;
       return { type: "BUILD_BUILDING", playerId: player.id, cityId, buildingId: id };
     }
   }

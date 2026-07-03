@@ -136,54 +136,50 @@ test("scripted headless match flow reaches turn progression", () => {
 test("found city consumes settler and creates owned city", () => {
   let state = buildState();
 
-  state = applyAction(state, {
-    type: "BUILD_UNIT",
-    playerId: "p1",
-    cityId: "c1",
-    unitType: "settler",
-    unitId: "p1_settler_1"
-  });
-
+  state = applyAction(state, { type: "BUILD_UNIT", playerId: "p1", cityId: "c1", unitType: "settler", unitId: "x" });
+  state.map.cities.c1.production = 60; // bank enough to finish the settler this turn
   state = applyAction(state, { type: "END_TURN", playerId: "p1" });
   state = applyAction(state, { type: "END_TURN", playerId: "p2" });
+
+  const settler = Object.values(state.map.units).find((u) => u.ownerId === "p1" && u.type === "settler");
+  assert.ok(settler, "settler completed from the queue");
 
   state = applyAction(state, {
     type: "MOVE_UNIT",
     playerId: "p1",
-    unitId: "p1_settler_1",
+    unitId: settler!.id,
     destination: { q: 1, r: 0 },
     path: [{ q: 0, r: 0 }, { q: 1, r: 0 }]
   });
-
-  state = applyAction(state, {
-    type: "FOUND_CITY",
-    playerId: "p1",
-    settlerId: "p1_settler_1",
-    cityId: "c1b"
-  });
+  state = applyAction(state, { type: "FOUND_CITY", playerId: "p1", settlerId: settler!.id, cityId: "c1b" });
 
   assert.equal(state.map.cities.c1b.ownerId, "p1");
   assert.equal(state.map.cities.c1b.population, 1);
-  assert.equal(state.map.units.p1_settler_1, undefined);
+  assert.equal(state.map.units[settler!.id], undefined);
   assert.ok(state.playersById.p1.cityIds.includes("c1b"));
 });
 
-test("build unit spends production and creates unit in city tile", () => {
+test("recruiting a unit queues it, and it completes as the city banks production", () => {
   let state = buildState();
-  const beforeProduction = state.playersById.p1.production;
 
-  state = applyAction(state, {
-    type: "BUILD_UNIT",
-    playerId: "p1",
-    cityId: "c1",
-    unitType: "archer",
-    unitId: "p1_archer_new"
-  });
+  state = applyAction(state, { type: "BUILD_UNIT", playerId: "p1", cityId: "c1", unitType: "archer", unitId: "x" });
+  assert.ok(state.map.cities.c1.queue?.includes("archer"), "archer queued, not instant");
 
-  assert.ok(state.playersById.p1.production < beforeProduction);
-  assert.equal(state.map.units.p1_archer_new.ownerId, "p1");
-  assert.deepEqual(state.map.units.p1_archer_new.position, state.map.cities.c1.position);
-  assert.ok(state.playersById.p1.unitIds.includes("p1_archer_new"));
+  state.map.cities.c1.production = 60;
+  const before = state.map.cities.c1.production;
+  const archersBefore = Object.values(state.map.units).filter((u) => u.type === "archer").length;
+  state = applyAction(state, { type: "END_TURN", playerId: "p1" });
+
+  const archersAfter = Object.values(state.map.units).filter((u) => u.type === "archer").length;
+  assert.equal(archersAfter, archersBefore + 1, "a new archer was built from the queue");
+  // the new archer spawns on the city tile
+  assert.ok(
+    Object.values(state.map.units).some(
+      (u) => u.type === "archer" && u.position.q === state.map.cities.c1.position.q && u.position.r === state.map.cities.c1.position.r
+    ),
+    "new archer sits on the city tile"
+  );
+  assert.ok((state.map.cities.c1.production ?? 0) < before, "production was spent");
 });
 
 test("city can be captured and domination victory is detected", () => {

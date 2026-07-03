@@ -80,8 +80,8 @@ test("bigger cities yield more (production/gold/science scale with population)",
   const afterSmall = applyAction(small, { type: "END_TURN", playerId: "p1" });
   const afterBig = applyAction(big, { type: "END_TURN", playerId: "p1" });
   assert.ok(
-    afterBig.playersById.p1.production > afterSmall.playersById.p1.production,
-    "a size-6 city should out-produce a size-1 city"
+    (afterBig.map.cities.c1.production ?? 0) > (afterSmall.map.cities.c1.production ?? 0),
+    "a size-6 city should bank more production than a size-1 city"
   );
   assert.ok(afterBig.playersById.p1.science > afterSmall.playersById.p1.science, "bigger city yields more science");
 });

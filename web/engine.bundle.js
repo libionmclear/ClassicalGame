@@ -696,7 +696,9 @@ var HegemonEngine = (() => {
             maxHp: city.maxHp ?? 40,
             isCapital: city.isCapital ?? false,
             food: city.food ?? 0,
-            buildings: city.buildings ?? []
+            buildings: city.buildings ?? [],
+            production: city.production ?? 0,
+            queue: city.queue ?? []
           }
         ])
       ),
@@ -1036,6 +1038,60 @@ var HegemonEngine = (() => {
     }
     return yields;
   }
+  function productionItemCost(id) {
+    if (UNITS[id]) return UNIT_BUILD_COSTS[id] ?? Infinity;
+    if (BUILDINGS[id]) return BUILDINGS[id].cost;
+    return Infinity;
+  }
+  function completeQueueItem(state, city, id) {
+    if (UNITS[id]) {
+      const def = UNITS[id];
+      let counter = 1;
+      let unitId = `${city.ownerId}_${id}_${state.turn}_${city.id}_${counter}`;
+      while (state.map.units[unitId]) {
+        counter += 1;
+        unitId = `${city.ownerId}_${id}_${state.turn}_${city.id}_${counter}`;
+      }
+      state.map.units[unitId] = {
+        id: unitId,
+        type: id,
+        ownerId: city.ownerId,
+        position: { ...city.position },
+        hp: def.maxHp,
+        maxHp: def.maxHp,
+        movementRemaining: 0,
+        veterancy: "recruit"
+      };
+      syncOwnershipIndexes(state);
+    } else if (BUILDINGS[id] && !(city.buildings ?? []).includes(id)) {
+      city.buildings = [...city.buildings ?? [], id];
+      const cityHp = BUILDINGS[id].cityHp;
+      if (cityHp) {
+        city.maxHp += cityHp;
+        city.hp += cityHp;
+      }
+    }
+  }
+  function processCityQueue(state, city) {
+    city.queue = city.queue ?? [];
+    let guard = 0;
+    while (city.queue.length > 0 && guard < 32) {
+      guard += 1;
+      const id = city.queue[0];
+      if (BUILDINGS[id] && (city.buildings ?? []).includes(id)) {
+        city.queue.shift();
+        continue;
+      }
+      const cost = productionItemCost(id);
+      if (!Number.isFinite(cost) || (city.production ?? 0) < cost) break;
+      city.production = (city.production ?? 0) - cost;
+      completeQueueItem(state, city, id);
+      city.queue.shift();
+    }
+  }
+  function enqueueProduction(city, id) {
+    city.queue = [...city.queue ?? [], id];
+  }
   function applyBuildBuilding(state, action) {
     assertPlayerTurn(state, action.playerId);
     const city = cityAt(state, action.cityId);
@@ -1043,26 +1099,25 @@ var HegemonEngine = (() => {
     const building = BUILDINGS[action.buildingId];
     if (!building) throw new Error(`Unknown building ${action.buildingId}`);
     if ((city.buildings ?? []).includes(action.buildingId)) throw new Error(`${action.buildingId} already built`);
+    if ((city.queue ?? []).includes(action.buildingId)) throw new Error(`${action.buildingId} already queued`);
     const player = state.playersById[action.playerId];
     if (building.requiresTech && !player.techs.includes(building.requiresTech)) {
       throw new Error(`Building ${action.buildingId} requires tech ${building.requiresTech}`);
     }
-    if (player.production < building.cost) {
-      throw new Error(`Insufficient production: needs ${building.cost}, has ${player.production}`);
-    }
-    player.production -= building.cost;
-    city.buildings = [...city.buildings ?? [], action.buildingId];
-    if (building.cityHp) {
-      city.maxHp += building.cityHp;
-      city.hp += building.cityHp;
-    }
+    enqueueProduction(city, action.buildingId);
+  }
+  function applyUnqueueProduction(state, action) {
+    assertPlayerTurn(state, action.playerId);
+    const city = cityAt(state, action.cityId);
+    if (city.ownerId !== action.playerId) throw new Error("Cannot edit an enemy city's queue");
+    if (!city.queue || action.index < 0 || action.index >= city.queue.length) return;
+    city.queue = city.queue.filter((_, i) => i !== action.index);
   }
   function applyEndTurn(state, action) {
     assertPlayerTurn(state, action.playerId);
     const endingPlayer = getCurrentPlayer(state);
     for (const cityId of endingPlayer.cityIds) {
       const yields = computeCityYield(state, cityId);
-      endingPlayer.production += yields.production;
       endingPlayer.gold += yields.gold;
       endingPlayer.science += yields.science;
       const city = state.map.cities[cityId];
@@ -1074,6 +1129,8 @@ var HegemonEngine = (() => {
           city.population += 1;
           need = growthCost(city.population);
         }
+        city.production = (city.production ?? 0) + yields.production;
+        processCityQueue(state, city);
       }
     }
     const upkeep = endingPlayer.unitIds.reduce((sum, unitId) => {
@@ -1121,9 +1178,10 @@ var HegemonEngine = (() => {
     const event = getEvent(action.eventId);
     const option = event && event.options[action.optionIndex];
     if (!event || !option) throw new Error(`Invalid event option`);
+    const capitalCity = player.cityIds.map((id) => state.map.cities[id]).find((c) => c && c.isCapital) || state.map.cities[player.cityIds[0]];
     const fx = option.effects;
     if (fx.gold) player.gold += fx.gold;
-    if (fx.production) player.production += fx.production;
+    if (fx.production && capitalCity) capitalCity.production = (capitalCity.production ?? 0) + fx.production;
     if (fx.science) player.science += fx.science;
     if (fx.food) {
       for (const cityId of player.cityIds) {
@@ -1182,30 +1240,13 @@ var HegemonEngine = (() => {
     assertPlayerTurn(state, action.playerId);
     const city = cityAt(state, action.cityId);
     if (city.ownerId !== action.playerId) throw new Error("Cannot build from enemy city");
-    if (state.map.units[action.unitId]) throw new Error(`Unit id ${action.unitId} already exists`);
     if (!UNITS[action.unitType]) throw new Error(`Unknown unit type ${action.unitType}`);
     const player = state.playersById[action.playerId];
     const unitRule = UNITS[action.unitType];
     if (unitRule.requiresTech && !player.techs.includes(unitRule.requiresTech)) {
       throw new Error(`Unit ${action.unitType} requires tech ${unitRule.requiresTech}`);
     }
-    const cost = UNIT_BUILD_COSTS[action.unitType] ?? 9999;
-    if (player.production < cost) {
-      throw new Error(`Insufficient production: needs ${cost}, has ${player.production}`);
-    }
-    player.production -= cost;
-    const unitDef = UNITS[action.unitType];
-    state.map.units[action.unitId] = {
-      id: action.unitId,
-      type: action.unitType,
-      ownerId: action.playerId,
-      position: { ...city.position },
-      hp: unitDef.maxHp,
-      maxHp: unitDef.maxHp,
-      movementRemaining: 0,
-      veterancy: "recruit"
-    };
-    syncOwnershipIndexes(state);
+    enqueueProduction(city, action.unitType);
   }
   function createInitialGameState(config = {}) {
     const players = normalizePlayers(config.players);
@@ -1317,6 +1358,9 @@ var HegemonEngine = (() => {
         break;
       case "BUILD_BUILDING":
         applyBuildBuilding(state, action);
+        break;
+      case "UNQUEUE_PRODUCTION":
+        applyUnqueueProduction(state, action);
         break;
       default: {
         const unknownAction = action;
@@ -1473,21 +1517,21 @@ var HegemonEngine = (() => {
     const canBuild = (type) => {
       const rule = UNITS[type];
       if (!rule) return false;
-      if (rule.requiresTech && !player.techs.includes(rule.requiresTech)) return false;
-      return player.production >= (UNIT_BUILD_COSTS[type] ?? Infinity);
+      return !rule.requiresTech || player.techs.includes(rule.requiresTech);
     };
     for (const city of cities) {
+      if ((city.queue?.length ?? 0) >= 2) continue;
       let chosen = null;
-      if (wantSettler && canBuild("settler")) chosen = "settler";
+      if (wantSettler && canBuild("settler") && !(city.queue ?? []).includes("settler")) chosen = "settler";
       if (!chosen) chosen = militaryPref.find(canBuild) ?? null;
       if (!chosen) continue;
-      let counter = 1;
-      let unitId = `${player.id}_${chosen}_${state.turn}_${city.id}_${counter}`;
-      while (state.map.units[unitId]) {
-        counter += 1;
-        unitId = `${player.id}_${chosen}_${state.turn}_${city.id}_${counter}`;
-      }
-      return { type: "BUILD_UNIT", playerId: player.id, cityId: city.id, unitType: chosen, unitId };
+      return {
+        type: "BUILD_UNIT",
+        playerId: player.id,
+        cityId: city.id,
+        unitType: chosen,
+        unitId: `${player.id}_${chosen}_${state.turn}_${city.id}`
+      };
     }
     return null;
   }
@@ -1495,11 +1539,11 @@ var HegemonEngine = (() => {
     for (const cityId of player.cityIds) {
       const city = state.map.cities[cityId];
       if (!city) continue;
-      const built = new Set(city.buildings ?? []);
+      if ((city.queue?.length ?? 0) >= 3) continue;
+      const built = /* @__PURE__ */ new Set([...city.buildings ?? [], ...city.queue ?? []]);
       for (const [id, b] of Object.entries(BUILDINGS)) {
         if (built.has(id)) continue;
         if (b.requiresTech && !player.techs.includes(b.requiresTech)) continue;
-        if (player.production < b.cost) continue;
         return { type: "BUILD_BUILDING", playerId: player.id, cityId, buildingId: id };
       }
     }

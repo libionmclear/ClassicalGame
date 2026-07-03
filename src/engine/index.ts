@@ -14,7 +14,7 @@ import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import type { ResolveEventAction, BuildBuildingAction } from "./types";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -120,7 +120,9 @@ function normalizeMap(configMap: NonNullable<CreateGameConfig["map"]> | undefine
           maxHp: city.maxHp ?? 40,
           isCapital: city.isCapital ?? false,
           food: city.food ?? 0,
-          buildings: city.buildings ?? []
+          buildings: city.buildings ?? [],
+          production: city.production ?? 0,
+          queue: city.queue ?? []
         }
       ])
     ),
@@ -535,6 +537,66 @@ function computeCityYield(
   return yields;
 }
 
+// A queue item is a unit type or a building id (they never collide).
+export function productionItemCost(id: string): number {
+  if (UNITS[id]) return UNIT_BUILD_COSTS[id] ?? Infinity;
+  if (BUILDINGS[id]) return BUILDINGS[id].cost;
+  return Infinity;
+}
+
+function completeQueueItem(state: GameState, city: City, id: string): void {
+  if (UNITS[id]) {
+    const def = UNITS[id];
+    let counter = 1;
+    let unitId = `${city.ownerId}_${id}_${state.turn}_${city.id}_${counter}`;
+    while (state.map.units[unitId]) {
+      counter += 1;
+      unitId = `${city.ownerId}_${id}_${state.turn}_${city.id}_${counter}`;
+    }
+    state.map.units[unitId] = {
+      id: unitId,
+      type: id,
+      ownerId: city.ownerId,
+      position: { ...city.position },
+      hp: def.maxHp,
+      maxHp: def.maxHp,
+      movementRemaining: 0,
+      veterancy: "recruit"
+    };
+    syncOwnershipIndexes(state);
+  } else if (BUILDINGS[id] && !(city.buildings ?? []).includes(id)) {
+    city.buildings = [...(city.buildings ?? []), id];
+    const cityHp = BUILDINGS[id].cityHp;
+    if (cityHp) {
+      city.maxHp += cityHp;
+      city.hp += cityHp;
+    }
+  }
+}
+
+// Bank the turn's production, then finish as many queued items as it can afford.
+function processCityQueue(state: GameState, city: City): void {
+  city.queue = city.queue ?? [];
+  let guard = 0;
+  while (city.queue.length > 0 && guard < 32) {
+    guard += 1;
+    const id = city.queue[0];
+    if (BUILDINGS[id] && (city.buildings ?? []).includes(id)) {
+      city.queue.shift(); // already built elsewhere — discard
+      continue;
+    }
+    const cost = productionItemCost(id);
+    if (!Number.isFinite(cost) || (city.production ?? 0) < cost) break;
+    city.production = (city.production ?? 0) - cost;
+    completeQueueItem(state, city, id);
+    city.queue.shift();
+  }
+}
+
+function enqueueProduction(city: City, id: string): void {
+  city.queue = [...(city.queue ?? []), id];
+}
+
 function applyBuildBuilding(state: GameState, action: BuildBuildingAction): void {
   assertPlayerTurn(state, action.playerId);
   const city = cityAt(state, action.cityId);
@@ -542,21 +604,21 @@ function applyBuildBuilding(state: GameState, action: BuildBuildingAction): void
   const building = BUILDINGS[action.buildingId];
   if (!building) throw new Error(`Unknown building ${action.buildingId}`);
   if ((city.buildings ?? []).includes(action.buildingId)) throw new Error(`${action.buildingId} already built`);
+  if ((city.queue ?? []).includes(action.buildingId)) throw new Error(`${action.buildingId} already queued`);
 
   const player = state.playersById[action.playerId];
   if (building.requiresTech && !player.techs.includes(building.requiresTech)) {
     throw new Error(`Building ${action.buildingId} requires tech ${building.requiresTech}`);
   }
-  if (player.production < building.cost) {
-    throw new Error(`Insufficient production: needs ${building.cost}, has ${player.production}`);
-  }
+  enqueueProduction(city, action.buildingId);
+}
 
-  player.production -= building.cost;
-  city.buildings = [...(city.buildings ?? []), action.buildingId];
-  if (building.cityHp) {
-    city.maxHp += building.cityHp;
-    city.hp += building.cityHp;
-  }
+function applyUnqueueProduction(state: GameState, action: UnqueueProductionAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const city = cityAt(state, action.cityId);
+  if (city.ownerId !== action.playerId) throw new Error("Cannot edit an enemy city's queue");
+  if (!city.queue || action.index < 0 || action.index >= city.queue.length) return;
+  city.queue = city.queue.filter((_, i) => i !== action.index);
 }
 
 function applyEndTurn(state: GameState, action: EndTurnAction): void {
@@ -565,13 +627,12 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
 
   for (const cityId of endingPlayer.cityIds) {
     const yields = computeCityYield(state, cityId);
-    endingPlayer.production += yields.production;
     endingPlayer.gold += yields.gold;
     endingPlayer.science += yields.science;
 
-    // Food is banked per-city and grows population when it fills the bar.
     const city = state.map.cities[cityId];
     if (city) {
+      // Food is banked per-city and grows population when it fills the bar.
       city.food = (city.food ?? 0) + yields.food;
       let need = growthCost(city.population);
       while (city.population < MAX_POPULATION && city.food >= need) {
@@ -579,6 +640,9 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
         city.population += 1;
         need = growthCost(city.population);
       }
+      // Production is banked per-city and drives the build queue.
+      city.production = (city.production ?? 0) + yields.production;
+      processCityQueue(state, city);
     }
   }
 
@@ -637,9 +701,13 @@ function applyResolveEvent(state: GameState, action: ResolveEventAction): void {
   const option = event && event.options[action.optionIndex];
   if (!event || !option) throw new Error(`Invalid event option`);
 
+  const capitalCity =
+    player.cityIds.map((id) => state.map.cities[id]).find((c) => c && c.isCapital) ||
+    state.map.cities[player.cityIds[0]];
+
   const fx = option.effects;
   if (fx.gold) player.gold += fx.gold;
-  if (fx.production) player.production += fx.production;
+  if (fx.production && capitalCity) capitalCity.production = (capitalCity.production ?? 0) + fx.production;
   if (fx.science) player.science += fx.science;
   if (fx.food) {
     for (const cityId of player.cityIds) {
@@ -702,11 +770,12 @@ function applyFoundCity(state: GameState, action: FoundCityAction): void {
   syncOwnershipIndexes(state);
 }
 
+// Recruiting a unit now enqueues it in the city's build queue; it completes over
+// turns as the city banks production (see processCityQueue).
 function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   assertPlayerTurn(state, action.playerId);
   const city = cityAt(state, action.cityId);
   if (city.ownerId !== action.playerId) throw new Error("Cannot build from enemy city");
-  if (state.map.units[action.unitId]) throw new Error(`Unit id ${action.unitId} already exists`);
   if (!UNITS[action.unitType]) throw new Error(`Unknown unit type ${action.unitType}`);
 
   const player = state.playersById[action.playerId];
@@ -714,27 +783,7 @@ function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   if (unitRule.requiresTech && !player.techs.includes(unitRule.requiresTech)) {
     throw new Error(`Unit ${action.unitType} requires tech ${unitRule.requiresTech}`);
   }
-
-  const cost = UNIT_BUILD_COSTS[action.unitType] ?? 9999;
-  if (player.production < cost) {
-    throw new Error(`Insufficient production: needs ${cost}, has ${player.production}`);
-  }
-
-  player.production -= cost;
-
-  const unitDef = UNITS[action.unitType];
-  state.map.units[action.unitId] = {
-    id: action.unitId,
-    type: action.unitType,
-    ownerId: action.playerId,
-    position: { ...city.position },
-    hp: unitDef.maxHp,
-    maxHp: unitDef.maxHp,
-    movementRemaining: 0,
-    veterancy: "recruit"
-  };
-
-  syncOwnershipIndexes(state);
+  enqueueProduction(city, action.unitType);
 }
 
 export function createInitialGameState(config: CreateGameConfig = {}): GameState {
@@ -872,6 +921,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "BUILD_BUILDING":
       applyBuildBuilding(state, action);
+      break;
+    case "UNQUEUE_PRODUCTION":
+      applyUnqueueProduction(state, action);
       break;
     default: {
       const unknownAction: never = action;

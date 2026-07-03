@@ -82,6 +82,10 @@ export interface City {
   food?: number;
   /** Ids of buildings constructed in this city. */
   buildings?: string[];
+  /** Production banked toward the front of the build queue. */
+  production?: number;
+  /** Ordered build queue of item ids (unit type or building id). */
+  queue?: string[];
 }
 
 export interface Player {
@@ -203,6 +207,13 @@ export interface BuildBuildingAction {
   buildingId: string;
 }
 
+export interface UnqueueProductionAction {
+  type: "UNQUEUE_PRODUCTION";
+  playerId: string;
+  cityId: string;
+  index: number;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -213,7 +224,8 @@ export type GameAction =
   | BuildUnitAction
   | AttackCityAction
   | ResolveEventAction
-  | BuildBuildingAction;
+  | BuildBuildingAction
+  | UnqueueProductionAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

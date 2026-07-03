@@ -125,15 +125,19 @@ test("siege engines crack cities far harder than infantry", () => {
   assert.ok(siegeDamage > warriorDamage, `siege (${siegeDamage}) should out-damage warrior (${warriorDamage}) vs a city`);
 });
 
-test("units gated by tech cannot be built until the tech is researched", () => {
-  const cities = { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 2, hp: 40, maxHp: 40 } };
+test("units gated by tech cannot be queued until the tech is researched", () => {
+  const cities = { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 2, hp: 40, maxHp: 40, production: 60 } };
   const build = { type: "BUILD_UNIT", playerId: "p1", cityId: "c1", unitType: "swordsman", unitId: "sw1" } as const;
 
   const noTech = makeState({}, [], JSON.parse(JSON.stringify(cities)));
   assert.throws(() => applyAction(noTech, build), /requires tech iron-working/);
 
-  const withTech = makeState({}, ["iron-working"], JSON.parse(JSON.stringify(cities)));
-  const after = applyAction(withTech, build);
-  assert.ok(after.map.units.sw1, "swordsman should exist once iron-working is known");
-  assert.equal(after.playersById.p1.production, 200 - 20, "swordsman cost should be deducted");
+  let withTech = makeState({}, ["iron-working"], JSON.parse(JSON.stringify(cities)));
+  withTech = applyAction(withTech, build);
+  assert.ok(withTech.map.cities.c1.queue?.includes("swordsman"), "swordsman queued once iron-working is known");
+  withTech = applyAction(withTech, { type: "END_TURN", playerId: "p1" });
+  assert.ok(
+    Object.values(withTech.map.units).some((u) => u.ownerId === "p1" && u.type === "swordsman"),
+    "swordsman built as production banks"
+  );
 });

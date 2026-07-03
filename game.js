@@ -18,6 +18,7 @@
   const foundCityBtn = document.getElementById("found-city-btn");
   const buildMenuEl = document.getElementById("build-menu");
   const buildingMenuEl = document.getElementById("building-menu");
+  const buildQueueEl = document.getElementById("build-queue");
   const techTreeEl = document.getElementById("tech-tree");
   const hintLineEl = document.getElementById("hint-line");
   const resourceBarEl = document.getElementById("resource-bar");
@@ -193,6 +194,56 @@
 
   const BUILDING_GLYPH = { granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱" };
 
+  function itemCost(id) {
+    if (engine.UNITS && engine.UNITS[id]) return (engine.UNIT_BUILD_COSTS || {})[id] || 0;
+    if (engine.BUILDINGS && engine.BUILDINGS[id]) return engine.BUILDINGS[id].cost;
+    return 0;
+  }
+  function itemName(id) {
+    if (engine.UNITS && engine.UNITS[id]) return (UNIT_META[id] && UNIT_META[id].name) || id;
+    if (engine.BUILDINGS && engine.BUILDINGS[id]) return engine.BUILDINGS[id].name;
+    return id;
+  }
+  function itemGlyph(id) {
+    if (engine.UNITS && engine.UNITS[id]) return UNIT_GLYPHS[id] || "•";
+    if (engine.BUILDINGS && engine.BUILDINGS[id]) return BUILDING_GLYPH[id] || "▪";
+    return "";
+  }
+
+  function renderBuildQueue(selectedCity) {
+    if (!buildQueueEl) return;
+    buildQueueEl.innerHTML = "";
+    if (!selectedCity) {
+      buildQueueEl.innerHTML = '<div class="bm-empty">Select a city to manage its queue.</div>';
+      return;
+    }
+    const q = selectedCity.queue || [];
+    if (!q.length) {
+      buildQueueEl.innerHTML = '<div class="bm-empty">Nothing queued — recruit a unit or start a building above.</div>';
+      return;
+    }
+    const banked = Math.floor(selectedCity.production || 0);
+    q.forEach(function (id, i) {
+      const cost = itemCost(id);
+      const row = document.createElement("div");
+      row.className = "queue-item" + (i === 0 ? " active" : "");
+      const progress = i === 0 ? Math.min(banked, cost) + "/" + cost + " ⚒️" : cost + " ⚒️";
+      row.innerHTML =
+        '<span class="qi-pos">' + (i + 1) + "</span>" +
+        '<span class="qi-name">' + itemGlyph(id) + " " + itemName(id) + "</span>" +
+        '<span class="qi-prog">' + progress + "</span>";
+      const rm = document.createElement("button");
+      rm.className = "qi-remove";
+      rm.textContent = "×";
+      rm.title = "Remove from queue";
+      rm.addEventListener("click", function () {
+        apply({ type: "UNQUEUE_PRODUCTION", playerId: HUMAN_ID, cityId: selectedCity.id, index: i });
+      });
+      row.appendChild(rm);
+      buildQueueEl.appendChild(row);
+    });
+  }
+
   function renderBuildingMenu(isTurn, selectedCity) {
     if (!buildingMenuEl) return;
     buildingMenuEl.innerHTML = "";
@@ -203,18 +254,19 @@
     const player = human();
     const buildings = engine.BUILDINGS || {};
     const built = new Set(selectedCity.buildings || []);
+    const queued = new Set(selectedCity.queue || []);
     for (const id of Object.keys(buildings)) {
       const b = buildings[id];
       const has = built.has(id);
+      const isQueued = queued.has(id);
       const reqTech = b.requiresTech;
       const hasTech = !reqTech || player.techs.includes(reqTech);
-      const affordable = player.production >= b.cost;
       const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
       const btn = document.createElement("button");
       btn.className = "build-item" + (has ? " done" : hasTech ? "" : " locked");
-      btn.disabled = has || !(isTurn && hasTech && affordable);
+      btn.disabled = has || isQueued || !(isTurn && hasTech);
       btn.title = b.note;
-      const status = has ? "✓ built" : !hasTech ? "🔒 " + techName : b.cost + " ⚒️";
+      const status = has ? "✓ built" : isQueued ? "in queue" : !hasTech ? "🔒 " + techName : b.cost + " ⚒️";
       btn.innerHTML =
         '<span class="bi-name">' + (BUILDING_GLYPH[id] || "▪") + " " + b.name + "</span>" +
         '<span class="bi-cost">' + status + "</span>";
@@ -240,17 +292,16 @@
       const cost = costs[type];
       const reqTech = def.requiresTech;
       const hasTech = !reqTech || player.techs.includes(reqTech);
-      const affordable = typeof cost === "number" && player.production >= cost;
       const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
 
       const btn = document.createElement("button");
       btn.className = "build-item" + (hasTech ? "" : " locked");
-      btn.disabled = !(isTurn && !!selectedCity && hasTech && affordable);
+      btn.disabled = !(isTurn && !!selectedCity && hasTech);
       btn.title =
         meta.role + (reqTech ? " — needs " + techName : "") +
         (UNIT_HISTORY[type] ? "\n\n" + UNIT_HISTORY[type] : "");
 
-      const status = !hasTech ? "🔒 " + techName : typeof cost === "number" ? cost + " ⚒" : "";
+      const status = !hasTech ? "🔒 " + techName : typeof cost === "number" ? cost + " ⚒️" : "";
       btn.innerHTML =
         '<span class="bi-name">' + (UNIT_GLYPHS[type] || "•") + " " + meta.name + "</span>" +
         '<span class="bi-cost">' + status + "</span>";
@@ -533,6 +584,7 @@
       const keepSelection =
         action.type === "BUILD_UNIT" ||
         action.type === "BUILD_BUILDING" ||
+        action.type === "UNQUEUE_PRODUCTION" ||
         action.type === "RESEARCH_TECH" ||
         action.type === "RESOLVE_EVENT";
       state = engine.applyAction(state, action);
@@ -922,10 +974,14 @@
         " · Move " + selectedUnit.movementRemaining + vet + "</span>";
     } else if (selectedCity) {
       const need = 8 + selectedCity.population * 6;
+      const q = selectedCity.queue || [];
+      const banked = Math.floor(selectedCity.production || 0);
+      const building = q.length ? " · Building " + itemName(q[0]) + " " + Math.min(banked, itemCost(q[0])) + "/" + itemCost(q[0]) : "";
       selectionLineEl.innerHTML =
         (selectedCity.isCapital ? "🏛️ " : "🏘️ ") + cityDisplayName(selectedCity) +
         '<span class="sel-sub"> Pop ' + selectedCity.population + " · HP " + selectedCity.hp + "/" + selectedCity.maxHp +
-        " · Growth " + Math.floor(selectedCity.food || 0) + "/" + need + "</span>";
+        " · Growth " + Math.floor(selectedCity.food || 0) + "/" + need +
+        " · ⚒️ " + banked + building + "</span>";
     } else {
       selectionLineEl.textContent = "Nothing selected";
     }
@@ -934,6 +990,7 @@
     if (clearSelectionBtn) clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
     renderBuildMenu(isTurn, selectedCity);
     renderBuildingMenu(isTurn, selectedCity);
+    renderBuildQueue(selectedCity);
   }
 
   function renderRanking() {
@@ -1116,13 +1173,13 @@
 
   function renderHud() {
     const rome = human();
-    const pop = Object.values(state.map.cities)
-      .filter((c) => c.ownerId === HUMAN_ID)
-      .reduce((sum, c) => sum + c.population, 0);
+    const humanCities = Object.values(state.map.cities).filter((c) => c.ownerId === HUMAN_ID);
+    const pop = humanCities.reduce((sum, c) => sum + c.population, 0);
+    const stockpile = humanCities.reduce((sum, c) => sum + Math.floor(c.production || 0), 0);
     const inc = engine.computePlayerIncome ? engine.computePlayerIncome(state, HUMAN_ID) : {};
     const resources = [
       { ico: "👥", val: pop, lbl: "Populus", delta: null },
-      { ico: "⚒️", val: rome.production, lbl: "Labor", delta: inc.production },
+      { ico: "⚒️", val: stockpile, lbl: "Labor", delta: inc.production },
       { ico: "🪙", val: rome.gold, lbl: "Denarii", delta: inc.gold },
       { ico: "🔬", val: rome.science, lbl: "Scientia", delta: inc.science },
       { ico: "📜", val: rome.techs.length, lbl: "Doctrinae", delta: null }
