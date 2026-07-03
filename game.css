@@ -855,6 +855,94 @@ button:hover:not(:disabled) {
   font-size: 1.6rem;
 }
 
+/* ===== Codex ===== */
+.ghost-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+.ghost-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.codex-card {
+  width: min(720px, 100%);
+  max-height: 86vh;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+}
+
+.codex-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.codex-header h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.codex-close {
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.codex-body {
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.cdx-sec {
+  margin-bottom: 16px;
+}
+
+.cdx-sec h3 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 3px;
+  margin: 0 0 8px;
+}
+
+.cdx-sec h4 {
+  font-size: 0.82rem;
+  color: var(--gold);
+  margin: 10px 0 4px;
+}
+
+.cdx-entry {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.cdx-entry .cdx-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.cdx-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 /* ===== Crossroads event card ===== */
 .event-card {
   width: min(560px, 100%);

@@ -33,6 +33,7 @@
         </label>
         <button id="new-game-btn">New Game</button>
         <button id="end-turn-btn">End Turn</button>
+        <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖 Codex</button>
       </div>
     </header>
 
@@ -90,6 +91,16 @@
       <h2 id="event-title"></h2>
       <p id="event-situation" class="event-situation"></p>
       <div id="event-options" class="event-options"></div>
+    </div>
+  </div>
+
+  <div id="codex-modal" class="result-modal hidden">
+    <div class="result-card codex-card">
+      <div class="codex-header">
+        <h2>📖 Codex — the Classical World</h2>
+        <button id="codex-close-btn" class="codex-close" title="Close">×</button>
+      </div>
+      <div id="codex-body" class="codex-body"></div>
     </div>
   </div>
 

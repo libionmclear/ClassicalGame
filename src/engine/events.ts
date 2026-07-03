@@ -115,6 +115,96 @@ export const EVENTS: CrossroadsEvent[] = [
         effects: { gold: 8 }
       }
     ]
+  },
+  {
+    id: "oracle",
+    title: "The Oracle Speaks",
+    situation:
+      "Envoys return from Delphi with a riddling prophecy. The priests demand rich offerings to interpret it.",
+    options: [
+      {
+        label: "Pay for the reading",
+        outcome: "The omens are studied; scholars glean real insight from the ritual.",
+        effects: { science: 26, gold: -20 }
+      },
+      {
+        label: "Trust your own counsel",
+        outcome: "You keep the offering and act on reason alone.",
+        effects: { gold: 12 }
+      }
+    ]
+  },
+  {
+    id: "plague",
+    title: "Plague in the City",
+    situation:
+      "A sickness spreads through the crowded quarters — as it did in Athens in 430 BC, felling even Pericles.",
+    options: [
+      {
+        label: "Quarantine and tend the sick",
+        outcome: "The physicians contain it, though trade slows for a season.",
+        effects: { gold: -18, food: 4 }
+      },
+      {
+        label: "Let it run its course",
+        outcome: "You spend nothing, but the workshops fall quiet as workers sicken.",
+        effects: { production: -14 }
+      }
+    ]
+  },
+  {
+    id: "elephants",
+    title: "A Gift of War Elephants",
+    situation:
+      "An allied prince offers a handful of trained war elephants — terrifying, costly, and hungry.",
+    options: [
+      {
+        label: "Accept the beasts",
+        outcome: "A pair of tuskers lumbers into your capital (rendered here as heavy horse).",
+        effects: { spawnUnit: "horseman", gold: -24 }
+      },
+      {
+        label: "Politely decline",
+        outcome: "You spare the fodder and the risk of a rout turning on you.",
+        effects: { gold: 12 }
+      }
+    ]
+  },
+  {
+    id: "publicani",
+    title: "The Tax Farmers",
+    situation:
+      "The publicani offer to buy the right to collect your taxes — quick coin now, resentment later.",
+    options: [
+      {
+        label: "Sell the tax contracts",
+        outcome: "The treasury fills at once; the provinces grumble under the collectors.",
+        effects: { gold: 34, production: -6 }
+      },
+      {
+        label: "Keep collection in state hands",
+        outcome: "Fairer, slower — and the workshops stay content.",
+        effects: { production: 8 }
+      }
+    ]
+  },
+  {
+    id: "engineer",
+    title: "A Wandering Engineer",
+    situation:
+      "A Syracusan engineer in the spirit of Archimedes offers to build cranes, mills and machines of war.",
+    options: [
+      {
+        label: "Commission his machines",
+        outcome: "Mills turn and cranes rise — the city's output leaps.",
+        effects: { production: 20, gold: -22 }
+      },
+      {
+        label: "Send him to a rival",
+        outcome: "You keep the coin; his genius serves another.",
+        effects: { gold: 14 }
+      }
+    ]
   }
 ];
 

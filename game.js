@@ -32,6 +32,10 @@
   const eventTitleEl = document.getElementById("event-title");
   const eventSituationEl = document.getElementById("event-situation");
   const eventOptionsEl = document.getElementById("event-options");
+  const codexBtn = document.getElementById("codex-btn");
+  const codexModalEl = document.getElementById("codex-modal");
+  const codexBodyEl = document.getElementById("codex-body");
+  const codexCloseBtn = document.getElementById("codex-close-btn");
 
   let state = null;
   let selectedUnitId = null;
@@ -148,29 +152,29 @@
   };
   // Display name + one-line sourced history note (the educational layer).
   const TECH_INFO = {
-    "bronze-working": { name: "Bronze Working", note: "Alloying copper and tin armed the first city militias (~3000 BC onward)." },
-    sailing: { name: "Sailing", note: "Coast-hugging galleys opened Mediterranean trade and colonization." },
-    writing: { name: "Writing", note: "Administration and law become possible — from cuneiform to the alphabet." },
-    masonry: { name: "Masonry", note: "Dressed stone means real city walls and lasting monuments." },
-    archery: { name: "Archery", note: "Massed bowmen — the skirmish and ambush school of war." },
-    irrigation: { name: "Irrigation", note: "Canals and basins multiplied river-valley harvests." },
+    "bronze-working": { name: "Bronze Working", note: "Alloying copper and tin armed the first city militias (~3000 BC). EFFECT: unlocks the Spearman — your anti-cavalry line." },
+    sailing: { name: "Sailing", note: "Coast-hugging galleys opened Mediterranean trade and colonization. EFFECT: prerequisite for Open-Sea Sailing and the naval line." },
+    writing: { name: "Writing", note: "Administration and law from cuneiform to the alphabet. EFFECT: +1 science per city, unlocks the Library, and opens the Economy fork (Temple vs Coinage)." },
+    masonry: { name: "Masonry", note: "Dressed stone means lasting walls and monuments. EFFECT: unlocks City Walls (+20 city HP) and leads to Engineering." },
+    archery: { name: "Archery", note: "Massed bowmen — the skirmish and ambush school of war. EFFECT: opens the Skirmish Doctrine fork." },
+    irrigation: { name: "Irrigation", note: "Canals and basins multiplied river-valley harvests. EFFECT: strengthens the farming economy of your valleys." },
     "phalanx-doctrine": { name: "Phalanx Doctrine", note: "FORK: heavy spear-line, shields locked — the Greek hoplite way." },
     "skirmish-doctrine": { name: "Skirmish Doctrine", note: "FORK: mobility, javelins and bows — hit and fade." },
     "temple-economy": { name: "Temple Economy", note: "FORK: faith and culture fund the state — Egypt's model." },
     coinage: { name: "Coinage", note: "FORK: struck coin (Lydia ~600 BC) makes rush-buying cheap." },
-    "iron-working": { name: "Iron Working", note: "Cheaper, harder blades put swords in every soldier's hand." },
+    "iron-working": { name: "Iron Working", note: "Cheaper, harder blades put swords in every soldier's hand. EFFECT: unlocks the Swordsman (heavy infantry) and leads to Siegecraft & Combined Arms." },
     "combined-arms": { name: "Combined Arms", note: "The manipular legion (~315 BC) fought in articulated lines — hastati, principes, triarii — mixing shock, missile and reserve. Hannibal's genius at Cannae was combined-arms coordination, not numbers. Effect: your forces gain Supported (+10%) and Combined-arms (+15%) bonuses when infantry, ranged and cavalry fight side by side." },
-    "open-sea-sailing": { name: "Open-Sea Sailing", note: "Leaving sight of land — the deep sea becomes navigable." },
-    engineering: { name: "Engineering", note: "Bridges, fords and siege works — Roman practicality." },
-    "horseback-riding": { name: "Horseback Riding", note: "True cavalry replaces the chariot on open ground." },
-    "mountain-paths": { name: "Mountain Paths", note: "Passes and switchbacks let armies cross the ranges." },
-    "caravan-logistics": { name: "Caravan Logistics", note: "Water and supply discipline defeat desert attrition." },
+    "open-sea-sailing": { name: "Open-Sea Sailing", note: "Leaving sight of land — the deep sea becomes navigable. EFFECT: ships may enter deep sea; unlocks the Trireme and the Naval fork." },
+    engineering: { name: "Engineering", note: "Bridges, fords and siege works — Roman practicality. EFFECT: leads to Mountain Paths and Age III construction." },
+    "horseback-riding": { name: "Horseback Riding", note: "True cavalry replaces the chariot on open ground. EFFECT: unlocks the Horseman — runs down archers and light foot." },
+    "mountain-paths": { name: "Mountain Paths", note: "Passes and switchbacks let armies cross the ranges. EFFECT: your land units can traverse mountain tiles." },
+    "caravan-logistics": { name: "Caravan Logistics", note: "Water and supply discipline defeat the desert. EFFECT: your units no longer take desert attrition damage." },
     republic: { name: "Republic", note: "FORK: elected magistrates and a Senate — Rome after 509 BC." },
     monarchy: { name: "Monarchy", note: "FORK: one crowned ruler — the Hellenistic kingdoms." },
     "ramming-fleets": { name: "Ramming Fleets", note: "FORK: the bronze ram and the trireme — Salamis, 480 BC." },
     "merchant-marine": { name: "Merchant Marine", note: "FORK: cargo hulls and sea-trade wealth — Carthage, Phoenicia." },
     "roads-logistics": { name: "Roads & Logistics", note: "The Via Appia (312 BC): legions marching 25 miles a day." },
-    siegecraft: { name: "Siegecraft", note: "Ballistae and towers crack the strongest walls." },
+    siegecraft: { name: "Siegecraft", note: "Ballistae and towers crack the strongest walls. EFFECT: unlocks the Siege Ballista — devastating against cities." },
     medicine: { name: "Medicine", note: "Army physicians and hygiene keep veterans in the field." },
     "law-administration": { name: "Law & Administration", note: "Codified law binds a sprawling empire together." },
     "currency-reform": { name: "Currency Reform", note: "Standardized coinage steadies trade across provinces." },
@@ -1244,6 +1248,71 @@
       cityId: createCityId()
     });
   });
+
+  // ===== Codex (browsable historical encyclopedia) =====
+  function buildCodex() {
+    if (!codexBodyEl) return;
+    const parts = [];
+
+    parts.push('<section class="cdx-sec"><h3>Civilizations</h3>');
+    for (const c of engine.CIV_ROSTER || []) {
+      parts.push(
+        '<div class="cdx-entry"><b><span class="cdx-dot" style="background:' + c.color + '"></span>' +
+        c.civ + "</b> — the " + c.adjective + " people; capital " + c.capital + "." +
+        '</div>'
+      );
+    }
+    parts.push("</section>");
+
+    parts.push('<section class="cdx-sec"><h3>Units — a classical order of battle</h3>');
+    for (const type of BUILDABLE) {
+      const meta = UNIT_META[type] || { name: type, role: "" };
+      parts.push(
+        '<div class="cdx-entry"><b>' + (UNIT_GLYPHS[type] || "") + " " + meta.name + "</b> — " + meta.role +
+        '<div class="cdx-note">' + (UNIT_HISTORY[type] || "") + "</div></div>"
+      );
+    }
+    parts.push("</section>");
+
+    parts.push('<section class="cdx-sec"><h3>The Tree of Decisions</h3>');
+    for (const age of [1, 2, 3]) {
+      parts.push('<h4>' + (AGE_LABELS[age] || "Age " + age) + "</h4>");
+      for (const id of Object.keys(engine.TECHS || {})) {
+        if (engine.TECHS[id].age !== age) continue;
+        const info = TECH_INFO[id] || { name: id, note: "" };
+        parts.push('<div class="cdx-entry"><b>' + info.name + '</b><div class="cdx-note">' + info.note + "</div></div>");
+      }
+    }
+    parts.push("</section>");
+
+    parts.push('<section class="cdx-sec"><h3>City Buildings</h3>');
+    for (const id of Object.keys(engine.BUILDINGS || {})) {
+      const b = engine.BUILDINGS[id];
+      parts.push(
+        '<div class="cdx-entry"><b>' + (BUILDING_GLYPH[id] || "") + " " + b.name + '</b><div class="cdx-note">' + b.note + "</div></div>"
+      );
+    }
+    parts.push("</section>");
+
+    parts.push('<section class="cdx-sec"><h3>Crossroads of History</h3>');
+    for (const e of engine.EVENTS || []) {
+      parts.push('<div class="cdx-entry"><b>' + e.title + '</b><div class="cdx-note">' + e.situation + "</div></div>");
+    }
+    parts.push("</section>");
+
+    codexBodyEl.innerHTML = parts.join("");
+  }
+
+  if (codexBtn && codexModalEl) {
+    codexBtn.addEventListener("click", function () {
+      buildCodex();
+      codexModalEl.classList.remove("hidden");
+    });
+    if (codexCloseBtn) codexCloseBtn.addEventListener("click", function () { codexModalEl.classList.add("hidden"); });
+    codexModalEl.addEventListener("click", function (e) {
+      if (e.target === codexModalEl) codexModalEl.classList.add("hidden");
+    });
+  }
 
   resultNewGameBtn.addEventListener("click", newGame);
 
