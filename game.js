@@ -16,9 +16,7 @@
   const clearSelectionBtn = document.getElementById("clear-selection-btn");
   const turnChecklistEl = document.getElementById("turn-checklist");
   const foundCityBtn = document.getElementById("found-city-btn");
-  const buildWarriorBtn = document.getElementById("build-warrior-btn");
-  const buildArcherBtn = document.getElementById("build-archer-btn");
-  const buildSettlerBtn = document.getElementById("build-settler-btn");
+  const buildMenuEl = document.getElementById("build-menu");
   const techTreeEl = document.getElementById("tech-tree");
   const hintLineEl = document.getElementById("hint-line");
   const resourceBarEl = document.getElementById("resource-bar");
@@ -35,14 +33,28 @@
   let actionLog = [];
   let hoveredPathKeys = new Set();
   const defaultHintText = "Hint: Select your unit, then click a tile to move or attack.";
-  const unitCosts = { warrior: 12, archer: 14, settler: 18 };
+
+  // Units offered in the city build menu (order = progression).
+  const BUILDABLE = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "settler"];
+  const UNIT_META = {
+    warrior: { name: "Warrior", role: "Basic melee infantry" },
+    archer: { name: "Archer", role: "Ranged support (range 2, no retaliation from afar)" },
+    spearman: { name: "Spearman", role: "Anti-cavalry: +50% attacking and defending vs mounted" },
+    swordsman: { name: "Swordsman", role: "Heavy melee — high attack" },
+    horseman: { name: "Horseman", role: "Fast cavalry (3 movement)" },
+    siege: { name: "Siege Ballista", role: "Range 2, devastating vs cities, fragile vs troops" },
+    settler: { name: "Settler", role: "Founds a new city" }
+  };
 
   // ----- Presentation lookups -----
   const SQRT3 = Math.sqrt(3);
   const UNIT_GLYPHS = {
     warrior: "⚔️",
     archer: "🏹",
+    spearman: "🔱",
+    swordsman: "🗡️",
     horseman: "🐎",
+    siege: "🎯",
     trireme: "⛵",
     merchant: "🪙",
     settler: "🛠️"
@@ -139,6 +151,46 @@
       return engine.canResearch(player, techId);
     } catch {
       return false;
+    }
+  }
+
+  function renderBuildMenu(isTurn, selectedCity) {
+    if (!buildMenuEl) return;
+    const player = human();
+    const costs = engine.UNIT_BUILD_COSTS || {};
+    buildMenuEl.innerHTML = "";
+
+    for (const type of BUILDABLE) {
+      const def = engine.UNITS[type];
+      if (!def) continue;
+      const meta = UNIT_META[type] || { name: type, role: "" };
+      const cost = costs[type];
+      const reqTech = def.requiresTech;
+      const hasTech = !reqTech || player.techs.includes(reqTech);
+      const affordable = typeof cost === "number" && player.production >= cost;
+      const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
+
+      const btn = document.createElement("button");
+      btn.className = "build-item" + (hasTech ? "" : " locked");
+      btn.disabled = !(isTurn && !!selectedCity && hasTech && affordable);
+      btn.title = meta.role + (reqTech ? " — needs " + techName : "");
+
+      const status = !hasTech ? "🔒 " + techName : typeof cost === "number" ? cost + " ⚒" : "";
+      btn.innerHTML =
+        '<span class="bi-name">' + (UNIT_GLYPHS[type] || "•") + " " + meta.name + "</span>" +
+        '<span class="bi-cost">' + status + "</span>";
+
+      btn.addEventListener("click", function () {
+        if (btn.disabled || !selectedCityId) return;
+        apply({
+          type: "BUILD_UNIT",
+          playerId: HUMAN_ID,
+          cityId: selectedCityId,
+          unitType: type,
+          unitId: createUnitId(type)
+        });
+      });
+      buildMenuEl.appendChild(btn);
     }
   }
 
@@ -630,14 +682,8 @@
     }
 
     foundCityBtn.disabled = !(isTurn && selectedUnit && selectedUnit.type === "settler");
-    buildWarriorBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.warrior;
-    buildArcherBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.archer;
-    buildSettlerBtn.disabled = !(isTurn && selectedCity) || rome.production < unitCosts.settler;
     clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
-
-    buildWarriorBtn.textContent = `Build Warrior (${unitCosts.warrior})`;
-    buildArcherBtn.textContent = `Build Archer (${unitCosts.archer})`;
-    buildSettlerBtn.textContent = `Build Settler (${unitCosts.settler})`;
+    renderBuildMenu(isTurn, selectedCity);
 
     const checklist = [];
     checklist.push(selectedUnit || selectedCity ? "Selection: ready" : "Selection: choose a unit or city");
@@ -902,39 +948,6 @@
       playerId: "rome",
       settlerId: unit.id,
       cityId: createCityId()
-    });
-  });
-
-  buildWarriorBtn.addEventListener("click", function () {
-    if (!selectedCityId) return;
-    apply({
-      type: "BUILD_UNIT",
-      playerId: "rome",
-      cityId: selectedCityId,
-      unitType: "warrior",
-      unitId: createUnitId("warrior")
-    });
-  });
-
-  buildArcherBtn.addEventListener("click", function () {
-    if (!selectedCityId) return;
-    apply({
-      type: "BUILD_UNIT",
-      playerId: "rome",
-      cityId: selectedCityId,
-      unitType: "archer",
-      unitId: createUnitId("archer")
-    });
-  });
-
-  buildSettlerBtn.addEventListener("click", function () {
-    if (!selectedCityId) return;
-    apply({
-      type: "BUILD_UNIT",
-      playerId: "rome",
-      cityId: selectedCityId,
-      unitType: "settler",
-      unitId: createUnitId("settler")
     });
   });
 

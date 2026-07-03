@@ -28,6 +28,7 @@ var HegemonEngine = (() => {
     TECHS: () => TECHS,
     TERRAIN: () => TERRAIN,
     UNITS: () => UNITS,
+    UNIT_BUILD_COSTS: () => UNIT_BUILD_COSTS,
     WEATHER_STATES: () => WEATHER_STATES,
     applyAction: () => applyAction,
     canResearch: () => canResearch,
@@ -151,15 +152,21 @@ var HegemonEngine = (() => {
   var UNITS = {
     warrior: { domain: "land", movement: 2, attack: 20, defense: 18, maxHp: 20, range: 1, upkeep: 1 },
     archer: { domain: "land", movement: 2, attack: 16, defense: 12, maxHp: 18, range: 2, upkeep: 1 },
-    horseman: { domain: "land", movement: 3, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true },
-    trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2 },
+    spearman: { domain: "land", movement: 2, attack: 15, defense: 22, maxHp: 20, range: 1, upkeep: 1, requiresTech: "bronze-working", bonusVsMounted: 0.5 },
+    swordsman: { domain: "land", movement: 2, attack: 27, defense: 20, maxHp: 22, range: 1, upkeep: 2, requiresTech: "iron-working" },
+    horseman: { domain: "land", movement: 3, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "horseback-riding" },
+    siege: { domain: "land", movement: 1, attack: 12, defense: 8, maxHp: 16, range: 2, upkeep: 2, requiresTech: "siegecraft", siegeBonus: 1.2 },
+    trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing" },
     merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1 },
     settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1 }
   };
   var UNIT_BUILD_COSTS = {
     warrior: 12,
     archer: 14,
+    spearman: 14,
+    swordsman: 20,
     horseman: 20,
+    siege: 24,
     trireme: 22,
     merchant: 16,
     settler: 18
@@ -552,8 +559,10 @@ var HegemonEngine = (() => {
     }
     const defenderTile = tileAt(state, defender.position);
     const weather = state.weather.current[defenderTile.region] || "clear";
-    const attackMult = veterancyMultiplier(attacker.veterancy) + flankingBonus(state, attacker, defender) - riverAttackPenalty(state, attacker, defender);
-    const defenseMult = 1 + defenderTerrainBonus(state, defender) + veterancyMultiplier(defender.veterancy) - 1;
+    let attackMult = veterancyMultiplier(attacker.veterancy) + flankingBonus(state, attacker, defender) - riverAttackPenalty(state, attacker, defender);
+    if (attackerDef.bonusVsMounted && defenderDef.mounted) attackMult += attackerDef.bonusVsMounted;
+    let defenseMult = defenderTerrainBonus(state, defender) + veterancyMultiplier(defender.veterancy);
+    if (defenderDef.bonusVsMounted && attackerDef.mounted) defenseMult += defenderDef.bonusVsMounted;
     const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
     const defPower = defenderDef.defense * (defender.hp / defender.maxHp) * Math.max(0.1, defenseMult);
     let damageToDefender = Math.max(1, Math.round(20 * atkPower / (atkPower + defPower)));
@@ -598,7 +607,8 @@ var HegemonEngine = (() => {
     const cityTile = tileAt(state, city.position);
     const weather = state.weather.current[cityTile.region] || "clear";
     const weatherMult = weather === "fog" ? 0.95 : 1;
-    const attackPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * veterancyMultiplier(attacker.veterancy) * weatherMult;
+    const siegeMult = 1 + (attackerDef.siegeBonus ?? 0);
+    const attackPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * veterancyMultiplier(attacker.veterancy) * weatherMult * siegeMult;
     const cityDefense = 22 + city.population * 3;
     return Math.max(1, Math.round(18 * attackPower / (attackPower + cityDefense)));
   }
@@ -728,6 +738,10 @@ var HegemonEngine = (() => {
     if (state.map.units[action.unitId]) throw new Error(`Unit id ${action.unitId} already exists`);
     if (!UNITS[action.unitType]) throw new Error(`Unknown unit type ${action.unitType}`);
     const player = state.playersById[action.playerId];
+    const unitRule = UNITS[action.unitType];
+    if (unitRule.requiresTech && !player.techs.includes(unitRule.requiresTech)) {
+      throw new Error(`Unit ${action.unitType} requires tech ${unitRule.requiresTech}`);
+    }
     const cost = UNIT_BUILD_COSTS[action.unitType] ?? 9999;
     if (player.production < cost) {
       throw new Error(`Insufficient production: needs ${cost}, has ${player.production}`);

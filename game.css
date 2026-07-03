@@ -477,6 +477,54 @@ button:hover:not(:disabled) {
   cursor: not-allowed;
 }
 
+/* ===== Build menu ===== */
+.build-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.build-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #33230f;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.build-item:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.build-item .bi-cost {
+  flex: none;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.build-item.locked {
+  background: #241a13;
+}
+
+.build-item.locked .bi-cost {
+  color: #b98bd8;
+}
+
+.build-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ===== Tech tree ===== */
 .tech-tree {
   max-height: 260px;

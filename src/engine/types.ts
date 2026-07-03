@@ -42,6 +42,12 @@ export interface UnitRule {
   range: number;
   upkeep: number;
   mounted?: boolean;
+  /** Tech that must be researched before this unit can be built. */
+  requiresTech?: string;
+  /** Extra combat multiplier vs mounted units, both attacking and defending (anti-cavalry). */
+  bonusVsMounted?: number;
+  /** Extra attack multiplier when assaulting a city (siege engines). */
+  siegeBonus?: number;
 }
 
 export interface TechRule {

@@ -273,9 +273,12 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   const defenderTile = tileAt(state, defender.position);
   const weather = state.weather.current[defenderTile.region] || "clear";
 
-  const attackMult =
+  let attackMult =
     veterancyMultiplier(attacker.veterancy) + flankingBonus(state, attacker, defender) - riverAttackPenalty(state, attacker, defender);
-  const defenseMult = 1 + defenderTerrainBonus(state, defender) + veterancyMultiplier(defender.veterancy) - 1;
+  if (attackerDef.bonusVsMounted && defenderDef.mounted) attackMult += attackerDef.bonusVsMounted;
+
+  let defenseMult = defenderTerrainBonus(state, defender) + veterancyMultiplier(defender.veterancy);
+  if (defenderDef.bonusVsMounted && attackerDef.mounted) defenseMult += defenderDef.bonusVsMounted;
 
   const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
   const defPower = defenderDef.defense * (defender.hp / defender.maxHp) * Math.max(0.1, defenseMult);
@@ -332,7 +335,9 @@ function computeCityAttackDamage(state: GameState, attacker: Unit, city: City): 
   const weather = state.weather.current[cityTile.region] || "clear";
 
   const weatherMult = weather === "fog" ? 0.95 : 1;
-  const attackPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * veterancyMultiplier(attacker.veterancy) * weatherMult;
+  const siegeMult = 1 + (attackerDef.siegeBonus ?? 0);
+  const attackPower =
+    attackerDef.attack * (attacker.hp / attacker.maxHp) * veterancyMultiplier(attacker.veterancy) * weatherMult * siegeMult;
   const cityDefense = 22 + city.population * 3;
 
   return Math.max(1, Math.round((18 * attackPower) / (attackPower + cityDefense)));
@@ -490,6 +495,11 @@ function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   if (!UNITS[action.unitType]) throw new Error(`Unknown unit type ${action.unitType}`);
 
   const player = state.playersById[action.playerId];
+  const unitRule = UNITS[action.unitType];
+  if (unitRule.requiresTech && !player.techs.includes(unitRule.requiresTech)) {
+    throw new Error(`Unit ${action.unitType} requires tech ${unitRule.requiresTech}`);
+  }
+
   const cost = UNIT_BUILD_COSTS[action.unitType] ?? 9999;
   if (player.production < cost) {
     throw new Error(`Insufficient production: needs ${cost}, has ${player.production}`);
@@ -620,5 +630,6 @@ export {
   WEATHER_STATES,
   TERRAIN,
   TECHS,
-  UNITS
+  UNITS,
+  UNIT_BUILD_COSTS
 };

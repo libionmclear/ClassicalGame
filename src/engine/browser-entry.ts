@@ -16,6 +16,7 @@ import {
   TERRAIN,
   TECHS,
   UNITS,
+  UNIT_BUILD_COSTS,
   WEATHER_STATES
 } from "./index";
 import { chooseAiAction, runAiTurn } from "./ai";
@@ -42,6 +43,7 @@ export {
   TERRAIN,
   TECHS,
   UNITS,
+  UNIT_BUILD_COSTS,
   WEATHER_STATES,
   chooseAiAction,
   runAiTurn,

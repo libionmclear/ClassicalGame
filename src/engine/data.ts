@@ -106,8 +106,11 @@ export const TECHS: Record<string, TechRule> = {
 export const UNITS: Record<string, UnitRule> = {
   warrior: { domain: "land", movement: 2, attack: 20, defense: 18, maxHp: 20, range: 1, upkeep: 1 },
   archer: { domain: "land", movement: 2, attack: 16, defense: 12, maxHp: 18, range: 2, upkeep: 1 },
-  horseman: { domain: "land", movement: 3, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true },
-  trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2 },
+  spearman: { domain: "land", movement: 2, attack: 15, defense: 22, maxHp: 20, range: 1, upkeep: 1, requiresTech: "bronze-working", bonusVsMounted: 0.5 },
+  swordsman: { domain: "land", movement: 2, attack: 27, defense: 20, maxHp: 22, range: 1, upkeep: 2, requiresTech: "iron-working" },
+  horseman: { domain: "land", movement: 3, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "horseback-riding" },
+  siege: { domain: "land", movement: 1, attack: 12, defense: 8, maxHp: 16, range: 2, upkeep: 2, requiresTech: "siegecraft", siegeBonus: 1.2 },
+  trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing" },
   merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1 },
   settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1 }
 };
@@ -115,7 +118,10 @@ export const UNITS: Record<string, UnitRule> = {
 export const UNIT_BUILD_COSTS: Record<string, number> = {
   warrior: 12,
   archer: 14,
+  spearman: 14,
+  swordsman: 20,
   horseman: 20,
+  siege: 24,
   trireme: 22,
   merchant: 16,
   settler: 18
