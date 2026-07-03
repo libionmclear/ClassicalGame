@@ -1,5 +1,5 @@
 import { seededRandom } from "./rng";
-import { keyOf, neighborsOf, parseKey, distance } from "./hex";
+import { keyOf, neighborsOf, parseKey, distance, edgeKey } from "./hex";
 import type { Coord, CreateGameConfig, TerrainType } from "./types";
 
 export type MapSize = "small" | "medium" | "large" | "xl";
@@ -8,14 +8,15 @@ interface SizeSpec {
   width: number;
   height: number;
   bands: number;
+  rivers: number;
   label: string;
 }
 
 export const MAP_SIZES: Record<MapSize, SizeSpec> = {
-  small: { width: 9, height: 7, bands: 2, label: "Small" },
-  medium: { width: 13, height: 10, bands: 2, label: "Medium" },
-  large: { width: 18, height: 13, bands: 3, label: "Large" },
-  xl: { width: 24, height: 17, bands: 3, label: "XL" }
+  small: { width: 9, height: 7, bands: 2, rivers: 1, label: "Small" },
+  medium: { width: 13, height: 10, bands: 2, rivers: 2, label: "Medium" },
+  large: { width: 18, height: 13, bands: 3, rivers: 3, label: "Large" },
+  xl: { width: 24, height: 17, bands: 3, rivers: 4, label: "XL" }
 };
 
 export interface GenerateMapOptions {
@@ -111,11 +112,13 @@ function bandName(r: number, height: number, bands: number): string {
 interface TerrainField {
   tiles: Record<string, { terrain: TerrainType; region: string }>;
   regions: string[];
+  elevation: Record<string, number>;
 }
 
 function buildTerrain(seed: string, spec: SizeSpec): TerrainField {
   const { width, height, bands } = spec;
   const tiles: Record<string, { terrain: TerrainType; region: string }> = {};
+  const elevation: Record<string, number> = {};
   const regionSet = new Set<string>();
 
   for (let r = 0; r < height; r += 1) {
@@ -132,13 +135,66 @@ function buildTerrain(seed: string, spec: SizeSpec): TerrainField {
 
       const region = bandName(r, height, bands);
       regionSet.add(region);
-      tiles[keyOf({ q, r })] = { terrain: terrainFor(elev, moist), region };
+      const key = keyOf({ q, r });
+      tiles[key] = { terrain: terrainFor(elev, moist), region };
+      elevation[key] = elev;
     }
   }
 
   const order = ["north", "central", "south"];
   const regions = order.filter((name) => regionSet.has(name));
-  return { tiles, regions };
+  return { tiles, regions, elevation };
+}
+
+// Carve rivers by tracing downhill from high, wet interior tiles to the sea.
+// Each step marks the crossed edge; the renderer draws them as flowing lines.
+function carveRivers(
+  tiles: Record<string, { terrain: TerrainType; region: string }>,
+  elevation: Record<string, number>,
+  spec: SizeSpec,
+  count: number
+): Record<string, boolean> {
+  const rivers: Record<string, boolean> = {};
+  const inBounds = (c: Coord) => c.q >= 0 && c.r >= 0 && c.q < spec.width && c.r < spec.height;
+
+  // Sources: the highest land tiles, greedily spaced apart.
+  const sources = Object.keys(tiles)
+    .filter((k) => WALKABLE.has(tiles[k].terrain))
+    .sort((a, b) => elevation[b] - elevation[a]);
+
+  const chosen: string[] = [];
+  for (const key of sources) {
+    if (chosen.length >= count) break;
+    const c = parseKey(key);
+    if (chosen.every((ck) => distance(parseKey(ck), c) >= 3)) chosen.push(key);
+  }
+
+  for (const source of chosen) {
+    let currentKey = source;
+    const visited = new Set<string>([currentKey]);
+    for (let step = 0; step < spec.width + spec.height; step += 1) {
+      const current = parseKey(currentKey);
+      let bestKey: string | null = null;
+      let bestElev = elevation[currentKey];
+      for (const n of neighborsOf(current)) {
+        if (!inBounds(n)) continue;
+        const nk = keyOf(n);
+        if (visited.has(nk)) continue;
+        if (elevation[nk] < bestElev) {
+          bestElev = elevation[nk];
+          bestKey = nk;
+        }
+      }
+      if (!bestKey) break;
+      rivers[edgeKey(current, parseKey(bestKey))] = true;
+      visited.add(bestKey);
+      currentKey = bestKey;
+      const t = tiles[bestKey].terrain;
+      if (t === "sea" || t === "coast") break; // reached the coast
+    }
+  }
+
+  return rivers;
 }
 
 function largestWalkableComponent(
@@ -233,7 +289,7 @@ function placeStarters(
 }
 
 function tryGenerate(seed: string, spec: SizeSpec, playerCount: number): CreateGameConfig | null {
-  const { tiles, regions } = buildTerrain(seed, spec);
+  const { tiles, regions, elevation } = buildTerrain(seed, spec);
   const component = largestWalkableComponent(tiles, spec);
   const minComponent = Math.max(8, playerCount * 3, Math.floor(spec.width * spec.height * 0.15));
   if (component.length < minComponent) return null;
@@ -279,10 +335,12 @@ function tryGenerate(seed: string, spec: SizeSpec, playerCount: number): CreateG
     units[`${id}_settler`] = { id: `${id}_settler`, type: "settler", ownerId: id, position: start.settler };
   }
 
+  const rivers = carveRivers(tiles, elevation, spec, spec.rivers);
+
   return {
     seed,
     players,
-    map: { width: spec.width, height: spec.height, regions, rivers: {}, tiles, cities, units }
+    map: { width: spec.width, height: spec.height, regions, rivers, tiles, cities, units }
   };
 }
 

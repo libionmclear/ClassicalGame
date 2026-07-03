@@ -264,6 +264,55 @@ button:hover:not(:disabled) {
   pointer-events: none;
 }
 
+/* small unit-type badge in the corner */
+.tile .utype {
+  position: absolute;
+  top: 12%;
+  right: 12%;
+  font-size: 0.62rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
+  pointer-events: none;
+}
+
+/* "little soldiers" — a cluster of figures that thins as HP drops */
+.tile .figures {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 42%;
+  pointer-events: none;
+}
+
+.tile .figures .fig {
+  width: 3px;
+  height: 74%;
+  border-radius: 1px 1px 0 0;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.55), 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+
+.tile .figures .fig.fig-vet {
+  height: 90%;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.55), 0 -2px 0 -0.5px #f2cc69;
+}
+
+.tile .figures .fig.fig-elite {
+  height: 100%;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.55), 0 -3px 0 -0.5px #ffe08a;
+}
+
+/* rivers — flowing lines between tile centres */
+.river {
+  position: absolute;
+  height: 3.5px;
+  background: linear-gradient(90deg, #5aa9e6, #7ec8f0, #5aa9e6);
+  border-radius: 2px;
+  box-shadow: 0 0 2px rgba(120, 200, 240, 0.8);
+  transform-origin: 50% 50%;
+  pointer-events: none;
+  z-index: 3;
+}
+
 .tile .hpbar {
   position: absolute;
   bottom: 20%;

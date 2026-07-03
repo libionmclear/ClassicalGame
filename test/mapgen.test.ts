@@ -3,8 +3,23 @@ import assert from "node:assert/strict";
 
 import { generateMap, MAP_SIZES, type MapSize } from "../src/engine/mapgen";
 import { createInitialGameState, findPath, UNITS } from "../src/engine/index";
+import { distance, parseKey } from "../src/engine/hex";
 
 const SIZES: MapSize[] = ["small", "medium", "large", "xl"];
+
+test("generated maps carve rivers along valid adjacent-tile edges", () => {
+  for (const size of SIZES) {
+    const config = generateMap({ size, seed: `rivers-${size}` });
+    const rivers = config.map?.rivers ?? {};
+    const edges = Object.keys(rivers);
+    assert.ok(edges.length > 0, `${size} produced no rivers`);
+    for (const edge of edges) {
+      const [a, b] = edge.split("|");
+      assert.ok(config.map?.tiles?.[a] && config.map?.tiles?.[b], `${size} river touches missing tile`);
+      assert.equal(distance(parseKey(a), parseKey(b)), 1, `${size} river edge is not between adjacent tiles`);
+    }
+  }
+});
 
 test("generateMap is deterministic for the same size and seed", () => {
   const a = generateMap({ size: "medium", seed: "abc" });

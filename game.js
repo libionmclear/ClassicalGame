@@ -495,7 +495,8 @@
     } else if (units.length > 0) {
       const top = units[0];
       btn.classList.add("owner-" + top.ownerId);
-      inner += '<span class="glyph">' + (UNIT_GLYPHS[top.type] || "•") + "</span>";
+      inner += unitCluster(top);
+      inner += '<span class="utype">' + (UNIT_GLYPHS[top.type] || "•") + "</span>";
       inner += hpBar(top.hp, top.maxHp);
       if (units.length > 1) inner += '<span class="stack">+' + (units.length - 1) + "</span>";
       for (const u of units) {
@@ -546,6 +547,58 @@
     });
 
     return btn;
+  }
+
+  function tileCenter(q, r, geom) {
+    return {
+      x: geom.hexW * (q + r / 2) + geom.hexW / 2,
+      y: geom.vSpace * r + geom.hexH / 2
+    };
+  }
+
+  function renderRivers(geom, visibility) {
+    const rivers = state.map.rivers || {};
+    for (const edge of Object.keys(rivers)) {
+      if (!rivers[edge]) continue;
+      const parts = edge.split("|");
+      if (parts.length !== 2) continue;
+      // Only draw once both banks have been seen.
+      if (!visibility.discovered.has(parts[0]) || !visibility.discovered.has(parts[1])) continue;
+
+      const a = parts[0].split(",").map(Number);
+      const b = parts[1].split(",").map(Number);
+      const ca = tileCenter(a[0], a[1], geom);
+      const cb = tileCenter(b[0], b[1], geom);
+      const dx = cb.x - ca.x;
+      const dy = cb.y - ca.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+      const line = document.createElement("div");
+      line.className = "river";
+      line.style.left = (ca.x + cb.x) / 2 + "px";
+      line.style.top = (ca.y + cb.y) / 2 + "px";
+      line.style.width = len + "px";
+      line.style.transform = "translate(-50%, -50%) rotate(" + angle + "deg)";
+      boardEl.appendChild(line);
+    }
+  }
+
+  // Render a unit as a small cluster of figures — count thins with damage,
+  // and veteran/elite units gain a highlighted standard-bearer.
+  function unitCluster(unit) {
+    const color = CIV_COLORS[unit.ownerId] || "#d8d8d8";
+    const frac = unit.maxHp > 0 ? unit.hp / unit.maxHp : 1;
+    const figures = Math.max(1, Math.min(5, Math.round(frac * 5)));
+    let html = '<span class="figures">';
+    for (let i = 0; i < figures; i += 1) {
+      let cls = "fig";
+      if (i === 0 && unit.veterancy === "elite") cls += " fig-elite";
+      else if (i === 0 && unit.veterancy === "veteran") cls += " fig-vet";
+      html += '<span class="' + cls + '" style="background:' + color + '"></span>';
+    }
+    html += "</span>";
+    return html;
   }
 
   function hpBar(hp, maxHp) {
@@ -630,6 +683,7 @@
         boardEl.appendChild(renderTile(q, r, visibility, hints, geom));
       }
     }
+    renderRivers(geom, visibility);
 
     endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
     renderHud();

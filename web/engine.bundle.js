@@ -1118,10 +1118,10 @@ var HegemonEngine = (() => {
 
   // src/engine/mapgen.ts
   var MAP_SIZES = {
-    small: { width: 9, height: 7, bands: 2, label: "Small" },
-    medium: { width: 13, height: 10, bands: 2, label: "Medium" },
-    large: { width: 18, height: 13, bands: 3, label: "Large" },
-    xl: { width: 24, height: 17, bands: 3, label: "XL" }
+    small: { width: 9, height: 7, bands: 2, rivers: 1, label: "Small" },
+    medium: { width: 13, height: 10, bands: 2, rivers: 2, label: "Medium" },
+    large: { width: 18, height: 13, bands: 3, rivers: 3, label: "Large" },
+    xl: { width: 24, height: 17, bands: 3, rivers: 4, label: "XL" }
   };
   var CIV_ROSTER = [
     { id: "rome", civ: "Rome" },
@@ -1190,6 +1190,7 @@ var HegemonEngine = (() => {
   function buildTerrain(seed, spec) {
     const { width, height, bands } = spec;
     const tiles = {};
+    const elevation = {};
     const regionSet = /* @__PURE__ */ new Set();
     for (let r = 0; r < height; r += 1) {
       for (let q = 0; q < width; q += 1) {
@@ -1201,12 +1202,50 @@ var HegemonEngine = (() => {
         const moist = fbm(seed, "moist", q, r) - 0.22 * (height <= 1 ? 0 : r / (height - 1));
         const region = bandName(r, height, bands);
         regionSet.add(region);
-        tiles[keyOf({ q, r })] = { terrain: terrainFor(elev, moist), region };
+        const key = keyOf({ q, r });
+        tiles[key] = { terrain: terrainFor(elev, moist), region };
+        elevation[key] = elev;
       }
     }
     const order = ["north", "central", "south"];
     const regions = order.filter((name) => regionSet.has(name));
-    return { tiles, regions };
+    return { tiles, regions, elevation };
+  }
+  function carveRivers(tiles, elevation, spec, count) {
+    const rivers = {};
+    const inBounds = (c) => c.q >= 0 && c.r >= 0 && c.q < spec.width && c.r < spec.height;
+    const sources = Object.keys(tiles).filter((k) => WALKABLE.has(tiles[k].terrain)).sort((a, b) => elevation[b] - elevation[a]);
+    const chosen = [];
+    for (const key of sources) {
+      if (chosen.length >= count) break;
+      const c = parseKey(key);
+      if (chosen.every((ck) => distance(parseKey(ck), c) >= 3)) chosen.push(key);
+    }
+    for (const source of chosen) {
+      let currentKey = source;
+      const visited = /* @__PURE__ */ new Set([currentKey]);
+      for (let step = 0; step < spec.width + spec.height; step += 1) {
+        const current = parseKey(currentKey);
+        let bestKey = null;
+        let bestElev = elevation[currentKey];
+        for (const n of neighborsOf(current)) {
+          if (!inBounds(n)) continue;
+          const nk = keyOf(n);
+          if (visited.has(nk)) continue;
+          if (elevation[nk] < bestElev) {
+            bestElev = elevation[nk];
+            bestKey = nk;
+          }
+        }
+        if (!bestKey) break;
+        rivers[edgeKey(current, parseKey(bestKey))] = true;
+        visited.add(bestKey);
+        currentKey = bestKey;
+        const t = tiles[bestKey].terrain;
+        if (t === "sea" || t === "coast") break;
+      }
+    }
+    return rivers;
   }
   function largestWalkableComponent(tiles, spec) {
     const inBounds = (c) => c.q >= 0 && c.r >= 0 && c.q < spec.width && c.r < spec.height;
@@ -1283,7 +1322,7 @@ var HegemonEngine = (() => {
     return { warrior, settler };
   }
   function tryGenerate(seed, spec, playerCount) {
-    const { tiles, regions } = buildTerrain(seed, spec);
+    const { tiles, regions, elevation } = buildTerrain(seed, spec);
     const component = largestWalkableComponent(tiles, spec);
     const minComponent = Math.max(8, playerCount * 3, Math.floor(spec.width * spec.height * 0.15));
     if (component.length < minComponent) return null;
@@ -1322,10 +1361,11 @@ var HegemonEngine = (() => {
       units[`${id}_warrior`] = { id: `${id}_warrior`, type: "warrior", ownerId: id, position: start.warrior };
       units[`${id}_settler`] = { id: `${id}_settler`, type: "settler", ownerId: id, position: start.settler };
     }
+    const rivers = carveRivers(tiles, elevation, spec, spec.rivers);
     return {
       seed,
       players,
-      map: { width: spec.width, height: spec.height, regions, rivers: {}, tiles, cities, units }
+      map: { width: spec.width, height: spec.height, regions, rivers, tiles, cities, units }
     };
   }
   function generateMap(options = {}) {
