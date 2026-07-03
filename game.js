@@ -467,7 +467,7 @@
     const clickedCity = getCityAt(q, r);
 
     if (!selectedUnitId) {
-      const ownUnit = clickedUnits.find((u) => u.ownerId === "rome");
+      const ownUnit = clickedUnits.find((u) => u.ownerId === HUMAN_ID);
       if (ownUnit) {
         selectedUnitId = ownUnit.id;
         selectedCityId = null;
@@ -475,7 +475,7 @@
         return;
       }
 
-      if (clickedCity && clickedCity.ownerId === "rome") {
+      if (clickedCity && clickedCity.ownerId === HUMAN_ID) {
         selectedCityId = clickedCity.id;
         selectedUnitId = null;
         render();
@@ -490,23 +490,65 @@
       return;
     }
 
-    const enemyUnit = clickedUnits.find((u) => u.ownerId !== "rome");
+    // Clicking the selected unit itself deselects it.
+    if (selected.position.q === q && selected.position.r === r) {
+      clearSelection();
+      render();
+      return;
+    }
+
+    const selectedDef = engine.UNITS[selected.type];
+    const moveCtx = { ownerId: selected.ownerId, domain: selectedDef.domain, mounted: selectedDef.mounted };
+
+    const enemyUnit = clickedUnits.find((u) => u.ownerId !== HUMAN_ID);
     if (enemyUnit) {
-      apply({ type: "ATTACK", playerId: "rome", attackerId: selected.id, defenderId: enemyUnit.id });
+      if (engine.distance(selected.position, { q, r }) > selectedDef.range) {
+        hintLineEl.textContent = "That enemy is out of range.";
+        return;
+      }
+      apply({ type: "ATTACK", playerId: HUMAN_ID, attackerId: selected.id, defenderId: enemyUnit.id });
       return;
     }
 
-    if (clickedCity && clickedCity.ownerId !== "rome") {
-      apply({ type: "ATTACK_CITY", playerId: "rome", attackerId: selected.id, cityId: clickedCity.id });
+    if (clickedCity && clickedCity.ownerId !== HUMAN_ID) {
+      if (engine.distance(selected.position, { q, r }) > selectedDef.range) {
+        hintLineEl.textContent = "That city is out of range.";
+        return;
+      }
+      apply({ type: "ATTACK_CITY", playerId: HUMAN_ID, attackerId: selected.id, cityId: clickedCity.id });
       return;
     }
 
-    apply({
-      type: "MOVE_UNIT",
-      playerId: "rome",
-      unitId: selected.id,
-      destination: { q, r }
-    });
+    // Clicking one of your own units/cities re-selects it (don't move onto it).
+    const ownUnitHere = clickedUnits.find((u) => u.ownerId === HUMAN_ID);
+    if (ownUnitHere) {
+      selectedUnitId = ownUnitHere.id;
+      selectedCityId = null;
+      render();
+      return;
+    }
+    if (clickedCity && clickedCity.ownerId === HUMAN_ID) {
+      selectedCityId = clickedCity.id;
+      selectedUnitId = null;
+      render();
+      return;
+    }
+
+    // Otherwise move — but validate first so a bad click never throws.
+    const path = engine.findPath(state, moveCtx, selected.position, { q, r });
+    if (!path || path.length < 2) {
+      hintLineEl.textContent = "Can't move there.";
+      return;
+    }
+    let cost = 0;
+    for (let i = 0; i < path.length - 1; i += 1) {
+      cost += engine.movementCost(state, moveCtx, path[i], path[i + 1]);
+    }
+    if (!Number.isFinite(cost) || cost > selected.movementRemaining) {
+      hintLineEl.textContent = "Not enough movement to reach there.";
+      return;
+    }
+    apply({ type: "MOVE_UNIT", playerId: HUMAN_ID, unitId: selected.id, destination: { q, r }, path: path });
   }
 
   function renderTile(q, r, visibility, hints, geom, pos) {
