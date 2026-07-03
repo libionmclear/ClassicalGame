@@ -1373,13 +1373,50 @@ var HegemonEngine = (() => {
     const spec = MAP_SIZES[size];
     if (!spec) throw new Error(`Unknown map size ${size}`);
     const baseSeed = options.seed ?? "hegemon-map";
-    const playerCount = Math.max(2, Math.min(MAX_PLAYERS, Math.floor(options.playerCount ?? 2)));
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const seed = attempt === 0 ? baseSeed : `${baseSeed}#${attempt}`;
-      const config = tryGenerate(seed, spec, playerCount);
-      if (config) return config;
+    const requested = Math.max(2, Math.min(MAX_PLAYERS, Math.floor(options.playerCount ?? 2)));
+    for (let playerCount = requested; playerCount >= 2; playerCount -= 1) {
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        const seed = attempt === 0 ? baseSeed : `${baseSeed}#${attempt}`;
+        const config = tryGenerate(seed, spec, playerCount);
+        if (config) return config;
+      }
     }
-    throw new Error(`Map generation failed for size ${size} with ${playerCount} players (seed ${baseSeed})`);
+    return tryGenerate(`${baseSeed}#fallback`, spec, 2) ?? buildFlatFallback(spec, baseSeed);
+  }
+  function buildFlatFallback(spec, seed) {
+    const tiles = {};
+    for (let r = 0; r < spec.height; r += 1) {
+      for (let q = 0; q < spec.width; q += 1) {
+        tiles[keyOf({ q, r })] = { terrain: "plains", region: bandName(r, spec.height, spec.bands) };
+      }
+    }
+    const midR = Math.floor(spec.height / 2);
+    const romePos = { q: 1, r: midR };
+    const carthagePos = { q: spec.width - 2, r: midR };
+    return {
+      seed,
+      players: [
+        { id: "rome", civ: "Rome", food: 8, production: 30, gold: 20 },
+        { id: "carthage", civ: "Carthage", food: 8, production: 30, gold: 20 }
+      ],
+      map: {
+        width: spec.width,
+        height: spec.height,
+        regions: Array.from(new Set(Object.values(tiles).map((t) => t.region))),
+        rivers: {},
+        tiles,
+        cities: {
+          rome_capital: { id: "rome_capital", ownerId: "rome", position: romePos, population: 2, hp: 40, maxHp: 40, isCapital: true },
+          carthage_capital: { id: "carthage_capital", ownerId: "carthage", position: carthagePos, population: 2, hp: 40, maxHp: 40, isCapital: true }
+        },
+        units: {
+          r_warrior: { id: "r_warrior", type: "warrior", ownerId: "rome", position: { q: 2, r: midR } },
+          r_settler: { id: "r_settler", type: "settler", ownerId: "rome", position: { q: 1, r: midR - 1 >= 0 ? midR - 1 : midR + 1 } },
+          c_warrior: { id: "c_warrior", type: "warrior", ownerId: "carthage", position: { q: spec.width - 3, r: midR } },
+          c_settler: { id: "c_settler", type: "settler", ownerId: "carthage", position: { q: spec.width - 2, r: midR - 1 >= 0 ? midR - 1 : midR + 1 } }
+        }
+      }
+    };
   }
   return __toCommonJS(browser_entry_exports);
 })();

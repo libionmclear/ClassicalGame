@@ -64,6 +64,22 @@ test("generateMap clamps player count to the roster range", () => {
   assert.equal(Object.values(tooFew.map?.cities ?? {}).filter((c) => c.isCapital).length, 2);
 });
 
+test("generateMap never throws and always yields a playable map (every size x civ count x seed)", () => {
+  for (const size of SIZES) {
+    for (let pc = 2; pc <= 6; pc += 1) {
+      for (let s = 0; s < 40; s += 1) {
+        const config = generateMap({ size, playerCount: pc, seed: `robust-${size}-${pc}-${s}` });
+        const caps = Object.values(config.map?.cities ?? {}).filter((c) => c.isCapital);
+        // Graceful downgrade is allowed on tiny maps, but never fewer than 2.
+        assert.ok(caps.length >= 2 && caps.length <= pc, `${size}/${pc} seed ${s} -> ${caps.length} capitals`);
+        // Whatever count it settles on, every capital must be a distinct owner.
+        const owners = new Set(caps.map((c) => c.ownerId));
+        assert.equal(owners.size, caps.length, `${size}/${pc} seed ${s} has duplicate capital owners`);
+      }
+    }
+  }
+});
+
 for (const size of SIZES) {
   test(`generateMap(${size}) has correct dimensions and full tile coverage`, () => {
     const spec = MAP_SIZES[size];

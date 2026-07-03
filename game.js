@@ -647,51 +647,62 @@
     const current = state.players[state.currentPlayerIndex];
     const victory = engine.getVictoryStatus(state);
 
-    const standings = state.players
-      .map((p) => {
-        const color = CIV_COLORS[p.id] || "#ccc";
-        const active = p.id === current.id ? "font-weight:700;text-decoration:underline" : "";
-        const eliminated = p.cityIds.length === 0 ? "opacity:0.5" : "";
-        return (
-          '<span style="color:' + color + ";" + active + ";" + eliminated + '">' +
-          (p.civ || p.id) + " " + p.cityIds.length + "</span>"
-        );
-      })
-      .join(" · ");
-    statusEl.innerHTML = "Turn " + state.turn + " · Cities — " + standings;
+    try {
+      const standings = state.players
+        .map((p) => {
+          const color = CIV_COLORS[p.id] || "#ccc";
+          const active = p.id === current.id ? "font-weight:700;text-decoration:underline" : "";
+          const eliminated = p.cityIds.length === 0 ? "opacity:0.5" : "";
+          return (
+            '<span style="color:' + color + ";" + active + ";" + eliminated + '">' +
+            (p.civ || p.id) + " " + p.cityIds.length + "</span>"
+          );
+        })
+        .join(" · ");
+      statusEl.innerHTML = "Turn " + state.turn + " · Cities — " + standings;
 
-    victoryEl.textContent = victory.winnerId
-      ? "Victory: " + victory.type + " by " + victory.winnerId
-      : "No winner yet.";
+      victoryEl.textContent = victory.winnerId
+        ? "Victory: " + victory.type + " by " + victory.winnerId
+        : "No winner yet.";
 
-    const visibility = getHumanVisibility();
-    const hints = getTileHintsForSelectedUnit(visibility);
+      const visibility = getHumanVisibility();
+      const hints = getTileHintsForSelectedUnit(visibility);
 
-    const size = hexSize();
-    const geom = {
-      hexW: SQRT3 * size,
-      hexH: 2 * size,
-      vSpace: size * 1.5
-    };
-    const extentW = state.map.width + (state.map.height - 1) / 2;
-    boardEl.style.width = geom.hexW * extentW + "px";
-    boardEl.style.height = geom.vSpace * (state.map.height - 1) + geom.hexH + "px";
+      const size = hexSize();
+      const geom = {
+        hexW: SQRT3 * size,
+        hexH: 2 * size,
+        vSpace: size * 1.5
+      };
+      const extentW = state.map.width + (state.map.height - 1) / 2;
+      boardEl.style.width = geom.hexW * extentW + "px";
+      boardEl.style.height = geom.vSpace * (state.map.height - 1) + geom.hexH + "px";
 
-    boardEl.innerHTML = "";
-    for (let r = 0; r < state.map.height; r += 1) {
-      for (let q = 0; q < state.map.width; q += 1) {
-        boardEl.appendChild(renderTile(q, r, visibility, hints, geom));
+      boardEl.innerHTML = "";
+      for (let r = 0; r < state.map.height; r += 1) {
+        for (let q = 0; q < state.map.width; q += 1) {
+          boardEl.appendChild(renderTile(q, r, visibility, hints, geom));
+        }
+      }
+      renderRivers(geom, visibility);
+
+      renderHud();
+      renderLegend();
+      renderTechTree(victory);
+      updatePanelState(victory);
+      renderLog();
+    } catch (err) {
+      console.error("Render error:", err);
+    } finally {
+      // Always reconcile the turn button and result overlay with the true
+      // victory state — a partial render must never leave a stale modal.
+      try {
+        endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
+        showResultModal(victory);
+      } catch (overlayErr) {
+        console.error("Overlay error:", overlayErr);
       }
     }
-    renderRivers(geom, visibility);
-
-    endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
-    renderHud();
-    renderLegend();
-    renderTechTree(victory);
-    updatePanelState(victory);
-    renderLog();
-    showResultModal(victory);
   }
 
   function renderTechTree(victory) {
@@ -798,25 +809,35 @@
   }
 
   function newGame() {
+    // Clear any leftover result modal first, so a new game can never inherit a
+    // stale "Victory/Defeat" overlay even if something below misbehaves.
+    resultModalEl.classList.add("hidden");
+
     const choice = (mapSizeSelectEl && mapSizeSelectEl.value) || "medium";
     let config;
     let label;
-    if (choice === "italia") {
+    try {
+      if (choice === "italia") {
+        config = engine.loadScenario("italia").config;
+        label = "Italia scenario";
+      } else {
+        const seed = "map-" + choice + "-" + Date.now();
+        const playerCount = playerCountSelectEl ? parseInt(playerCountSelectEl.value, 10) || 2 : 2;
+        config = engine.generateMap({ size: choice, seed: seed, playerCount: playerCount });
+        const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
+        label = sizeLabel + " random map (" + config.map.width + "×" + config.map.height + "), " +
+          config.players.length + " civs";
+      }
+    } catch (err) {
+      console.error("New game generation failed, falling back:", err);
       config = engine.loadScenario("italia").config;
-      label = "Italia scenario";
-    } else {
-      const seed = "map-" + choice + "-" + Date.now();
-      const playerCount = playerCountSelectEl ? parseInt(playerCountSelectEl.value, 10) || 2 : 2;
-      config = engine.generateMap({ size: choice, seed: seed, playerCount: playerCount });
-      const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
-      label = sizeLabel + " random map (" + config.map.width + "×" + config.map.height + "), " +
-        config.players.length + " civs";
+      label = "Italia scenario (fallback)";
     }
+
     state = engine.createInitialGameState(config);
     clearSelection();
     actionLog = ["New game started: " + label];
     hintLineEl.textContent = defaultHintText;
-    resultModalEl.classList.add("hidden");
     render();
   }
 
