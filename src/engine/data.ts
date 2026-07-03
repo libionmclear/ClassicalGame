@@ -138,6 +138,10 @@ export interface BuildingRule {
   requiresTech?: string;
   yields?: { food?: number; production?: number; gold?: number; science?: number };
   cityHp?: number;
+  /** Only buildable in a city touching the sea (coast or open water). */
+  coastalOnly?: boolean;
+  /** Extra gold per OTHER building of this same id the owner holds (trade network). */
+  networkGold?: number;
   note: string;
 }
 
@@ -174,6 +178,15 @@ export const BUILDINGS: Record<string, BuildingRule> = {
     requiresTech: "masonry",
     cityHp: 20,
     note: "Servian and Aurelian walls, Hellenistic circuits — dressed stone that turned a town into a fortress. Effect: +20 city HP."
+  },
+  harbor: {
+    name: "Harbor",
+    cost: 18,
+    requiresTech: "sailing",
+    coastalOnly: true,
+    yields: { food: 1, gold: 2 },
+    networkGold: 1,
+    note: "Moles, quays and warehouses — Ostia, Carthage's circular cothon, Piraeus. Sea lanes carried grain, wine, tin and silver across the classical world. Effect: +1 food, +2 gold, and +1 more gold for every other Harbor you hold (a trade network)."
   }
 };
 

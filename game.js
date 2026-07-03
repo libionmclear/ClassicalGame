@@ -68,7 +68,7 @@
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
-  const BUILDABLE = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "settler"];
+  const BUILDABLE = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "trireme", "settler"];
   const UNIT_META = {
     warrior: { name: "Warrior", role: "Basic melee infantry — cheap, no strong matchups" },
     archer: { name: "Archer", role: "Ranged (range 2): strikes with no reply at distance, but fragile in melee and easy prey for cavalry" },
@@ -76,6 +76,7 @@
     swordsman: { name: "Swordsman", role: "Heavy infantry: grinds spearmen and skirmishers" },
     horseman: { name: "Horseman", role: "Cavalry (3 move): runs down archers & light foot — but spears counter it" },
     siege: { name: "Siege Ballista", role: "Range 2, devastating vs cities, fragile in the open field" },
+    trireme: { name: "Trireme", role: "Warship — rules the sea lanes, carries war to the coast. Built only in coastal cities; launches into the water" },
     settler: { name: "Settler", role: "Founds a new city" }
   };
   // One-line historical grounding for each unit (the educational layer).
@@ -86,6 +87,7 @@
     swordsman: "Sword-and-shield heavy infantry — the Roman legionary with gladius and scutum, drilled and armoured.",
     horseman: "Companion and Numidian cavalry — the shock and pursuit arm that rode down fleeing skirmishers.",
     siege: "The ballista and onager — torsion artillery that hurled bolts and stones over the highest walls.",
+    trireme: "Three banks of oars and a bronze ram — the trireme decided Salamis (480 BC) and every contest for the Mediterranean thereafter.",
     settler: "Colonists sent to found a new colonia or polis, carrying the sacred fire from the mother city."
   };
 
@@ -284,7 +286,7 @@
     }
   }
 
-  const BUILDING_GLYPH = { granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱" };
+  const BUILDING_GLYPH = { granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱", harbor: "⚓" };
 
   function itemCost(id) {
     if (engine.UNITS && engine.UNITS[id]) return (engine.UNIT_BUILD_COSTS || {})[id] || 0;
@@ -421,18 +423,28 @@
     const buildings = engine.BUILDINGS || {};
     const built = new Set(selectedCity.buildings || []);
     const queued = new Set(selectedCity.queue || []);
+    const coastal = engine.isCoastalCity ? engine.isCoastalCity(state, selectedCity.id) : true;
     for (const id of Object.keys(buildings)) {
       const b = buildings[id];
       const has = built.has(id);
       const isQueued = queued.has(id);
       const reqTech = b.requiresTech;
       const hasTech = !reqTech || player.techs.includes(reqTech);
+      const needsCoast = b.coastalOnly && !coastal;
       const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
       const btn = document.createElement("button");
-      btn.className = "build-item" + (has ? " done" : hasTech ? "" : " locked");
-      btn.disabled = has || isQueued || !(isTurn && hasTech);
-      btn.title = b.note;
-      const status = has ? "✓ built" : isQueued ? "in queue" : !hasTech ? "🔒 " + techName : b.cost + " ⚒️";
+      btn.className = "build-item" + (has ? " done" : hasTech && !needsCoast ? "" : " locked");
+      btn.disabled = has || isQueued || needsCoast || !(isTurn && hasTech);
+      btn.title = b.note + (b.coastalOnly ? "\n\n⚓ Coastal cities only." : "");
+      const status = has
+        ? "✓ built"
+        : isQueued
+          ? "in queue"
+          : !hasTech
+            ? "🔒 " + techName
+            : needsCoast
+              ? "⚓ coastal only"
+              : b.cost + " ⚒️";
       btn.innerHTML =
         '<span class="bi-name">' + (BUILDING_GLYPH[id] || "▪") + " " + b.name + "</span>" +
         '<span class="bi-cost">' + status + "</span>";
@@ -450,6 +462,7 @@
     const player = human();
     const costs = engine.UNIT_BUILD_COSTS || {};
     buildMenuEl.innerHTML = "";
+    const coastal = selectedCity && engine.isCoastalCity ? engine.isCoastalCity(state, selectedCity.id) : false;
 
     for (const type of BUILDABLE) {
       const def = engine.UNITS[type];
@@ -458,11 +471,12 @@
       const cost = costs[type];
       const reqTech = def.requiresTech;
       const hasTech = !reqTech || player.techs.includes(reqTech);
+      const needsCoast = def.domain === "naval" && !coastal;
       const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
 
       const btn = document.createElement("button");
-      btn.className = "build-item" + (hasTech ? "" : " locked");
-      btn.disabled = !(isTurn && !!selectedCity && hasTech);
+      btn.className = "build-item" + (hasTech && !needsCoast ? "" : " locked");
+      btn.disabled = !(isTurn && !!selectedCity && hasTech && !needsCoast);
       // ETA if built next at this city (a hint — costs are paid in labor over
       // several turns, not instantly; this is why a cheap unit "isn't building").
       let etaHint = "";
@@ -474,10 +488,17 @@
 
       btn.title =
         meta.role + (reqTech ? " — needs " + techName : "") +
+        (def.domain === "naval" ? "\n\n⚓ Coastal cities only; launches into the water." : "") +
         (typeof cost === "number" ? "\n\nCosts " + cost + " labor — this city banks labor each turn until it is paid, then the unit appears at End Turn." : "") +
         (UNIT_HISTORY[type] ? "\n\n" + UNIT_HISTORY[type] : "");
 
-      const status = !hasTech ? "🔒 " + techName : typeof cost === "number" ? cost + " ⚒️" + etaHint : "";
+      const status = !hasTech
+        ? "🔒 " + techName
+        : needsCoast
+          ? "⚓ coastal only"
+          : typeof cost === "number"
+            ? cost + " ⚒️" + etaHint
+            : "";
       btn.innerHTML =
         '<span class="bi-name">' + (UNIT_GLYPHS[type] || "•") + " " + meta.name + "</span>" +
         '<span class="bi-cost">' + status + "</span>";

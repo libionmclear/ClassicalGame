@@ -1,5 +1,5 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS } from "./data";
-import { applyAction, computeCombatPreview, researchCost } from "./index";
+import { applyAction, computeCombatPreview, researchCost, isCoastalCity } from "./index";
 import { getEvent } from "./events";
 import { distance, DIRECTIONS } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -14,6 +14,7 @@ const RESEARCH_PRIORITY = [
   "combined-arms",
   "horseback-riding",
   "writing",
+  "sailing",
   "masonry",
   "engineering",
   "siegecraft",
@@ -238,6 +239,7 @@ function buildingAction(state: GameState, player: Player): GameAction | null {
     for (const [id, b] of Object.entries(BUILDINGS)) {
       if (built.has(id)) continue;
       if (b.requiresTech && !player.techs.includes(b.requiresTech)) continue;
+      if (b.coastalOnly && !isCoastalCity(state, cityId)) continue;
       return { type: "BUILD_BUILDING", playerId: player.id, cityId, buildingId: id };
     }
   }

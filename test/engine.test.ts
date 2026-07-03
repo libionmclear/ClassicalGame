@@ -5,10 +5,12 @@ import {
   applyAction,
   canResearch,
   computeCombatPreview,
+  computeCityYield,
   computePlayerIncome,
   computeTerritory,
   createInitialGameState,
   getVictoryStatus,
+  isCoastalCity,
   keyOf,
   movementCost,
   replayActions,
@@ -205,6 +207,83 @@ test("city can be captured and domination victory is detected", () => {
   const victory = getVictoryStatus(state);
   assert.equal(victory.type, "domination");
   assert.equal(victory.winnerId, "p1");
+});
+
+function seaState(techs: string[] = ["sailing"]) {
+  const tiles: Record<string, { terrain: string; region: string }> = {};
+  for (let r = 0; r < 3; r += 1) {
+    for (let q = 0; q < 5; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "r" };
+  }
+  // The eastern edge is open water, so cities beside it are coastal.
+  tiles["4,0"] = { terrain: "sea", region: "r" };
+  tiles["4,1"] = { terrain: "sea", region: "r" };
+  tiles["4,2"] = { terrain: "sea", region: "r" };
+  return createInitialGameState({
+    seed: "sea",
+    players: [{ id: "a", civ: "A", techs }],
+    map: {
+      width: 5,
+      height: 3,
+      regions: ["r"],
+      tiles: tiles as never,
+      cities: {
+        coast1: { id: "coast1", ownerId: "a", position: { q: 3, r: 0 }, population: 2 },
+        coast2: { id: "coast2", ownerId: "a", position: { q: 3, r: 1 }, population: 2 },
+        inland: { id: "inland", ownerId: "a", position: { q: 0, r: 0 }, population: 2 }
+      }
+    }
+  });
+}
+
+test("coastal detection: a city beside water is coastal, an inland one is not", () => {
+  const state = seaState();
+  assert.equal(isCoastalCity(state, "coast1"), true);
+  assert.equal(isCoastalCity(state, "inland"), false);
+});
+
+test("harbor is coastal-only", () => {
+  let state = seaState();
+  assert.throws(
+    () => applyAction(state, { type: "BUILD_BUILDING", playerId: "a", cityId: "inland", buildingId: "harbor" }),
+    /coastal/
+  );
+  state = applyAction(state, { type: "BUILD_BUILDING", playerId: "a", cityId: "coast1", buildingId: "harbor" });
+  assert.ok((state.map.cities.coast1.queue || []).includes("harbor"));
+});
+
+test("harbors earn extra gold as a trade network", () => {
+  const state = seaState();
+  state.map.cities.coast1.buildings = ["harbor"];
+  const solo = computeCityYield(state, "coast1").gold;
+  state.map.cities.coast2.buildings = ["harbor"];
+  const networked = computeCityYield(state, "coast1").gold;
+  assert.equal(networked, solo + 1, "a second harbor adds one trade-network gold");
+});
+
+test("a trireme launches onto adjacent water, not the city's land tile", () => {
+  let state = seaState(["sailing", "open-sea-sailing"]);
+  state = applyAction(state, {
+    type: "BUILD_UNIT",
+    playerId: "a",
+    cityId: "coast1",
+    unitType: "trireme",
+    unitId: "t1"
+  });
+  state.map.cities.coast1.production = 999; // fund it so End Turn completes it
+  state = applyAction(state, { type: "END_TURN", playerId: "a" });
+
+  const trireme = Object.values(state.map.units).find((u) => u.type === "trireme");
+  assert.ok(trireme, "the trireme was built");
+  const tile = state.map.tiles[`${trireme!.position.q},${trireme!.position.r}`];
+  assert.ok(tile.terrain === "sea" || tile.terrain === "coast", "the trireme sits on water");
+});
+
+test("ships cannot be built in a landlocked city", () => {
+  const state = seaState(["sailing", "open-sea-sailing"]);
+  assert.throws(
+    () => applyAction(state, { type: "BUILD_UNIT", playerId: "a", cityId: "inland", unitType: "trireme", unitId: "t2" }),
+    /coastal/
+  );
 });
 
 test("territory claims coast and land but never open sea", () => {

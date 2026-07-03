@@ -528,13 +528,34 @@ export function computeCityYield(
 
   for (const buildingId of city.buildings ?? []) {
     const b = BUILDINGS[buildingId];
-    if (!b || !b.yields) continue;
-    yields.food += b.yields.food ?? 0;
-    yields.production += b.yields.production ?? 0;
-    yields.gold += b.yields.gold ?? 0;
-    yields.science += b.yields.science ?? 0;
+    if (!b) continue;
+    if (b.yields) {
+      yields.food += b.yields.food ?? 0;
+      yields.production += b.yields.production ?? 0;
+      yields.gold += b.yields.gold ?? 0;
+      yields.science += b.yields.science ?? 0;
+    }
+    // Trade-network buildings (harbours) earn more the more of them you hold —
+    // a shipping lane needs ports at both ends. Count the owner's other copies.
+    if (b.networkGold && owner) {
+      const network = owner.cityIds.reduce((n, id) => {
+        const c = state.map.cities[id];
+        return n + (c && (c.buildings ?? []).includes(buildingId) ? 1 : 0);
+      }, 0);
+      yields.gold += b.networkGold * Math.max(0, network - 1);
+    }
   }
   return yields;
+}
+
+// A city touches the sea if any neighbouring tile is coast or open water.
+export function isCoastalCity(state: GameState, cityId: string): boolean {
+  const city = state.map.cities[cityId];
+  if (!city) return false;
+  return neighborsOf(city.position).some((n) => {
+    const tile = state.map.tiles[keyOf(n)];
+    return tile && (tile.terrain === "coast" || tile.terrain === "sea");
+  });
 }
 
 // A queue item is a unit type or a building id (they never collide).
@@ -542,6 +563,20 @@ export function productionItemCost(id: string): number {
   if (UNITS[id]) return UNIT_BUILD_COSTS[id] ?? Infinity;
   if (BUILDINGS[id]) return BUILDINGS[id].cost;
   return Infinity;
+}
+
+// Pick an empty water tile next to a coastal city to launch a new ship. Falls
+// back to the city tile if the city is somehow landlocked or the water is full.
+function navalLaunchTile(state: GameState, city: City): Coord {
+  const occupied = new Set(Object.values(state.map.units).map((u) => keyOf(u.position)));
+  for (const n of neighborsOf(city.position)) {
+    const tile = state.map.tiles[keyOf(n)];
+    if (!tile) continue;
+    if (tile.terrain !== "coast" && tile.terrain !== "sea") continue;
+    if (occupied.has(keyOf(n))) continue;
+    return n;
+  }
+  return { ...city.position };
 }
 
 function completeQueueItem(state: GameState, city: City, id: string): void {
@@ -553,11 +588,13 @@ function completeQueueItem(state: GameState, city: City, id: string): void {
       counter += 1;
       unitId = `${city.ownerId}_${id}_${state.turn}_${city.id}_${counter}`;
     }
+    // Ships launch into adjacent water, not onto the city's land tile.
+    const spawn = def.domain === "naval" ? navalLaunchTile(state, city) : { ...city.position };
     state.map.units[unitId] = {
       id: unitId,
       type: id,
       ownerId: city.ownerId,
-      position: { ...city.position },
+      position: spawn,
       hp: def.maxHp,
       maxHp: def.maxHp,
       movementRemaining: 0,
@@ -609,6 +646,9 @@ function applyBuildBuilding(state: GameState, action: BuildBuildingAction): void
   const player = state.playersById[action.playerId];
   if (building.requiresTech && !player.techs.includes(building.requiresTech)) {
     throw new Error(`Building ${action.buildingId} requires tech ${building.requiresTech}`);
+  }
+  if (building.coastalOnly && !isCoastalCity(state, action.cityId)) {
+    throw new Error(`Building ${action.buildingId} can only be raised in a coastal city`);
   }
   enqueueProduction(city, action.buildingId);
 }
@@ -816,6 +856,9 @@ function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   const unitRule = UNITS[action.unitType];
   if (unitRule.requiresTech && !player.techs.includes(unitRule.requiresTech)) {
     throw new Error(`Unit ${action.unitType} requires tech ${unitRule.requiresTech}`);
+  }
+  if (unitRule.domain === "naval" && !isCoastalCity(state, action.cityId)) {
+    throw new Error(`Ships can only be built in a coastal city`);
   }
   enqueueProduction(city, action.unitType);
 }
