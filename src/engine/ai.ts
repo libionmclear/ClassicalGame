@@ -1,5 +1,6 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS } from "./data";
 import { applyAction, computeCombatPreview, researchCost } from "./index";
+import { getEvent } from "./events";
 import { distance, DIRECTIONS } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import type { City, Coord, GameAction, GameState, Player, Unit } from "./types";
@@ -237,7 +238,8 @@ function settlerMoveAction(state: GameState, player: Player): GameAction | null 
     for (const dir of DIRECTIONS) {
       const next = { q: unit.position.q + dir[0], r: unit.position.r + dir[1] };
       if (!state.map.tiles[`${next.q},${next.r}`]) continue;
-      if (!Number.isFinite(movementCost(state, ctx, unit.position, next))) continue;
+      const step = movementCost(state, ctx, unit.position, next);
+      if (!Number.isFinite(step) || step > unit.movementRemaining) continue;
       if (unitAt(state, next) || cityAtCoord(state, next)) continue;
       const near = nearestCity(cities, next);
       const score = near ? distance(next, near.position) : 99;
@@ -258,6 +260,20 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
   if (!player) throw new Error(`Unknown player ${playerId}`);
 
   const steps: Array<() => GameAction | null> = [
+    () => {
+      // Resolve any pending Crossroads dilemma first (pick the better payoff).
+      if (!player.pendingEvent) return null;
+      const event = getEvent(player.pendingEvent);
+      if (!event) return null;
+      const score = (o: (typeof event.options)[number]) =>
+        (o.effects.gold ?? 0) * 0.5 +
+        (o.effects.production ?? 0) +
+        (o.effects.science ?? 0) * 0.8 +
+        (o.effects.food ?? 0) * 3 +
+        (o.effects.spawnUnit ? 25 : 0);
+      const optionIndex = score(event.options[0]) >= score(event.options[1]) ? 0 : 1;
+      return { type: "RESOLVE_EVENT", playerId, eventId: player.pendingEvent, optionIndex };
+    },
     () => attackAction(state, player),
     () => foundCityAction(state, player),
     () => buildAction(state, player),
@@ -283,9 +299,23 @@ export function runAiTurn(inputState: GameState, playerId: string, maxActions = 
 
   for (let i = 0; i < maxActions; i += 1) {
     const action = chooseAiAction(state, playerId);
-    actions.push(action);
-    state = applyAction(state, action);
-    if (action.type === "END_TURN") break;
+    if (action.type === "END_TURN") {
+      actions.push(action);
+      state = applyAction(state, action);
+      break;
+    }
+    try {
+      const next = applyAction(state, action);
+      state = next;
+      actions.push(action);
+    } catch {
+      // A heuristic produced an illegal action; don't crash the game — just end
+      // this player's turn cleanly.
+      const forcedEnd: GameAction = { type: "END_TURN", playerId };
+      actions.push(forcedEnd);
+      state = applyAction(state, forcedEnd);
+      return { state, actions };
+    }
   }
 
   if (actions.length === maxActions && actions[actions.length - 1].type !== "END_TURN") {

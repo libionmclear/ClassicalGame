@@ -93,6 +93,10 @@ export interface Player {
   forkChoices: Record<string, string>;
   cityIds: string[];
   unitIds: string[];
+  /** A Crossroads event awaiting the player's decision (event id), if any. */
+  pendingEvent?: string;
+  /** Turn the player's last event fired, to space them out. */
+  lastEventTurn?: number;
 }
 
 export interface GameMap {
@@ -183,6 +187,13 @@ export interface AttackCityAction {
   cityId: string;
 }
 
+export interface ResolveEventAction {
+  type: "RESOLVE_EVENT";
+  playerId: string;
+  eventId: string;
+  optionIndex: number;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -191,7 +202,8 @@ export type GameAction =
   | EndTurnAction
   | FoundCityAction
   | BuildUnitAction
-  | AttackCityAction;
+  | AttackCityAction
+  | ResolveEventAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

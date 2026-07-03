@@ -749,6 +749,80 @@ button:hover:not(:disabled) {
   font-size: 1.6rem;
 }
 
+/* ===== Crossroads event card ===== */
+.event-card {
+  width: min(560px, 100%);
+  text-align: left;
+}
+
+.event-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 2px 12px;
+  margin-bottom: 10px;
+}
+
+.event-card h2 {
+  font-size: 1.35rem;
+  margin: 0 0 8px;
+}
+
+.event-situation {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.event-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.event-option:hover {
+  border-color: var(--accent);
+  filter: brightness(1.08);
+}
+
+.event-option .eo-label {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.event-option .eo-outcome {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.event-option .eo-effects {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
 @media (max-width: 760px) {
   .play-area {
     grid-template-columns: 1fr;

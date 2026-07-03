@@ -23,6 +23,7 @@ var HegemonEngine = (() => {
   __export(browser_entry_exports, {
     CIV_ROSTER: () => CIV_ROSTER,
     DEFAULT_PLAYERS: () => DEFAULT_PLAYERS,
+    EVENTS: () => EVENTS,
     MAP_SIZES: () => MAP_SIZES,
     MAX_PLAYERS: () => MAX_PLAYERS,
     TECHS: () => TECHS,
@@ -40,6 +41,7 @@ var HegemonEngine = (() => {
     distance: () => distance,
     findPath: () => findPath,
     generateMap: () => generateMap,
+    getEvent: () => getEvent,
     getVictoryStatus: () => getVictoryStatus,
     keyOf: () => keyOf,
     listScenarios: () => listScenarios,
@@ -399,6 +401,98 @@ var HegemonEngine = (() => {
       visibleTiles: [...visible],
       discoveredTiles: [...discovered]
     };
+  }
+
+  // src/engine/events.ts
+  var EVENTS = [
+    {
+      id: "gracchi",
+      title: "The Gracchi and the Land",
+      situation: "Tribunes demand farmland for landless veterans, defying the Senate. (Rome, 133 BC \u2014 the reform that lit a century of strife.)",
+      options: [
+        {
+          label: "Grant the land reform",
+          outcome: "Veterans settle new farms. The people cheer; the nobles seethe.",
+          effects: { production: 18, gold: -25 }
+        },
+        {
+          label: "Side with the Senate",
+          outcome: "Order holds and the treasury swells, but resentment festers.",
+          effects: { gold: 32, science: -15 }
+        }
+      ]
+    },
+    {
+      id: "grain-fleet",
+      title: "The Grain Fleet Falters",
+      situation: "Storms delay the grain ships from Alexandria and the city grows hungry. Bread or coin?",
+      options: [
+        {
+          label: "Open the public granaries",
+          outcome: "Bread for the people \u2014 the stores empty but the city thrives.",
+          effects: { food: 8, gold: -15 }
+        },
+        {
+          label: "Ration and sell the surplus",
+          outcome: "Coin fills the coffers; the mob grumbles at the queues.",
+          effects: { gold: 28, production: -8 }
+        }
+      ]
+    },
+    {
+      id: "philosopher",
+      title: "A Philosopher at the Gates",
+      situation: "A renowned teacher offers to found a school of rhetoric and natural philosophy in your city.",
+      options: [
+        {
+          label: "Endow the academy",
+          outcome: "Minds are sharpened; discoveries follow.",
+          effects: { science: 32, gold: -22 }
+        },
+        {
+          label: "Send him on his way",
+          outcome: "Tradition preserved, purse intact.",
+          effects: { gold: 16 }
+        }
+      ]
+    },
+    {
+      id: "mercenaries",
+      title: "Mercenaries for Hire",
+      situation: "A hardened band of spearmen offers their service \u2014 for a price. Sacred bands and hired spears fought in every ancient war.",
+      options: [
+        {
+          label: "Hire the spearmen",
+          outcome: "Fresh spears muster at your capital.",
+          effects: { spawnUnit: "spearman", gold: -28 }
+        },
+        {
+          label: "Refuse and keep the coin",
+          outcome: "You keep your gold and your independence.",
+          effects: { gold: 14 }
+        }
+      ]
+    },
+    {
+      id: "games",
+      title: "Games for the People",
+      situation: "The crowd clamors for festival games in the forum. Bread and circuses buy loyalty \u2014 at a cost.",
+      options: [
+        {
+          label: "Fund lavish games",
+          outcome: "The crowd roars your name; workshops hum with new energy.",
+          effects: { gold: -20, production: 12 }
+        },
+        {
+          label: "Hold a modest festival",
+          outcome: "A quiet celebration; savings kept.",
+          effects: { gold: 8 }
+        }
+      ]
+    }
+  ];
+  function getEvent(id) {
+    return EVENTS.find((e) => e.id === id);
   }
 
   // src/engine/index.ts
@@ -848,6 +942,62 @@ var HegemonEngine = (() => {
         unit.hp = Math.max(1, unit.hp - 2);
       }
     }
+    maybeFireEvent(state, nextPlayer);
+  }
+  function maybeFireEvent(state, player) {
+    if (player.pendingEvent) return;
+    if (player.cityIds.length === 0) return;
+    const since = state.turn - (player.lastEventTurn ?? 0);
+    if (state.turn < 3 || since < 5) return;
+    const roll = seededRandom(state.seed, `event:${state.turn}:${player.id}`)();
+    if (roll >= 0.3) return;
+    const pick = Math.floor(seededRandom(state.seed, `eventpick:${state.turn}:${player.id}`)() * EVENTS.length);
+    player.pendingEvent = EVENTS[Math.min(pick, EVENTS.length - 1)].id;
+    player.lastEventTurn = state.turn;
+  }
+  function applyResolveEvent(state, action) {
+    const player = state.playersById[action.playerId];
+    if (!player) throw new Error(`Unknown player ${action.playerId}`);
+    if (player.pendingEvent !== action.eventId) {
+      throw new Error(`No pending event ${action.eventId} for ${action.playerId}`);
+    }
+    const event = getEvent(action.eventId);
+    const option = event && event.options[action.optionIndex];
+    if (!event || !option) throw new Error(`Invalid event option`);
+    const fx = option.effects;
+    if (fx.gold) player.gold += fx.gold;
+    if (fx.production) player.production += fx.production;
+    if (fx.science) player.science += fx.science;
+    if (fx.food) {
+      for (const cityId of player.cityIds) {
+        const city = state.map.cities[cityId];
+        if (city) city.food = (city.food ?? 0) + fx.food;
+      }
+    }
+    if (fx.spawnUnit && UNITS[fx.spawnUnit]) {
+      const capital = player.cityIds.map((id) => state.map.cities[id]).find((c) => c && c.isCapital) || state.map.cities[player.cityIds[0]];
+      if (capital) {
+        const def = UNITS[fx.spawnUnit];
+        let counter = 1;
+        let unitId = `${player.id}_${fx.spawnUnit}_event_${state.turn}_${counter}`;
+        while (state.map.units[unitId]) {
+          counter += 1;
+          unitId = `${player.id}_${fx.spawnUnit}_event_${state.turn}_${counter}`;
+        }
+        state.map.units[unitId] = {
+          id: unitId,
+          type: fx.spawnUnit,
+          ownerId: player.id,
+          position: { ...capital.position },
+          hp: def.maxHp,
+          maxHp: def.maxHp,
+          movementRemaining: 0,
+          veterancy: "recruit"
+        };
+        syncOwnershipIndexes(state);
+      }
+    }
+    player.pendingEvent = void 0;
   }
   function applyFoundCity(state, action) {
     assertPlayerTurn(state, action.playerId);
@@ -962,6 +1112,9 @@ var HegemonEngine = (() => {
         break;
       case "ATTACK_CITY":
         applyAttackCity(state, action);
+        break;
+      case "RESOLVE_EVENT":
+        applyResolveEvent(state, action);
         break;
       default: {
         const unknownAction = action;
@@ -1176,7 +1329,8 @@ var HegemonEngine = (() => {
       for (const dir of DIRECTIONS) {
         const next = { q: unit.position.q + dir[0], r: unit.position.r + dir[1] };
         if (!state.map.tiles[`${next.q},${next.r}`]) continue;
-        if (!Number.isFinite(movementCost(state, ctx, unit.position, next))) continue;
+        const step = movementCost(state, ctx, unit.position, next);
+        if (!Number.isFinite(step) || step > unit.movementRemaining) continue;
         if (unitAt2(state, next) || cityAtCoord(state, next)) continue;
         const near = nearestCity(cities, next);
         const score = near ? distance(next, near.position) : 99;
@@ -1195,6 +1349,14 @@ var HegemonEngine = (() => {
     const player = state.playersById[playerId];
     if (!player) throw new Error(`Unknown player ${playerId}`);
     const steps = [
+      () => {
+        if (!player.pendingEvent) return null;
+        const event = getEvent(player.pendingEvent);
+        if (!event) return null;
+        const score = (o) => (o.effects.gold ?? 0) * 0.5 + (o.effects.production ?? 0) + (o.effects.science ?? 0) * 0.8 + (o.effects.food ?? 0) * 3 + (o.effects.spawnUnit ? 25 : 0);
+        const optionIndex = score(event.options[0]) >= score(event.options[1]) ? 0 : 1;
+        return { type: "RESOLVE_EVENT", playerId, eventId: player.pendingEvent, optionIndex };
+      },
       () => attackAction(state, player),
       () => foundCityAction(state, player),
       () => buildAction(state, player),
@@ -1217,9 +1379,21 @@ var HegemonEngine = (() => {
     const actions = [];
     for (let i = 0; i < maxActions; i += 1) {
       const action = chooseAiAction(state, playerId);
-      actions.push(action);
-      state = applyAction(state, action);
-      if (action.type === "END_TURN") break;
+      if (action.type === "END_TURN") {
+        actions.push(action);
+        state = applyAction(state, action);
+        break;
+      }
+      try {
+        const next = applyAction(state, action);
+        state = next;
+        actions.push(action);
+      } catch {
+        const forcedEnd = { type: "END_TURN", playerId };
+        actions.push(forcedEnd);
+        state = applyAction(state, forcedEnd);
+        return { state, actions };
+      }
     }
     if (actions.length === maxActions && actions[actions.length - 1].type !== "END_TURN") {
       const forcedEnd = { type: "END_TURN", playerId };

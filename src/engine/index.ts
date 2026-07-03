@@ -12,6 +12,8 @@ import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
+import { EVENTS, getEvent } from "./events";
+import type { ResolveEventAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -566,6 +568,71 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
       unit.hp = Math.max(1, unit.hp - 2);
     }
   }
+
+  maybeFireEvent(state, nextPlayer);
+}
+
+// Deterministically hand the next player a Crossroads dilemma now and then,
+// spaced out so they don't pile up. The human sees a card; the AI auto-resolves.
+function maybeFireEvent(state: GameState, player: Player): void {
+  if (player.pendingEvent) return;
+  if (player.cityIds.length === 0) return;
+  const since = state.turn - (player.lastEventTurn ?? 0);
+  if (state.turn < 3 || since < 5) return;
+  const roll = seededRandom(state.seed, `event:${state.turn}:${player.id}`)();
+  if (roll >= 0.3) return;
+  const pick = Math.floor(seededRandom(state.seed, `eventpick:${state.turn}:${player.id}`)() * EVENTS.length);
+  player.pendingEvent = EVENTS[Math.min(pick, EVENTS.length - 1)].id;
+  player.lastEventTurn = state.turn;
+}
+
+function applyResolveEvent(state: GameState, action: ResolveEventAction): void {
+  const player = state.playersById[action.playerId];
+  if (!player) throw new Error(`Unknown player ${action.playerId}`);
+  if (player.pendingEvent !== action.eventId) {
+    throw new Error(`No pending event ${action.eventId} for ${action.playerId}`);
+  }
+  const event = getEvent(action.eventId);
+  const option = event && event.options[action.optionIndex];
+  if (!event || !option) throw new Error(`Invalid event option`);
+
+  const fx = option.effects;
+  if (fx.gold) player.gold += fx.gold;
+  if (fx.production) player.production += fx.production;
+  if (fx.science) player.science += fx.science;
+  if (fx.food) {
+    for (const cityId of player.cityIds) {
+      const city = state.map.cities[cityId];
+      if (city) city.food = (city.food ?? 0) + fx.food;
+    }
+  }
+  if (fx.spawnUnit && UNITS[fx.spawnUnit]) {
+    const capital =
+      player.cityIds.map((id) => state.map.cities[id]).find((c) => c && c.isCapital) ||
+      state.map.cities[player.cityIds[0]];
+    if (capital) {
+      const def = UNITS[fx.spawnUnit];
+      let counter = 1;
+      let unitId = `${player.id}_${fx.spawnUnit}_event_${state.turn}_${counter}`;
+      while (state.map.units[unitId]) {
+        counter += 1;
+        unitId = `${player.id}_${fx.spawnUnit}_event_${state.turn}_${counter}`;
+      }
+      state.map.units[unitId] = {
+        id: unitId,
+        type: fx.spawnUnit,
+        ownerId: player.id,
+        position: { ...capital.position },
+        hp: def.maxHp,
+        maxHp: def.maxHp,
+        movementRemaining: 0,
+        veterancy: "recruit"
+      };
+      syncOwnershipIndexes(state);
+    }
+  }
+
+  player.pendingEvent = undefined;
 }
 
 function applyFoundCity(state: GameState, action: FoundCityAction): void {
@@ -700,6 +767,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
     case "ATTACK_CITY":
       applyAttackCity(state, action);
       break;
+    case "RESOLVE_EVENT":
+      applyResolveEvent(state, action);
+      break;
     default: {
       const unknownAction: never = action;
       throw new Error(`Unsupported action ${(unknownAction as { type: string }).type}`);
@@ -738,5 +808,7 @@ export {
   TERRAIN,
   TECHS,
   UNITS,
-  UNIT_BUILD_COSTS
+  UNIT_BUILD_COSTS,
+  EVENTS,
+  getEvent
 };

@@ -23,6 +23,7 @@ import {
 import { chooseAiAction, runAiTurn } from "./ai";
 import { loadScenario, listScenarios } from "./scenarios";
 import { generateMap, MAP_SIZES, CIV_ROSTER, DEFAULT_PLAYERS, MAX_PLAYERS } from "./mapgen";
+import { EVENTS, getEvent } from "./events";
 
 // Every symbol the browser demo (game.js) reads off window.HegemonEngine must be
 // re-exported here — esbuild only surfaces what this entry module exports.
@@ -55,5 +56,7 @@ export {
   MAP_SIZES,
   CIV_ROSTER,
   DEFAULT_PLAYERS,
-  MAX_PLAYERS
+  MAX_PLAYERS,
+  EVENTS,
+  getEvent
 };

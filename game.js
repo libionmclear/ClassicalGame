@@ -26,6 +26,10 @@
   const resultTitleEl = document.getElementById("result-title");
   const resultBodyEl = document.getElementById("result-body");
   const resultNewGameBtn = document.getElementById("result-new-game-btn");
+  const eventModalEl = document.getElementById("event-modal");
+  const eventTitleEl = document.getElementById("event-title");
+  const eventSituationEl = document.getElementById("event-situation");
+  const eventOptionsEl = document.getElementById("event-options");
 
   let state = null;
   let selectedUnitId = null;
@@ -258,6 +262,45 @@
       ? "Rome controls every capital. The republic has prevailed."
       : `${winnerName} controls every capital. ${victory.reason || "Try another campaign."}`;
     resultModalEl.classList.remove("hidden");
+  }
+
+  function eventEffectsSummary(fx) {
+    const sign = (n) => (n > 0 ? "+" + n : String(n));
+    const parts = [];
+    if (fx.gold) parts.push(sign(fx.gold) + " 🪙");
+    if (fx.production) parts.push(sign(fx.production) + " ⚒️");
+    if (fx.science) parts.push(sign(fx.science) + " 🔬");
+    if (fx.food) parts.push(sign(fx.food) + " 🌾/city");
+    if (fx.spawnUnit) parts.push("+1 " + fx.spawnUnit);
+    return parts.join("  ·  ");
+  }
+
+  function showEventModal(victory) {
+    if (!eventModalEl) return;
+    const p = human();
+    const pending = p && p.pendingEvent;
+    const event = pending && engine.getEvent ? engine.getEvent(pending) : null;
+    if (!event || !isHumanTurn() || (victory && victory.winnerId)) {
+      eventModalEl.classList.add("hidden");
+      return;
+    }
+    eventTitleEl.textContent = event.title;
+    eventSituationEl.textContent = event.situation;
+    eventOptionsEl.innerHTML = "";
+    event.options.forEach(function (opt, i) {
+      const btn = document.createElement("button");
+      btn.className = "event-option";
+      btn.innerHTML =
+        '<span class="eo-label">' + opt.label + "</span>" +
+        '<span class="eo-outcome">' + opt.outcome + "</span>" +
+        '<span class="eo-effects">' + eventEffectsSummary(opt.effects) + "</span>";
+      btn.addEventListener("click", function () {
+        logAction("⚖️ " + event.title + " — " + opt.label);
+        apply({ type: "RESOLVE_EVENT", playerId: HUMAN_ID, eventId: event.id, optionIndex: i });
+      });
+      eventOptionsEl.appendChild(btn);
+    });
+    eventModalEl.classList.remove("hidden");
   }
 
   function getHumanVisibility() {
@@ -886,6 +929,7 @@
       try {
         endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
         showResultModal(victory);
+        showEventModal(victory);
       } catch (overlayErr) {
         console.error("Overlay error:", overlayErr);
       }
