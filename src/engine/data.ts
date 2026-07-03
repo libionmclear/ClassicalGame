@@ -53,6 +53,7 @@ export const TECHS: Record<string, TechRule> = {
   },
 
   "iron-working": { age: 2, prerequisites: ["bronze-working"] },
+  "combined-arms": { age: 2, prerequisites: ["iron-working"] },
   "open-sea-sailing": { age: 2, prerequisites: ["sailing"] },
   engineering: { age: 2, prerequisites: ["masonry"] },
   "horseback-riding": { age: 2, prerequisites: ["bronze-working"] },
@@ -129,6 +130,51 @@ export const UNITS: Record<string, UnitRule> = {
   trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing", category: "ranged" },
   merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1, category: "infantry" },
   settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1, category: "infantry" }
+};
+
+export interface BuildingRule {
+  name: string;
+  cost: number;
+  requiresTech?: string;
+  yields?: { food?: number; production?: number; gold?: number; science?: number };
+  cityHp?: number;
+  note: string;
+}
+
+// City improvements — one of each per city. Yields add to that city each turn.
+export const BUILDINGS: Record<string, BuildingRule> = {
+  granary: {
+    name: "Granary",
+    cost: 16,
+    yields: { food: 2 },
+    note: "Storehouses of grain smoothed the lean years — the horrea that fed Rome and the silos of Egypt. Effect: +2 food (faster growth)."
+  },
+  workshop: {
+    name: "Workshop",
+    cost: 18,
+    yields: { production: 2 },
+    note: "Fabricae and artisan quarters turned raw metal and timber into arms and tools. Effect: +2 production."
+  },
+  market: {
+    name: "Market",
+    cost: 16,
+    yields: { gold: 2 },
+    note: "The macellum and agora — the beating commercial heart of every ancient city. Effect: +2 gold."
+  },
+  library: {
+    name: "Library",
+    cost: 20,
+    requiresTech: "writing",
+    yields: { science: 2 },
+    note: "From the Great Library of Alexandria to temple archives, collected knowledge accelerated discovery. Effect: +2 science."
+  },
+  walls: {
+    name: "Walls",
+    cost: 22,
+    requiresTech: "masonry",
+    cityHp: 20,
+    note: "Servian and Aurelian walls, Hellenistic circuits — dressed stone that turned a town into a fortress. Effect: +20 city HP."
+  }
 };
 
 // Composition roles for combined-arms bonuses.

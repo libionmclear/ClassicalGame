@@ -594,6 +594,22 @@ button:hover:not(:disabled) {
   background: #16283f;
 }
 
+.build-item.done {
+  background: #16331f;
+  color: #a9d69a;
+  cursor: default;
+}
+
+.build-item.done .bi-cost {
+  color: #a9d69a;
+}
+
+.bm-empty {
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding: 2px 2px 4px;
+}
+
 .build-item.locked .bi-cost {
   color: #b98bd8;
 }

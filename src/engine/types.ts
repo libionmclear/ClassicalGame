@@ -80,6 +80,8 @@ export interface City {
   isCapital?: boolean;
   /** Accumulated food toward the next population growth. */
   food?: number;
+  /** Ids of buildings constructed in this city. */
+  buildings?: string[];
 }
 
 export interface Player {
@@ -194,6 +196,13 @@ export interface ResolveEventAction {
   optionIndex: number;
 }
 
+export interface BuildBuildingAction {
+  type: "BUILD_BUILDING";
+  playerId: string;
+  cityId: string;
+  buildingId: string;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -203,7 +212,8 @@ export type GameAction =
   | FoundCityAction
   | BuildUnitAction
   | AttackCityAction
-  | ResolveEventAction;
+  | ResolveEventAction
+  | BuildBuildingAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

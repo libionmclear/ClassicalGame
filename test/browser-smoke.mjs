@@ -31,6 +31,12 @@ page.on("console", (m) => {
 await page.goto(fileUrl);
 await page.waitForSelector(".tile", { timeout: 5000 });
 
+// Use the authored Italia scenario for a deterministic start (units with room
+// to move), so the interaction checks below aren't at the mercy of the RNG map.
+await page.selectOption("#map-size-select", "italia");
+await page.click("#new-game-btn");
+await page.waitForTimeout(300);
+
 // 1) The result overlay must be hidden on a fresh game.
 const modalVisible = await page
   .locator("#result-modal")

@@ -1,4 +1,4 @@
-import { TECHS, UNIT_BUILD_COSTS, UNITS } from "./data";
+import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS } from "./data";
 import { applyAction, computeCombatPreview, researchCost } from "./index";
 import { getEvent } from "./events";
 import { distance, DIRECTIONS } from "./hex";
@@ -11,6 +11,7 @@ const RESEARCH_PRIORITY = [
   "bronze-working",
   "archery",
   "iron-working",
+  "combined-arms",
   "horseback-riding",
   "writing",
   "masonry",
@@ -187,6 +188,21 @@ function buildAction(state: GameState, player: Player): GameAction | null {
   return null;
 }
 
+function buildingAction(state: GameState, player: Player): GameAction | null {
+  for (const cityId of player.cityIds) {
+    const city = state.map.cities[cityId];
+    if (!city) continue;
+    const built = new Set(city.buildings ?? []);
+    for (const [id, b] of Object.entries(BUILDINGS)) {
+      if (built.has(id)) continue;
+      if (b.requiresTech && !player.techs.includes(b.requiresTech)) continue;
+      if (player.production < b.cost) continue;
+      return { type: "BUILD_BUILDING", playerId: player.id, cityId, buildingId: id };
+    }
+  }
+  return null;
+}
+
 // Farthest empty tile a unit can reach along a path this turn (stops before any
 // occupied tile or enemy city — those are handled by the attack step).
 function reachableAlong(state: GameState, unit: Unit, path: Coord[]): Coord | null {
@@ -277,6 +293,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => attackAction(state, player),
     () => foundCityAction(state, player),
     () => buildAction(state, player),
+    () => buildingAction(state, player),
     () => maneuverAction(state, player),
     () => settlerMoveAction(state, player),
     () => {

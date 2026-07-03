@@ -17,6 +17,7 @@
   const turnChecklistEl = document.getElementById("turn-checklist");
   const foundCityBtn = document.getElementById("found-city-btn");
   const buildMenuEl = document.getElementById("build-menu");
+  const buildingMenuEl = document.getElementById("building-menu");
   const techTreeEl = document.getElementById("tech-tree");
   const hintLineEl = document.getElementById("hint-line");
   const resourceBarEl = document.getElementById("resource-bar");
@@ -50,6 +51,16 @@
     horseman: { name: "Horseman", role: "Cavalry (3 move): runs down archers & light foot — but spears counter it" },
     siege: { name: "Siege Ballista", role: "Range 2, devastating vs cities, fragile in the open field" },
     settler: { name: "Settler", role: "Founds a new city" }
+  };
+  // One-line historical grounding for each unit (the educational layer).
+  const UNIT_HISTORY = {
+    warrior: "Levied tribal spearmen and clubmen — the citizen-militia of the earliest city-states.",
+    archer: "From Cretan bowmen to the archers of Kushite Ta-Seti, missile troops screened and harassed the line.",
+    spearman: "The hoplite and phalangite — locked shields and a hedge of spears that broke any cavalry charge (Chaeronea, Gaugamela).",
+    swordsman: "Sword-and-shield heavy infantry — the Roman legionary with gladius and scutum, drilled and armoured.",
+    horseman: "Companion and Numidian cavalry — the shock and pursuit arm that rode down fleeing skirmishers.",
+    siege: "The ballista and onager — torsion artillery that hurled bolts and stones over the highest walls.",
+    settler: "Colonists sent to found a new colonia or polis, carrying the sacred fire from the mother city."
   };
 
   // ----- Presentation lookups -----
@@ -133,6 +144,7 @@
     "temple-economy": { name: "Temple Economy", note: "FORK: faith and culture fund the state — Egypt's model." },
     coinage: { name: "Coinage", note: "FORK: struck coin (Lydia ~600 BC) makes rush-buying cheap." },
     "iron-working": { name: "Iron Working", note: "Cheaper, harder blades put swords in every soldier's hand." },
+    "combined-arms": { name: "Combined Arms", note: "The manipular legion (~315 BC) fought in articulated lines — hastati, principes, triarii — mixing shock, missile and reserve. Hannibal's genius at Cannae was combined-arms coordination, not numbers. Effect: your forces gain Supported (+10%) and Combined-arms (+15%) bonuses when infantry, ranged and cavalry fight side by side." },
     "open-sea-sailing": { name: "Open-Sea Sailing", note: "Leaving sight of land — the deep sea becomes navigable." },
     engineering: { name: "Engineering", note: "Bridges, fords and siege works — Roman practicality." },
     "horseback-riding": { name: "Horseback Riding", note: "True cavalry replaces the chariot on open ground." },
@@ -160,6 +172,42 @@
     }
   }
 
+  const BUILDING_GLYPH = { granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱" };
+
+  function renderBuildingMenu(isTurn, selectedCity) {
+    if (!buildingMenuEl) return;
+    buildingMenuEl.innerHTML = "";
+    if (!selectedCity) {
+      buildingMenuEl.innerHTML = '<div class="bm-empty">Select a city to raise improvements.</div>';
+      return;
+    }
+    const player = human();
+    const buildings = engine.BUILDINGS || {};
+    const built = new Set(selectedCity.buildings || []);
+    for (const id of Object.keys(buildings)) {
+      const b = buildings[id];
+      const has = built.has(id);
+      const reqTech = b.requiresTech;
+      const hasTech = !reqTech || player.techs.includes(reqTech);
+      const affordable = player.production >= b.cost;
+      const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
+      const btn = document.createElement("button");
+      btn.className = "build-item" + (has ? " done" : hasTech ? "" : " locked");
+      btn.disabled = has || !(isTurn && hasTech && affordable);
+      btn.title = b.note;
+      const status = has ? "✓ built" : !hasTech ? "🔒 " + techName : b.cost + " ⚒️";
+      btn.innerHTML =
+        '<span class="bi-name">' + (BUILDING_GLYPH[id] || "▪") + " " + b.name + "</span>" +
+        '<span class="bi-cost">' + status + "</span>";
+      if (!btn.disabled) {
+        btn.addEventListener("click", function () {
+          apply({ type: "BUILD_BUILDING", playerId: HUMAN_ID, cityId: selectedCity.id, buildingId: id });
+        });
+      }
+      buildingMenuEl.appendChild(btn);
+    }
+  }
+
   function renderBuildMenu(isTurn, selectedCity) {
     if (!buildMenuEl) return;
     const player = human();
@@ -179,7 +227,9 @@
       const btn = document.createElement("button");
       btn.className = "build-item" + (hasTech ? "" : " locked");
       btn.disabled = !(isTurn && !!selectedCity && hasTech && affordable);
-      btn.title = meta.role + (reqTech ? " — needs " + techName : "");
+      btn.title =
+        meta.role + (reqTech ? " — needs " + techName : "") +
+        (UNIT_HISTORY[type] ? "\n\n" + UNIT_HISTORY[type] : "");
 
       const status = !hasTech ? "🔒 " + techName : typeof cost === "number" ? cost + " ⚒" : "";
       btn.innerHTML =
@@ -458,8 +508,15 @@
   function apply(action) {
     try {
       const beforeSummary = action.type === "END_TURN" && action.playerId === "rome" ? snapshotRomeState() : null;
+      // City-panel actions keep the city selected so you can queue several in a row.
+      const keepSelection =
+        action.type === "BUILD_UNIT" ||
+        action.type === "BUILD_BUILDING" ||
+        action.type === "RESEARCH_TECH" ||
+        action.type === "RESOLVE_EVENT";
       state = engine.applyAction(state, action);
-      clearSelection();
+      if (!keepSelection) clearSelection();
+      else if (selectedCityId && !state.map.cities[selectedCityId]) clearSelection();
       logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
       render();
       runAiUntilHuman();
@@ -827,6 +884,7 @@
     foundCityBtn.disabled = !(isTurn && selectedUnit && selectedUnit.type === "settler");
     clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
     renderBuildMenu(isTurn, selectedCity);
+    renderBuildingMenu(isTurn, selectedCity);
 
     const checklist = [];
     checklist.push(selectedUnit || selectedCity ? "Selection: ready" : "Selection: choose a unit or city");

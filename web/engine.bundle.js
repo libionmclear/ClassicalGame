@@ -21,6 +21,7 @@ var HegemonEngine = (() => {
   // src/engine/browser-entry.ts
   var browser_entry_exports = {};
   __export(browser_entry_exports, {
+    BUILDINGS: () => BUILDINGS,
     CIV_ROSTER: () => CIV_ROSTER,
     DEFAULT_PLAYERS: () => DEFAULT_PLAYERS,
     EVENTS: () => EVENTS,
@@ -104,6 +105,7 @@ var HegemonEngine = (() => {
       forkBranch: "coinage"
     },
     "iron-working": { age: 2, prerequisites: ["bronze-working"] },
+    "combined-arms": { age: 2, prerequisites: ["iron-working"] },
     "open-sea-sailing": { age: 2, prerequisites: ["sailing"] },
     engineering: { age: 2, prerequisites: ["masonry"] },
     "horseback-riding": { age: 2, prerequisites: ["bronze-working"] },
@@ -207,6 +209,40 @@ var HegemonEngine = (() => {
     trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing", category: "ranged" },
     merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1, category: "infantry" },
     settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1, category: "infantry" }
+  };
+  var BUILDINGS = {
+    granary: {
+      name: "Granary",
+      cost: 16,
+      yields: { food: 2 },
+      note: "Storehouses of grain smoothed the lean years \u2014 the horrea that fed Rome and the silos of Egypt. Effect: +2 food (faster growth)."
+    },
+    workshop: {
+      name: "Workshop",
+      cost: 18,
+      yields: { production: 2 },
+      note: "Fabricae and artisan quarters turned raw metal and timber into arms and tools. Effect: +2 production."
+    },
+    market: {
+      name: "Market",
+      cost: 16,
+      yields: { gold: 2 },
+      note: "The macellum and agora \u2014 the beating commercial heart of every ancient city. Effect: +2 gold."
+    },
+    library: {
+      name: "Library",
+      cost: 20,
+      requiresTech: "writing",
+      yields: { science: 2 },
+      note: "From the Great Library of Alexandria to temple archives, collected knowledge accelerated discovery. Effect: +2 science."
+    },
+    walls: {
+      name: "Walls",
+      cost: 22,
+      requiresTech: "masonry",
+      cityHp: 20,
+      note: "Servian and Aurelian walls, Hellenistic circuits \u2014 dressed stone that turned a town into a fortress. Effect: +20 city HP."
+    }
   };
   var MELEE_CATEGORIES = /* @__PURE__ */ new Set(["infantry", "spear", "heavy"]);
   var RANGED_CATEGORIES = /* @__PURE__ */ new Set(["ranged", "siege"]);
@@ -571,7 +607,8 @@ var HegemonEngine = (() => {
             hp: city.hp ?? 40,
             maxHp: city.maxHp ?? 40,
             isCapital: city.isCapital ?? false,
-            food: city.food ?? 0
+            food: city.food ?? 0,
+            buildings: city.buildings ?? []
           }
         ])
       ),
@@ -707,6 +744,8 @@ var HegemonEngine = (() => {
     return UNITS[unit.type].category || "infantry";
   }
   function combinedArmsBonus(state, attacker) {
+    const owner = state.playersById[attacker.ownerId];
+    if (!owner || !owner.techs.includes("combined-arms")) return { bonus: 0, label: null };
     const zone = [attacker.position, ...neighborsOf(attacker.position)];
     const categories = /* @__PURE__ */ new Set();
     for (const unit of Object.values(state.map.units)) {
@@ -893,12 +932,42 @@ var HegemonEngine = (() => {
     const owner = state.playersById[city.ownerId];
     const pop = city.population;
     const writingBonus = owner && owner.techs.includes("writing") ? 1 : 0;
-    return {
+    const yields = {
       food: terrainYield.food + pop,
       production: terrainYield.production + Math.ceil(pop / 2) + 1,
       gold: terrainYield.gold + Math.floor(pop / 2) + 1,
       science: 2 + pop + writingBonus
     };
+    for (const buildingId of city.buildings ?? []) {
+      const b = BUILDINGS[buildingId];
+      if (!b || !b.yields) continue;
+      yields.food += b.yields.food ?? 0;
+      yields.production += b.yields.production ?? 0;
+      yields.gold += b.yields.gold ?? 0;
+      yields.science += b.yields.science ?? 0;
+    }
+    return yields;
+  }
+  function applyBuildBuilding(state, action) {
+    assertPlayerTurn(state, action.playerId);
+    const city = cityAt(state, action.cityId);
+    if (city.ownerId !== action.playerId) throw new Error("Cannot build in an enemy city");
+    const building = BUILDINGS[action.buildingId];
+    if (!building) throw new Error(`Unknown building ${action.buildingId}`);
+    if ((city.buildings ?? []).includes(action.buildingId)) throw new Error(`${action.buildingId} already built`);
+    const player = state.playersById[action.playerId];
+    if (building.requiresTech && !player.techs.includes(building.requiresTech)) {
+      throw new Error(`Building ${action.buildingId} requires tech ${building.requiresTech}`);
+    }
+    if (player.production < building.cost) {
+      throw new Error(`Insufficient production: needs ${building.cost}, has ${player.production}`);
+    }
+    player.production -= building.cost;
+    city.buildings = [...city.buildings ?? [], action.buildingId];
+    if (building.cityHp) {
+      city.maxHp += building.cityHp;
+      city.hp += building.cityHp;
+    }
   }
   function applyEndTurn(state, action) {
     assertPlayerTurn(state, action.playerId);
@@ -1116,6 +1185,9 @@ var HegemonEngine = (() => {
       case "RESOLVE_EVENT":
         applyResolveEvent(state, action);
         break;
+      case "BUILD_BUILDING":
+        applyBuildBuilding(state, action);
+        break;
       default: {
         const unknownAction = action;
         throw new Error(`Unsupported action ${unknownAction.type}`);
@@ -1143,6 +1215,7 @@ var HegemonEngine = (() => {
     "bronze-working",
     "archery",
     "iron-working",
+    "combined-arms",
     "horseback-riding",
     "writing",
     "masonry",
@@ -1288,6 +1361,20 @@ var HegemonEngine = (() => {
     }
     return null;
   }
+  function buildingAction(state, player) {
+    for (const cityId of player.cityIds) {
+      const city = state.map.cities[cityId];
+      if (!city) continue;
+      const built = new Set(city.buildings ?? []);
+      for (const [id, b] of Object.entries(BUILDINGS)) {
+        if (built.has(id)) continue;
+        if (b.requiresTech && !player.techs.includes(b.requiresTech)) continue;
+        if (player.production < b.cost) continue;
+        return { type: "BUILD_BUILDING", playerId: player.id, cityId, buildingId: id };
+      }
+    }
+    return null;
+  }
   function reachableAlong(state, unit, path) {
     const ctx = moveCtx(unit);
     let cost = 0;
@@ -1360,6 +1447,7 @@ var HegemonEngine = (() => {
       () => attackAction(state, player),
       () => foundCityAction(state, player),
       () => buildAction(state, player),
+      () => buildingAction(state, player),
       () => maneuverAction(state, player),
       () => settlerMoveAction(state, player),
       () => {

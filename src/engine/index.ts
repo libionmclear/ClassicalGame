@@ -6,14 +6,15 @@ import {
   WEATHER_STATES,
   MELEE_CATEGORIES,
   RANGED_CATEGORIES,
-  CATEGORY_LABELS
+  CATEGORY_LABELS,
+  BUILDINGS
 } from "./data";
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import type { ResolveEventAction } from "./types";
+import type { ResolveEventAction, BuildBuildingAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -118,7 +119,8 @@ function normalizeMap(configMap: NonNullable<CreateGameConfig["map"]> | undefine
           hp: city.hp ?? 40,
           maxHp: city.maxHp ?? 40,
           isCapital: city.isCapital ?? false,
-          food: city.food ?? 0
+          food: city.food ?? 0,
+          buildings: city.buildings ?? []
         }
       ])
     ),
@@ -283,6 +285,10 @@ function categoryOf(unit: Unit): string {
 // A unit fights as part of a "force": itself, anything stacked on its tile, and
 // friendly units adjacent to it. Diversity of roles grants a combined-arms bonus.
 function combinedArmsBonus(state: GameState, attacker: Unit): { bonus: number; label: string | null } {
+  // Combined-arms coordination is a learned doctrine (the manipular legion).
+  const owner = state.playersById[attacker.ownerId];
+  if (!owner || !owner.techs.includes("combined-arms")) return { bonus: 0, label: null };
+
   const zone = [attacker.position, ...neighborsOf(attacker.position)];
   const categories = new Set<string>();
   for (const unit of Object.values(state.map.units)) {
@@ -510,12 +516,47 @@ function computeCityYield(
   const owner = state.playersById[city.ownerId];
   const pop = city.population;
   const writingBonus = owner && owner.techs.includes("writing") ? 1 : 0;
-  return {
+
+  const yields = {
     food: terrainYield.food + pop,
     production: terrainYield.production + Math.ceil(pop / 2) + 1,
     gold: terrainYield.gold + Math.floor(pop / 2) + 1,
     science: 2 + pop + writingBonus
   };
+
+  for (const buildingId of city.buildings ?? []) {
+    const b = BUILDINGS[buildingId];
+    if (!b || !b.yields) continue;
+    yields.food += b.yields.food ?? 0;
+    yields.production += b.yields.production ?? 0;
+    yields.gold += b.yields.gold ?? 0;
+    yields.science += b.yields.science ?? 0;
+  }
+  return yields;
+}
+
+function applyBuildBuilding(state: GameState, action: BuildBuildingAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const city = cityAt(state, action.cityId);
+  if (city.ownerId !== action.playerId) throw new Error("Cannot build in an enemy city");
+  const building = BUILDINGS[action.buildingId];
+  if (!building) throw new Error(`Unknown building ${action.buildingId}`);
+  if ((city.buildings ?? []).includes(action.buildingId)) throw new Error(`${action.buildingId} already built`);
+
+  const player = state.playersById[action.playerId];
+  if (building.requiresTech && !player.techs.includes(building.requiresTech)) {
+    throw new Error(`Building ${action.buildingId} requires tech ${building.requiresTech}`);
+  }
+  if (player.production < building.cost) {
+    throw new Error(`Insufficient production: needs ${building.cost}, has ${player.production}`);
+  }
+
+  player.production -= building.cost;
+  city.buildings = [...(city.buildings ?? []), action.buildingId];
+  if (building.cityHp) {
+    city.maxHp += building.cityHp;
+    city.hp += building.cityHp;
+  }
 }
 
 function applyEndTurn(state: GameState, action: EndTurnAction): void {
@@ -770,6 +811,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
     case "RESOLVE_EVENT":
       applyResolveEvent(state, action);
       break;
+    case "BUILD_BUILDING":
+      applyBuildBuilding(state, action);
+      break;
     default: {
       const unknownAction: never = action;
       throw new Error(`Unsupported action ${(unknownAction as { type: string }).type}`);
@@ -809,6 +853,7 @@ export {
   TECHS,
   UNITS,
   UNIT_BUILD_COSTS,
+  BUILDINGS,
   EVENTS,
   getEvent
 };

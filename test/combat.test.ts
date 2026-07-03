@@ -73,13 +73,16 @@ test("spears blunt a cavalry charge (defensive counter is visible)", () => {
 });
 
 test("combined arms: a mixed force hits harder than a lone unit", () => {
-  const mixed = makeState({
-    lead: { id: "lead", type: "warrior", ownerId: "p1", position: { q: 2, r: 2 } },
-    // adjacent to the attacker but NOT the target, so this is composition, not flanking
-    arch: { id: "arch", type: "archer", ownerId: "p1", position: { q: 1, r: 2 } },
-    horse: { id: "horse", type: "horseman", ownerId: "p1", position: { q: 1, r: 3 } },
-    target: { id: "target", type: "settler", ownerId: "p2", position: { q: 3, r: 2 } }
-  });
+  const mixed = makeState(
+    {
+      lead: { id: "lead", type: "warrior", ownerId: "p1", position: { q: 2, r: 2 } },
+      // adjacent to the attacker but NOT the target, so this is composition, not flanking
+      arch: { id: "arch", type: "archer", ownerId: "p1", position: { q: 1, r: 2 } },
+      horse: { id: "horse", type: "horseman", ownerId: "p1", position: { q: 1, r: 3 } },
+      target: { id: "target", type: "settler", ownerId: "p2", position: { q: 3, r: 2 } }
+    },
+    ["combined-arms"] // the doctrine that unlocks the combined-arms bonus
+  );
   const solo = makeState({
     lead: { id: "lead", type: "warrior", ownerId: "p1", position: { q: 2, r: 2 } },
     target: { id: "target", type: "settler", ownerId: "p2", position: { q: 3, r: 2 } }
@@ -89,6 +92,18 @@ test("combined arms: a mixed force hits harder than a lone unit", () => {
   assert.ok(mixedHit.damageToDefender > soloHit.damageToDefender, "combined arms should raise damage");
   assert.ok(mixedHit.modifiers.some((m) => /combined arms/i.test(m)), "combined-arms modifier should be listed");
   assert.ok(!mixedHit.modifiers.some((m) => /flanking/i.test(m)), "support units are not adjacent to the target, so no flanking");
+});
+
+test("combined arms requires the doctrine tech to be researched", () => {
+  const units = {
+    lead: { id: "lead", type: "warrior", ownerId: "p1", position: { q: 2, r: 2 } },
+    arch: { id: "arch", type: "archer", ownerId: "p1", position: { q: 1, r: 2 } },
+    horse: { id: "horse", type: "horseman", ownerId: "p1", position: { q: 1, r: 3 } },
+    target: { id: "target", type: "settler", ownerId: "p2", position: { q: 3, r: 2 } }
+  };
+  const untrained = makeState(units, []); // no combined-arms tech
+  const hit = computeCombatPreview(untrained, "lead", "target");
+  assert.ok(!hit.modifiers.some((m) => /combined arms|supported/i.test(m)), "no composition bonus without the doctrine");
 });
 
 test("siege engines crack cities far harder than infantry", () => {
