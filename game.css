@@ -199,19 +199,14 @@ button:hover:not(:disabled) {
   border-radius: 6px;
   padding: 12px;
   overflow: auto;
-  max-height: 78vh;
-  perspective: 2200px;
-  perspective-origin: 50% 40%;
+  max-height: 80vh;
 }
 
-/* Gentle forward tilt so the map reads as an inclined 3D plane without
-   throwing off scroll-to-centre. */
+/* Flat board — a real 3D transform (perspective/preserve-3d) breaks pointer
+   hit-testing on the clip-path hex tiles, so depth comes from tile shading. */
 .board {
   position: relative;
-  margin: 18px auto 12px;
-  transform: rotateX(11deg);
-  transform-origin: 50% 50%;
-  transform-style: preserve-3d;
+  margin: 0 auto;
 }
 
 .tile {

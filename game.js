@@ -604,12 +604,12 @@
     });
     btn.addEventListener("mouseenter", function () {
       hoveredPathKeys = computePathPreviewKeys(q, r, visibility);
-      render();
+      updateHoverHighlight();
       hintLineEl.textContent = hoverHint || defaultHintText;
     });
     btn.addEventListener("mouseleave", function () {
       hoveredPathKeys = new Set();
-      render();
+      updateHoverHighlight();
       hintLineEl.textContent = defaultHintText;
     });
 
@@ -662,6 +662,16 @@
     }
     html += "</span>";
     return html;
+  }
+
+  // Update only the path-preview highlight on hover — do NOT rebuild the board
+  // (rebuilding the DOM under the cursor makes tiles hard to click).
+  function updateHoverHighlight() {
+    for (const el of boardEl.children) {
+      if (!el.dataset || !el.dataset.key) continue;
+      if (hoveredPathKeys.has(el.dataset.key)) el.classList.add("path-preview");
+      else el.classList.remove("path-preview");
+    }
   }
 
   function hpBar(hp, maxHp) {
