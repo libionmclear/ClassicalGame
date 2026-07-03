@@ -1,214 +1,282 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS } from "./data";
-import { applyAction } from "./index";
-import { distance } from "./hex";
+import { applyAction, computeCombatPreview } from "./index";
+import { distance, DIRECTIONS } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
-import type { Coord, GameAction, GameState, Player, Unit } from "./types";
+import type { City, Coord, GameAction, GameState, Player, Unit } from "./types";
+
+// Tech order: unlock the army (spears -> swords -> cavalry -> siege), grab a few
+// economy/statecraft nodes, and commit to one side of each fork.
+const RESEARCH_PRIORITY = [
+  "bronze-working",
+  "archery",
+  "iron-working",
+  "horseback-riding",
+  "writing",
+  "masonry",
+  "engineering",
+  "siegecraft",
+  "phalanx-doctrine",
+  "coinage",
+  "republic",
+  "open-sea-sailing",
+  "roads-logistics",
+  "law-administration",
+  "assimilation"
+];
+
+const EXPANSION_TARGET = 3;
+const WOUNDED_FRACTION = 0.4;
+
+function moveCtx(unit: Unit) {
+  const def = UNITS[unit.type];
+  return { ownerId: unit.ownerId, domain: def.domain, mounted: def.mounted };
+}
+
+function unitsOf(state: GameState, player: Player): Unit[] {
+  return player.unitIds.map((id) => state.map.units[id]).filter(Boolean) as Unit[];
+}
+
+function unitAt(state: GameState, c: Coord): Unit | undefined {
+  return Object.values(state.map.units).find((u) => u.position.q === c.q && u.position.r === c.r);
+}
+
+function cityAtCoord(state: GameState, c: Coord): City | undefined {
+  return Object.values(state.map.cities).find((ci) => ci.position.q === c.q && ci.position.r === c.r);
+}
+
+function nearestCity(cities: City[], from: Coord): City | null {
+  let best: City | null = null;
+  let bestDist = Infinity;
+  for (const c of cities) {
+    const d = distance(from, c.position);
+    if (d < bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
+function enemyCities(state: GameState, playerId: string): City[] {
+  return Object.values(state.map.cities).filter((c) => c.ownerId !== playerId);
+}
+
+function ownCities(state: GameState, playerId: string): City[] {
+  return Object.values(state.map.cities).filter((c) => c.ownerId === playerId);
+}
+
+function isMilitary(unit: Unit): boolean {
+  const def = UNITS[unit.type];
+  return def.attack > 0 && def.domain === "land";
+}
+
+function enemyCavalryNear(state: GameState, player: Player): boolean {
+  const mine = unitsOf(state, player);
+  for (const enemy of Object.values(state.map.units)) {
+    if (enemy.ownerId === player.id) continue;
+    if (!UNITS[enemy.type].mounted) continue;
+    if (mine.some((m) => distance(m.position, enemy.position) <= 4)) return true;
+  }
+  return false;
+}
 
 function firstBuildableTech(player: Player): string | null {
-  const priority = [
-    "bronze-working",
-    "archery",
-    "coinage",
-    "iron-working",
-    "open-sea-sailing",
-    "engineering",
-    "roads-logistics"
-  ];
-
-  for (const techId of priority) {
+  for (const techId of RESEARCH_PRIORITY) {
     if (player.techs.includes(techId)) continue;
     const tech = TECHS[techId];
     if (!tech) continue;
-
-    const prereqsOk = tech.prerequisites.every((pre) => player.techs.includes(pre));
-    if (!prereqsOk) continue;
-
+    if (!tech.prerequisites.every((p) => player.techs.includes(p))) continue;
     if (tech.forkGroup) {
       const chosen = player.forkChoices[tech.forkGroup];
       if (chosen && chosen !== tech.forkBranch) continue;
     }
-
     return techId;
   }
-
   return null;
 }
 
-function tileIsOccupiedByCity(state: GameState, coord: Coord): boolean {
-  return Object.values(state.map.cities).some((city) => city.position.q === coord.q && city.position.r === coord.r);
-}
+// --- Actions -------------------------------------------------------------
 
-function tileIsOccupiedByAnyUnit(state: GameState, coord: Coord): boolean {
-  return Object.values(state.map.units).some((unit) => unit.position.q === coord.q && unit.position.r === coord.r);
-}
-
-function findFoundCityAction(state: GameState, player: Player): GameAction | null {
-  for (const unitId of player.unitIds) {
-    const unit = state.map.units[unitId];
-    if (!unit || unit.type !== "settler") continue;
-
-    if (!tileIsOccupiedByCity(state, unit.position)) {
-      return {
-        type: "FOUND_CITY",
-        playerId: player.id,
-        settlerId: unit.id,
-        cityId: `${player.id}_city_${state.turn}_${unit.id}`
-      };
-    }
+function foundCityAction(state: GameState, player: Player): GameAction | null {
+  const cities = ownCities(state, player.id);
+  for (const unit of unitsOf(state, player)) {
+    if (unit.type !== "settler") continue;
+    if (cityAtCoord(state, unit.position)) continue;
+    // Found once we've spread at least 2 tiles from every existing city.
+    const tooClose = cities.some((c) => distance(c.position, unit.position) < 2);
+    if (tooClose) continue;
+    return {
+      type: "FOUND_CITY",
+      playerId: player.id,
+      settlerId: unit.id,
+      cityId: `${player.id}_city_${state.turn}_${unit.id}`
+    };
   }
-
   return null;
 }
 
-function findAttackAction(state: GameState, player: Player): GameAction | null {
-  for (const unitId of player.unitIds) {
-    const attacker = state.map.units[unitId];
-    if (!attacker) continue;
+function attackAction(state: GameState, player: Player): GameAction | null {
+  let best: { action: GameAction; score: number } | null = null;
 
-    const attackerDef = UNITS[attacker.type];
-    if (!attackerDef || attackerDef.attack <= 0) continue;
-    if (attacker.movementRemaining <= 0) continue;
+  for (const attacker of unitsOf(state, player)) {
+    const def = UNITS[attacker.type];
+    if (def.attack <= 0 || attacker.movementRemaining <= 0) continue;
 
-    for (const unit of Object.values(state.map.units)) {
-      if (unit.ownerId === player.id) continue;
-      if (distance(attacker.position, unit.position) <= attackerDef.range) {
-        return {
-          type: "ATTACK",
-          playerId: player.id,
-          attackerId: attacker.id,
-          defenderId: unit.id
-        };
+    // Enemy units — only strike when the trade is worth it.
+    for (const target of Object.values(state.map.units)) {
+      if (target.ownerId === player.id) continue;
+      if (distance(attacker.position, target.position) > def.range) continue;
+      const preview = computeCombatPreview(state, attacker.id, target.id);
+      const kills = preview.defenderRemainingHp <= 0;
+      const survives = preview.attackerRemainingHp > 0;
+      const favorable = survives && (kills || preview.damageToDefender >= preview.damageToAttacker);
+      if (!favorable) continue;
+      const score = (kills ? 1000 : 0) + preview.damageToDefender - preview.damageToAttacker;
+      if (!best || score > best.score) {
+        best = { action: { type: "ATTACK", playerId: player.id, attackerId: attacker.id, defenderId: target.id }, score };
       }
     }
 
-    for (const city of Object.values(state.map.cities)) {
-      if (city.ownerId === player.id) continue;
-      if (distance(attacker.position, city.position) <= attackerDef.range) {
-        return {
-          type: "ATTACK_CITY",
-          playerId: player.id,
-          attackerId: attacker.id,
-          cityId: city.id
-        };
+    // Enemy cities — always safe (no retaliation); siege excels.
+    for (const city of enemyCities(state, player.id)) {
+      if (distance(attacker.position, city.position) > def.range) continue;
+      const score = 450 + (def.siegeBonus ? 300 : 0) - city.hp * 0.5;
+      if (!best || score > best.score) {
+        best = { action: { type: "ATTACK_CITY", playerId: player.id, attackerId: attacker.id, cityId: city.id }, score };
       }
     }
   }
 
-  return null;
+  return best ? best.action : null;
 }
 
-function findBuildUnitAction(state: GameState, player: Player): GameAction | null {
-  for (const cityId of player.cityIds) {
-    const city = state.map.cities[cityId];
-    if (!city) continue;
+function buildAction(state: GameState, player: Player): GameAction | null {
+  const cities = player.cityIds.map((id) => state.map.cities[id]).filter(Boolean) as City[];
+  if (cities.length === 0) return null;
 
-    const desiredUnit = player.unitIds.length < player.cityIds.length * 3 ? "warrior" : "archer";
-    const cost = UNIT_BUILD_COSTS[desiredUnit];
-    if (player.production < cost) continue;
+  const settlersInFlight = unitsOf(state, player).filter((u) => u.type === "settler").length;
+  const wantSettler = cities.length < EXPANSION_TARGET && settlersInFlight === 0;
+
+  const spearFirst = enemyCavalryNear(state, player);
+  const militaryPref = spearFirst
+    ? ["spearman", "swordsman", "horseman", "archer", "warrior"]
+    : ["swordsman", "horseman", "spearman", "archer", "warrior"];
+
+  const canBuild = (type: string): boolean => {
+    const rule = UNITS[type];
+    if (!rule) return false;
+    if (rule.requiresTech && !player.techs.includes(rule.requiresTech)) return false;
+    return player.production >= (UNIT_BUILD_COSTS[type] ?? Infinity);
+  };
+
+  for (const city of cities) {
+    let chosen: string | null = null;
+    if (wantSettler && canBuild("settler")) chosen = "settler";
+    if (!chosen) chosen = militaryPref.find(canBuild) ?? null;
+    if (!chosen) continue;
 
     let counter = 1;
-    let candidateId = `${player.id}_${desiredUnit}_${state.turn}_${cityId}_${counter}`;
-    while (state.map.units[candidateId]) {
+    let unitId = `${player.id}_${chosen}_${state.turn}_${city.id}_${counter}`;
+    while (state.map.units[unitId]) {
       counter += 1;
-      candidateId = `${player.id}_${desiredUnit}_${state.turn}_${cityId}_${counter}`;
+      unitId = `${player.id}_${chosen}_${state.turn}_${city.id}_${counter}`;
     }
-
-    return {
-      type: "BUILD_UNIT",
-      playerId: player.id,
-      cityId,
-      unitType: desiredUnit,
-      unitId: candidateId
-    };
+    return { type: "BUILD_UNIT", playerId: player.id, cityId: city.id, unitType: chosen, unitId };
   }
-
   return null;
 }
 
-function closestEnemyCity(state: GameState, playerId: string, from: Coord) {
-  let best: { cityId: string; distance: number; position: Coord } | null = null;
-
-  for (const city of Object.values(state.map.cities)) {
-    if (city.ownerId === playerId) continue;
-    const d = distance(from, city.position);
-    if (!best || d < best.distance) {
-      best = { cityId: city.id, distance: d, position: city.position };
-    }
+// Farthest empty tile a unit can reach along a path this turn (stops before any
+// occupied tile or enemy city — those are handled by the attack step).
+function reachableAlong(state: GameState, unit: Unit, path: Coord[]): Coord | null {
+  const ctx = moveCtx(unit);
+  let cost = 0;
+  let lastIndex = 0;
+  for (let i = 1; i < path.length; i += 1) {
+    const step = movementCost(state, ctx, path[i - 1], path[i]);
+    if (!Number.isFinite(step) || cost + step > unit.movementRemaining) break;
+    if (unitAt(state, path[i])) break;
+    const cityHere = cityAtCoord(state, path[i]);
+    if (cityHere && cityHere.ownerId !== unit.ownerId) break;
+    cost += step;
+    lastIndex = i;
   }
-
-  return best;
+  return lastIndex > 0 ? path[lastIndex] : null;
 }
 
-function findAdvanceAction(state: GameState, player: Player): GameAction | null {
-  for (const unitId of player.unitIds) {
-    const unit = state.map.units[unitId];
-    if (!unit) continue;
-    const unitDef = UNITS[unit.type];
-    if (!unitDef || unitDef.domain !== "land" || unitDef.attack <= 0) continue;
-    if (unit.movementRemaining <= 0) continue;
+function maneuverAction(state: GameState, player: Player): GameAction | null {
+  for (const unit of unitsOf(state, player)) {
+    if (!isMilitary(unit) || unit.movementRemaining <= 0) continue;
 
-    const target = closestEnemyCity(state, player.id, unit.position);
+    const wounded = unit.hp < UNITS[unit.type].maxHp * WOUNDED_FRACTION;
+    const target = wounded
+      ? nearestCity(ownCities(state, player.id), unit.position)
+      : nearestCity(enemyCities(state, player.id), unit.position);
     if (!target) continue;
 
-    const path = findPath(
-      state,
-      { ownerId: player.id, domain: unitDef.domain, mounted: unitDef.mounted },
-      unit.position,
-      target.position
-    );
+    const path = findPath(state, moveCtx(unit), unit.position, target.position);
     if (!path || path.length < 2) continue;
+    const dest = reachableAlong(state, unit, path);
+    if (!dest) continue;
 
-    const step = path[1];
-    if (tileIsOccupiedByAnyUnit(state, step)) continue;
-
-    const stepCost = movementCost(
-      state,
-      { ownerId: player.id, domain: unitDef.domain, mounted: unitDef.mounted },
-      unit.position,
-      step
-    );
-    if (!Number.isFinite(stepCost) || stepCost > unit.movementRemaining) continue;
-
-    return {
-      type: "MOVE_UNIT",
-      playerId: player.id,
-      unitId: unit.id,
-      destination: step,
-      path: [unit.position, step]
-    };
+    return { type: "MOVE_UNIT", playerId: player.id, unitId: unit.id, destination: dest };
   }
+  return null;
+}
 
+function settlerMoveAction(state: GameState, player: Player): GameAction | null {
+  const cities = ownCities(state, player.id);
+  for (const unit of unitsOf(state, player)) {
+    if (unit.type !== "settler" || unit.movementRemaining <= 0) continue;
+    // Walk to the adjacent tile that gets furthest from our nearest city.
+    const currentNearest = nearestCity(cities, unit.position);
+    const currentDist = currentNearest ? distance(unit.position, currentNearest.position) : 0;
+    let bestStep: Coord | null = null;
+    let bestScore = currentDist;
+    const ctx = moveCtx(unit);
+    for (const dir of DIRECTIONS) {
+      const next = { q: unit.position.q + dir[0], r: unit.position.r + dir[1] };
+      if (!state.map.tiles[`${next.q},${next.r}`]) continue;
+      if (!Number.isFinite(movementCost(state, ctx, unit.position, next))) continue;
+      if (unitAt(state, next) || cityAtCoord(state, next)) continue;
+      const near = nearestCity(cities, next);
+      const score = near ? distance(next, near.position) : 99;
+      if (score > bestScore) {
+        bestScore = score;
+        bestStep = next;
+      }
+    }
+    if (bestStep) {
+      return { type: "MOVE_UNIT", playerId: player.id, unitId: unit.id, destination: bestStep };
+    }
+  }
   return null;
 }
 
 export function chooseAiAction(state: GameState, playerId: string): GameAction {
   const player = state.playersById[playerId];
-  if (!player) {
-    throw new Error(`Unknown player ${playerId}`);
-  }
+  if (!player) throw new Error(`Unknown player ${playerId}`);
 
-  const actions: Array<() => GameAction | null> = [
-    () => findFoundCityAction(state, player),
-    () => findAttackAction(state, player),
-    () => findBuildUnitAction(state, player),
-    () => findAdvanceAction(state, player),
+  const steps: Array<() => GameAction | null> = [
+    () => attackAction(state, player),
+    () => foundCityAction(state, player),
+    () => buildAction(state, player),
+    () => maneuverAction(state, player),
+    () => settlerMoveAction(state, player),
     () => {
       const techId = firstBuildableTech(player);
-      if (!techId) return null;
-      return { type: "RESEARCH_TECH", playerId: player.id, techId };
-    },
-    () => null
+      return techId ? { type: "RESEARCH_TECH", playerId, techId } : null;
+    }
   ];
 
-  for (const pick of actions) {
-    const action = pick();
+  for (const step of steps) {
+    const action = step();
     if (action) return action;
   }
-
-  return { type: "END_TURN", playerId: player.id };
+  return { type: "END_TURN", playerId };
 }
 
-export function runAiTurn(inputState: GameState, playerId: string, maxActions = 6): { state: GameState; actions: GameAction[] } {
+export function runAiTurn(inputState: GameState, playerId: string, maxActions = 10): { state: GameState; actions: GameAction[] } {
   let state = inputState;
   const actions: GameAction[] = [];
 

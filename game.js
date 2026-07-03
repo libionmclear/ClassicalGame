@@ -438,7 +438,7 @@
   function runAiUntilHuman() {
     while (state.players[state.currentPlayerIndex].id !== HUMAN_ID) {
       const active = state.players[state.currentPlayerIndex].id;
-      const result = engine.runAiTurn(state, active, 8);
+      const result = engine.runAiTurn(state, active, 12);
       for (const action of result.actions) {
         logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
       }
