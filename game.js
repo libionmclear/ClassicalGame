@@ -33,6 +33,7 @@
   let actionLog = [];
   let hoveredPathKeys = new Set();
   let pendingRecenter = true;
+  let combatFlashKeys = new Set();
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
@@ -501,12 +502,22 @@
     const selectedDef = engine.UNITS[selected.type];
     const moveCtx = { ownerId: selected.ownerId, domain: selectedDef.domain, mounted: selectedDef.mounted };
 
+    const attackerKey = selected.position.q + "," + selected.position.r;
+
     const enemyUnit = clickedUnits.find((u) => u.ownerId !== HUMAN_ID);
     if (enemyUnit) {
       if (engine.distance(selected.position, { q, r }) > selectedDef.range) {
         hintLineEl.textContent = "That enemy is out of range.";
         return;
       }
+      try {
+        const prev = engine.computeCombatPreview(state, selected.id, enemyUnit.id);
+        logAction(
+          "⚔️ " + selected.type + " strikes " + enemyUnit.type + ": deals " + prev.damageToDefender +
+          (prev.defenderRemainingHp <= 0 ? " — destroyed!" : ", takes " + prev.damageToAttacker)
+        );
+      } catch (e) {}
+      flashCombat([key, attackerKey]);
       apply({ type: "ATTACK", playerId: HUMAN_ID, attackerId: selected.id, defenderId: enemyUnit.id });
       return;
     }
@@ -516,6 +527,8 @@
         hintLineEl.textContent = "That city is out of range.";
         return;
       }
+      logAction("🏛️ " + selected.type + " assaults " + clickedCity.id + " (HP " + clickedCity.hp + ")");
+      flashCombat([key, attackerKey]);
       apply({ type: "ATTACK_CITY", playerId: HUMAN_ID, attackerId: selected.id, cityId: clickedCity.id });
       return;
     }
@@ -578,6 +591,7 @@
     if (hints.reachable.has(key)) btn.classList.add("reachable");
     if (hints.attackable.has(key)) btn.classList.add("attackable");
     if (hoveredPathKeys.has(key)) btn.classList.add("path-preview");
+    if (combatFlashKeys.has(key)) btn.classList.add("combat-flash");
 
     const selectedUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
     if (selectedUnit && selectedUnit.position.q === q && selectedUnit.position.r === r) {
@@ -593,7 +607,7 @@
     let inner = '<span class="coord">' + q + "," + r + "</span>";
 
     if (!isVisible) {
-      inner += '<span class="glyph">' + (isDiscovered ? "▒" : "?") + "</span>";
+      inner += '<span class="glyph">' + (isDiscovered ? "🌥️" : "☁️") + "</span>";
       tip.push(isDiscovered ? "Shrouded (last seen)" : "Unexplored");
     } else if (city) {
       btn.classList.add("owner-" + city.ownerId);
@@ -705,6 +719,17 @@
     }
     html += "</span>";
     return html;
+  }
+
+  // Briefly flash the tiles involved in a fight, so combat is visible.
+  function flashCombat(keys) {
+    combatFlashKeys = new Set(keys);
+    setTimeout(function () {
+      combatFlashKeys = new Set();
+      for (const el of boardEl.children) {
+        if (el.classList) el.classList.remove("combat-flash");
+      }
+    }, 550);
   }
 
   // Update only the path-preview highlight on hover — do NOT rebuild the board
