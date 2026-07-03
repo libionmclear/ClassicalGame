@@ -35,11 +35,14 @@
         <button id="end-turn-btn">End Turn</button>
         <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖 Codex</button>
         <button id="colors-btn" class="ghost-btn" title="Civilization colours">🎨</button>
+        <button id="zoom-out-btn" class="ghost-btn zoom-btn" title="Zoom out">−</button>
+        <button id="zoom-in-btn" class="ghost-btn zoom-btn" title="Zoom in">+</button>
       </div>
     </header>
 
     <section class="status-panel">
       <div id="status-line"></div>
+      <div id="ranking" class="ranking"></div>
       <div id="resource-bar" class="res-bar"></div>
       <div id="weather-bar" class="weather-bar"></div>
       <div id="hint-line">Your turn — click your city to build, or a unit to move it. Then End Turn.</div>
@@ -47,7 +50,6 @@
 
     <section class="play-area">
       <div class="board-wrap">
-        <div id="ranking" class="ranking"></div>
         <section id="board" class="board"></section>
         <div id="legend" class="legend"></div>
       </div>

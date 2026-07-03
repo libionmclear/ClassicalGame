@@ -42,6 +42,8 @@
   const colorsListEl = document.getElementById("colors-list");
   const colorsCloseBtn = document.getElementById("colors-close-btn");
   const colorsResetBtn = document.getElementById("colors-reset-btn");
+  const zoomInBtn = document.getElementById("zoom-in-btn");
+  const zoomOutBtn = document.getElementById("zoom-out-btn");
 
   let state = null;
   let selectedUnitId = null;
@@ -50,6 +52,7 @@
   let hoveredPathKeys = new Set();
   let pendingRecenter = true;
   let combatFlashKeys = new Set();
+  let zoomLevel = 1;
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
@@ -365,9 +368,11 @@
       wrap && wrap.clientWidth
         ? Math.max(280, wrap.clientWidth - 28)
         : Math.max(280, Math.min((window.innerWidth || 1000) - 340, 820));
-    const size = Math.floor(avail / (extentW * SQRT3));
-    // Keep hexes comfortably clickable; big maps scroll (view auto-centres on start).
-    return Math.max(20, Math.min(34, size));
+    // At zoom 1 the map fits the panel width; zooming in enlarges hexes and the
+    // board scrolls. Clamp so tiles stay clickable but can grow for the phone.
+    const fit = avail / (extentW * SQRT3);
+    const size = Math.floor(Math.max(20, Math.min(34, fit)) * zoomLevel);
+    return Math.max(12, Math.min(72, size));
   }
 
   function logAction(message) {
@@ -797,8 +802,10 @@
     btn.style.top = pos.y + "px";
 
     if (!isVisible) {
-      btn.classList.add("fog");
+      // Explored-but-not-in-sight tiles keep the terrain (dimmed) — a remembered
+      // map — but show no troops. Truly unexplored tiles are clouded over.
       if (isDiscovered) btn.classList.add("discovered");
+      else btn.classList.add("fog");
     }
     if (hints.reachable.has(key)) btn.classList.add("reachable");
     if (hints.attackable.has(key)) btn.classList.add("attackable");
@@ -833,8 +840,12 @@
     }
 
     if (!isVisible) {
-      inner += '<span class="glyph">' + (isDiscovered ? "🌥️" : "☁️") + "</span>";
-      tip.push(isDiscovered ? "Shrouded (last seen)" : "Unexplored");
+      if (isDiscovered) {
+        tip.push("Explored — you remember the land, but not who holds it now");
+      } else {
+        inner += '<span class="glyph">☁️</span>';
+        tip.push("Unexplored");
+      }
     } else if (city) {
       btn.classList.add("owner-" + city.ownerId);
       inner += '<span class="glyph">' + (city.isCapital ? "🏛️" : "🏘️") + "</span>";
@@ -856,9 +867,8 @@
           (u.veterancy && u.veterancy !== "recruit" ? " · " + u.veterancy : "")
         );
       }
-    } else if (TERRAIN_GLYPHS[tile.terrain]) {
-      inner += '<span class="glyph tglyph">' + TERRAIN_GLYPHS[tile.terrain] + "</span>";
     }
+    // (Empty land shows terrain by colour only — no glyph.)
 
     let hoverHint = "";
     if (isVisible && selectedUnit) {
@@ -1443,6 +1453,55 @@
   }
 
   resultNewGameBtn.addEventListener("click", newGame);
+
+  // ===== Zoom & pan (mouse wheel + touch pinch; one-finger drag pans) =====
+  function setZoom(factor) {
+    const prev = zoomLevel;
+    zoomLevel = Math.max(0.6, Math.min(2.6, zoomLevel * factor));
+    if (Math.abs(zoomLevel - prev) > 0.001 && state) render();
+  }
+  if (zoomInBtn) zoomInBtn.addEventListener("click", function () { setZoom(1.2); });
+  if (zoomOutBtn) zoomOutBtn.addEventListener("click", function () { setZoom(1 / 1.2); });
+
+  const boardWrap = boardEl && boardEl.parentElement;
+  if (boardWrap) {
+    boardWrap.addEventListener(
+      "wheel",
+      function (e) {
+        if (!state) return;
+        e.preventDefault();
+        setZoom(e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      },
+      { passive: false }
+    );
+
+    let pinchDist = 0;
+    let pinchZoom = 1;
+    const touchDist = function (t) {
+      const dx = t[0].clientX - t[1].clientX;
+      const dy = t[0].clientY - t[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+    boardWrap.addEventListener("touchstart", function (e) {
+      if (e.touches.length === 2) {
+        pinchDist = touchDist(e.touches);
+        pinchZoom = zoomLevel;
+      }
+    }, { passive: true });
+    boardWrap.addEventListener("touchmove", function (e) {
+      if (e.touches.length === 2 && pinchDist > 0) {
+        e.preventDefault();
+        const target = Math.max(0.6, Math.min(2.6, pinchZoom * (touchDist(e.touches) / pinchDist)));
+        if (Math.abs(target - zoomLevel) > 0.02 && state) {
+          zoomLevel = target;
+          render();
+        }
+      }
+    }, { passive: false });
+    boardWrap.addEventListener("touchend", function (e) {
+      if (e.touches.length < 2) pinchDist = 0;
+    });
+  }
 
   loadSavedColors();
 
