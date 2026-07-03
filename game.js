@@ -32,6 +32,7 @@
   let selectedCityId = null;
   let actionLog = [];
   let hoveredPathKeys = new Set();
+  let pendingRecenter = true;
   const defaultHintText = "Hint: Select your unit, then click a tile to move or attack.";
 
   // Units offered in the city build menu (order = progression).
@@ -203,7 +204,13 @@
     if (!state) return 28;
     // Offset rectangle is ~cols wide (+0.5 for the alternate-row shift).
     const extentW = state.map.width + 1;
-    const avail = Math.max(280, Math.min((window.innerWidth || 1000) - 340, 860));
+    // Size to the actual board column so the map fits without horizontal scroll
+    // where it can (falls back to a viewport estimate before layout settles).
+    const wrap = boardEl && boardEl.parentElement;
+    const avail =
+      wrap && wrap.clientWidth
+        ? Math.max(280, wrap.clientWidth - 28)
+        : Math.max(280, Math.min((window.innerWidth || 1000) - 340, 820));
     const size = Math.floor(avail / (extentW * SQRT3));
     return Math.max(13, Math.min(30, size));
   }
@@ -760,6 +767,21 @@
       }
       renderRivers(geom, visibility, pos);
 
+      // On a new game, scroll the view to the human's capital so the player
+      // always starts looking at their own city and units.
+      if (pendingRecenter) {
+        const home =
+          Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
+          Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
+        const wrap = boardEl.parentElement;
+        const p = home ? pos[home.position.q + "," + home.position.r] : null;
+        if (p && wrap) {
+          wrap.scrollLeft = Math.max(0, p.x + geom.hexW / 2 - wrap.clientWidth / 2);
+          wrap.scrollTop = Math.max(0, p.y + geom.hexH / 2 - wrap.clientHeight / 2);
+        }
+        pendingRecenter = false;
+      }
+
       renderHud();
       renderLegend();
       renderTechTree(victory);
@@ -917,6 +939,7 @@
     clearSelection();
     actionLog = ["New game started: " + label];
     hintLineEl.textContent = defaultHintText;
+    pendingRecenter = true;
     render();
   }
 
