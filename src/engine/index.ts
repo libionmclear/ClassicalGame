@@ -46,6 +46,7 @@ function normalizePlayers(configPlayers?: Partial<Player>[]): Player[] {
     food: player.food ?? 0,
     production: player.production ?? 0,
     gold: player.gold ?? 25,
+    science: player.science ?? 0,
     techs: player.techs ?? [],
     forkChoices: player.forkChoices ?? {},
     cityIds: player.cityIds ?? [],
@@ -105,7 +106,8 @@ function normalizeMap(configMap: NonNullable<CreateGameConfig["map"]> | undefine
           population: city.population,
           hp: city.hp ?? 40,
           maxHp: city.maxHp ?? 40,
-          isCapital: city.isCapital ?? false
+          isCapital: city.isCapital ?? false,
+          food: city.food ?? 0
         }
       ])
     ),
@@ -392,6 +394,12 @@ function applyResearch(state: GameState, action: ResearchTechAction): void {
     throw new Error(`Cannot research tech ${action.techId}`);
   }
 
+  const cost = researchCost(action.techId);
+  if (player.science < cost) {
+    throw new Error(`Insufficient science for ${action.techId}: needs ${cost}, has ${player.science}`);
+  }
+  player.science -= cost;
+
   player.techs.push(action.techId);
   const tech = TECHS[action.techId];
   if (tech.forkGroup && !player.forkChoices[tech.forkGroup]) {
@@ -408,16 +416,36 @@ function applyChooseFork(state: GameState, action: ChooseForkAction): void {
   player.forkChoices[action.forkGroup] = action.branch;
 }
 
-function computeCityYield(state: GameState, cityId: string): { food: number; production: number; gold: number } {
+const MAX_POPULATION = 8;
+
+// Food needed to grow from the current population to the next level.
+function growthCost(population: number): number {
+  return 8 + population * 6;
+}
+
+export function researchCost(techId: string): number {
+  const tech = TECHS[techId];
+  const age = tech ? tech.age : 1;
+  return age === 1 ? 18 : age === 2 ? 36 : 60;
+}
+
+function computeCityYield(
+  state: GameState,
+  cityId: string
+): { food: number; production: number; gold: number; science: number } {
   const city = state.map.cities[cityId];
   if (!city) throw new Error(`Unknown city ${cityId}`);
 
   const centerTile = tileAt(state, city.position);
   const terrainYield = TERRAIN[centerTile.terrain].yields;
+  const owner = state.playersById[city.ownerId];
+  const pop = city.population;
+  const writingBonus = owner && owner.techs.includes("writing") ? 1 : 0;
   return {
-    food: terrainYield.food + 1,
-    production: terrainYield.production + 1,
-    gold: terrainYield.gold + Math.max(1, Math.floor(city.population / 2))
+    food: terrainYield.food + pop,
+    production: terrainYield.production + Math.ceil(pop / 2) + 1,
+    gold: terrainYield.gold + Math.floor(pop / 2) + 1,
+    science: 2 + pop + writingBonus
   };
 }
 
@@ -427,9 +455,21 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
 
   for (const cityId of endingPlayer.cityIds) {
     const yields = computeCityYield(state, cityId);
-    endingPlayer.food += yields.food;
     endingPlayer.production += yields.production;
     endingPlayer.gold += yields.gold;
+    endingPlayer.science += yields.science;
+
+    // Food is banked per-city and grows population when it fills the bar.
+    const city = state.map.cities[cityId];
+    if (city) {
+      city.food = (city.food ?? 0) + yields.food;
+      let need = growthCost(city.population);
+      while (city.population < MAX_POPULATION && city.food >= need) {
+        city.food -= need;
+        city.population += 1;
+        need = growthCost(city.population);
+      }
+    }
   }
 
   const upkeep = endingPlayer.unitIds.reduce((sum, unitId) => {

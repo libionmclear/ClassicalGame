@@ -675,8 +675,10 @@
       selectionLineEl.textContent =
         `Unit selected: ${selectedUnit.type} (${selectedUnit.id}) HP ${selectedUnit.hp}, Move ${selectedUnit.movementRemaining}`;
     } else if (selectedCity) {
+      const need = 8 + selectedCity.population * 6;
       selectionLineEl.textContent =
-        `City selected: ${selectedCity.id}, Pop ${selectedCity.population}, HP ${selectedCity.hp}`;
+        `City: ${selectedCity.id} · Pop ${selectedCity.population} · HP ${selectedCity.hp}/${selectedCity.maxHp}` +
+        ` · Growth ${Math.floor(selectedCity.food || 0)}/${need}`;
     } else {
       selectionLineEl.textContent = "Nothing selected.";
     }
@@ -805,20 +807,21 @@
           player.forkChoices[rule.forkGroup] &&
           player.forkChoices[rule.forkGroup] !== rule.forkBranch;
 
+        const cost = engine.researchCost ? engine.researchCost(id) : 0;
+        const affordable = player.science >= cost;
+
         const item = document.createElement("button");
         item.className =
           "tech-item " +
           (researched ? "done" : available ? "avail" : forkClosed ? "closed" : "locked") +
           (rule.forkGroup ? " is-fork" : "");
-        item.disabled = !(available && canAct);
-        item.title = info.note;
+        item.disabled = !(available && affordable && canAct);
+        item.title = info.note + (available ? "\nCost: " + cost + " science" : "");
 
         const stateLabel = researched
           ? "✓ known"
           : available
-            ? rule.forkGroup
-              ? "choose"
-              : "research"
+            ? cost + " 🔬" + (affordable ? (rule.forkGroup ? " ⑂" : "") : " ⏳")
             : forkClosed
               ? "path closed"
               : "locked";
@@ -836,9 +839,13 @@
   }
 
   function renderHud() {
-    const rome = state.playersById.rome;
+    const rome = human();
+    const pop = Object.values(state.map.cities)
+      .filter((c) => c.ownerId === HUMAN_ID)
+      .reduce((sum, c) => sum + c.population, 0);
     const resources = [
-      { ico: "🌾", val: rome.food, lbl: "food" },
+      { ico: "👥", val: pop, lbl: "pop" },
+      { ico: "🔬", val: rome.science, lbl: "science" },
       { ico: "⚒️", val: rome.production, lbl: "prod" },
       { ico: "🪙", val: rome.gold, lbl: "gold" },
       { ico: "📜", val: rome.techs.length, lbl: "techs" }

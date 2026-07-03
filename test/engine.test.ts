@@ -18,8 +18,8 @@ function buildState() {
   const config: CreateGameConfig = {
     seed: "phase0-seed",
     players: [
-      { id: "p1", civ: "Rome", production: 40 },
-      { id: "p2", civ: "Carthage", production: 40 }
+      { id: "p1", civ: "Rome", production: 40, science: 500 },
+      { id: "p2", civ: "Carthage", production: 40, science: 500 }
     ],
     map: {
       width: 5,

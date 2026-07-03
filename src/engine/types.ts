@@ -76,6 +76,8 @@ export interface City {
   hp: number;
   maxHp: number;
   isCapital?: boolean;
+  /** Accumulated food toward the next population growth. */
+  food?: number;
 }
 
 export interface Player {
@@ -84,6 +86,7 @@ export interface Player {
   food: number;
   production: number;
   gold: number;
+  science: number;
   techs: string[];
   forkChoices: Record<string, string>;
   cityIds: string[];

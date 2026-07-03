@@ -1,5 +1,5 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS } from "./data";
-import { applyAction, computeCombatPreview } from "./index";
+import { applyAction, computeCombatPreview, researchCost } from "./index";
 import { distance, DIRECTIONS } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import type { City, Coord, GameAction, GameState, Player, Unit } from "./types";
@@ -265,7 +265,8 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => settlerMoveAction(state, player),
     () => {
       const techId = firstBuildableTech(player);
-      return techId ? { type: "RESEARCH_TECH", playerId, techId } : null;
+      if (!techId || player.science < researchCost(techId)) return null;
+      return { type: "RESEARCH_TECH", playerId, techId };
     }
   ];
 
