@@ -49,6 +49,13 @@
   const colorsResetBtn = document.getElementById("colors-reset-btn");
   const zoomInBtn = document.getElementById("zoom-in-btn");
   const zoomOutBtn = document.getElementById("zoom-out-btn");
+  const briefingModalEl = document.getElementById("briefing-modal");
+  const briefEraEl = document.getElementById("brief-era");
+  const briefTitleEl = document.getElementById("brief-title");
+  const briefSituationEl = document.getElementById("brief-situation");
+  const briefObjectivesEl = document.getElementById("brief-objectives");
+  const briefDidYouKnowEl = document.getElementById("brief-didyouknow");
+  const briefBeginBtn = document.getElementById("brief-begin-btn");
 
   let state = null;
   let selectedUnitId = null;
@@ -143,6 +150,17 @@
     CIV_ADJ[c.id] = c.adjective;
     CIV_CAPITAL[c.id] = c.capital;
   }
+
+  // Short historical flavour per civ — used to brief random-map campaigns
+  // (scenarios carry their own richer briefing from the engine).
+  const CIV_BRIEF = {
+    rome: "From a cluster of hills on the Tiber, Rome forged a republic of citizen-soldiers whose discipline and roads would knit an empire from Britain to Mesopotamia.",
+    carthage: "Founded by Phoenician traders around 814 BC, Carthage ruled the western seas through commerce and mercenary armies — and gave Rome her most feared enemy, Hannibal.",
+    greece: "A world of fiercely independent city-states, Greece gave the classical age its philosophy, its phalanx, and — under Alexander — an empire that carried Hellenism to the Indus.",
+    egypt: "By the classical age the Nile kingdom was ancient beyond memory, its Ptolemaic rulers heirs to Alexander, its granaries feeding the Mediterranean and its capital at Alexandria the mind of the world.",
+    gaul: "The Celtic peoples of Gaul were master ironworkers and ferocious warriors whose sack of Rome in 390 BC was never forgotten — and whose druids kept a learning written on no page.",
+    parthia: "Mounted lords of Iran and Mesopotamia, the Parthians met Rome's legions with horse-archers and cataphracts, and at Carrhae in 53 BC handed Rome one of her worst defeats."
+  };
 
   // Populate the "Play as" picker from the engine roster.
   (function populateCivPicker() {
@@ -569,6 +587,45 @@
         : `${winnerName} controls every capital. ${victory.reason || "Try another campaign."}`;
     }
     resultModalEl.classList.remove("hidden");
+  }
+
+  // Show a campaign briefing at the start of a game. `brief` is the engine's
+  // scenario.briefing for scenarios, or a synthesised one for random maps.
+  function showBriefing(brief, title) {
+    if (!briefingModalEl || !brief) return;
+    briefEraEl.textContent = brief.era || "";
+    briefTitleEl.textContent = title || "A New Age";
+    briefSituationEl.textContent = brief.situation || "";
+    briefObjectivesEl.innerHTML = "";
+    (brief.objectives || []).forEach(function (o) {
+      const li = document.createElement("li");
+      li.textContent = o;
+      briefObjectivesEl.appendChild(li);
+    });
+    if (brief.didYouKnow) {
+      briefDidYouKnowEl.innerHTML = "<b>Did you know?</b> " + brief.didYouKnow;
+      briefDidYouKnowEl.classList.remove("hidden");
+    } else {
+      briefDidYouKnowEl.classList.add("hidden");
+    }
+    briefingModalEl.classList.remove("hidden");
+  }
+
+  // Build a briefing for a random-map campaign from the civ you chose.
+  function randomMapBriefing(civId, sizeLabel, victoryLine) {
+    return {
+      era: "The Classical Age — a world of villages, kings and rising empires",
+      situation:
+        (CIV_BRIEF[civId] || "") +
+        " Before you lies uncharted country (" + sizeLabel + "), rival powers, and the whole span of the age to make your mark.",
+      objectives: [
+        "Explore, settle, and expand your realm",
+        "Advance through the ages and master combined arms",
+        victoryLine
+      ],
+      didYouKnow:
+        "Historians bracket the classical age roughly from 800 BC to AD 117 — from the first Olympiad and the founding of Rome to the empire's greatest extent under Trajan."
+    };
   }
 
   function eventEffectsSummary(fx) {
@@ -1425,7 +1482,7 @@
     legendEl.innerHTML = parts.join("");
   }
 
-  function newGame() {
+  function newGame(withBriefing) {
     // Clear any leftover result modal first, so a new game can never inherit a
     // stale "Victory/Defeat" overlay even if something below misbehaves.
     resultModalEl.classList.add("hidden");
@@ -1462,15 +1519,18 @@
     // capital); "quick" ends the age at a player-chosen turn count and awards
     // the score win. This overrides whatever limit the map/scenario carried.
     const mode = (victoryModeSelectEl && victoryModeSelectEl.value) || "quick";
+    let victoryLine;
     if (mode === "domination") {
       config.turnLimit = 0;
       label += " — Domination (hold every capital)";
+      victoryLine = "Victory: seize every enemy capital — there is no turn limit.";
     } else {
       let turns = turnsInputEl ? parseInt(turnsInputEl.value, 10) : 60;
       if (!Number.isFinite(turns) || turns < 10) turns = 10;
       if (turns > 300) turns = 300;
       config.turnLimit = turns;
       label += " — Quick (" + turns + " turns)";
+      victoryLine = "Victory: lead on score when the age ends at turn " + turns + " — or seize every capital sooner.";
     }
 
     // Difficulty handicaps the AI economy; the human's chosen civ is exempt.
@@ -1496,13 +1556,29 @@
     pendingRecenter = true;
     render();
     saveGame();
+
+    // Open with a briefing — the scenario's own for authored maps, or a civ
+    // flavour intro for random ones. Skipped for the silent auto-start so the
+    // setup bar isn't covered before the player has configured anything.
+    if (withBriefing === false) return;
+    try {
+      if (choice === "italia") {
+        const sc = engine.loadScenario("italia");
+        showBriefing(sc.briefing, sc.name);
+      } else {
+        const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
+        showBriefing(randomMapBriefing(HUMAN_ID, sizeLabel, victoryLine), "Playing " + myCivName);
+      }
+    } catch (e) {
+      console.error("Briefing failed:", e);
+    }
   }
 
   // Resume a saved game if one exists; otherwise start fresh.
   function resumeOrNew() {
     const saved = loadGame();
     if (!saved) {
-      newGame();
+      newGame(false);
       return;
     }
     state = saved;
@@ -1691,6 +1767,17 @@
   }
 
   resultNewGameBtn.addEventListener("click", newGame);
+
+  if (briefBeginBtn) {
+    briefBeginBtn.addEventListener("click", function () {
+      briefingModalEl.classList.add("hidden");
+    });
+  }
+  if (briefingModalEl) {
+    briefingModalEl.addEventListener("click", function (e) {
+      if (e.target === briefingModalEl) briefingModalEl.classList.add("hidden");
+    });
+  }
 
   // ===== Zoom & pan (mouse wheel + touch pinch; one-finger drag pans) =====
   function setZoom(factor) {

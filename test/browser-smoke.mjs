@@ -37,6 +37,13 @@ await page.selectOption("#map-size-select", "italia");
 await page.click("#new-game-btn");
 await page.waitForTimeout(300);
 
+// A new game opens with a campaign briefing — dismiss it before interacting.
+const briefBtn = page.locator("#brief-begin-btn");
+if (await briefBtn.isVisible()) {
+  await briefBtn.click();
+  await page.waitForTimeout(150);
+}
+
 // 1) The result overlay must be hidden on a fresh game.
 const modalVisible = await page
   .locator("#result-modal")
