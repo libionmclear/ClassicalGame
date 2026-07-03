@@ -12,12 +12,20 @@ interface SizeSpec {
   label: string;
 }
 
+// width = offset columns, height = offset rows (the board renders as a rectangle).
 export const MAP_SIZES: Record<MapSize, SizeSpec> = {
-  small: { width: 9, height: 7, bands: 2, rivers: 1, label: "Small" },
-  medium: { width: 13, height: 10, bands: 2, rivers: 2, label: "Medium" },
-  large: { width: 18, height: 13, bands: 3, rivers: 3, label: "Large" },
-  xl: { width: 24, height: 17, bands: 3, rivers: 4, label: "XL" }
+  small: { width: 14, height: 9, bands: 2, rivers: 2, label: "Small" },
+  medium: { width: 20, height: 13, bands: 3, rivers: 3, label: "Medium" },
+  large: { width: 28, height: 18, bands: 3, rivers: 4, label: "Large" },
+  xl: { width: 34, height: 22, bands: 3, rivers: 5, label: "XL" }
 };
+
+// Odd-r offset (pointy-top) <-> axial. Generation walks a rectangle in offset
+// space and stores tiles under axial keys, so the engine keeps axial adjacency
+// while the board draws as a clean rectangle.
+function offsetToAxial(col: number, row: number): Coord {
+  return { q: col - ((row - (row & 1)) >> 1), r: row };
+}
 
 export interface GenerateMapOptions {
   size?: MapSize;
@@ -116,26 +124,30 @@ interface TerrainField {
 }
 
 function buildTerrain(seed: string, spec: SizeSpec): TerrainField {
-  const { width, height, bands } = spec;
+  const cols = spec.width;
+  const rows = spec.height;
+  const bands = spec.bands;
   const tiles: Record<string, { terrain: TerrainType; region: string }> = {};
   const elevation: Record<string, number> = {};
   const regionSet = new Set<string>();
 
-  for (let r = 0; r < height; r += 1) {
-    for (let q = 0; q < width; q += 1) {
-      let elev = fbm(seed, "elev", q, r) + 0.06;
+  // Walk a rectangle in offset (col, row); noise is sampled in offset space so
+  // terrain reads coherently on the rectangular board.
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      let elev = fbm(seed, "elev", col, row) + 0.06;
       // Edge falloff sinks the borders into sea, leaving a central landmass with coasts.
-      const nx = width <= 1 ? 0 : (q / (width - 1)) * 2 - 1;
-      const ny = height <= 1 ? 0 : (r / (height - 1)) * 2 - 1;
+      const nx = cols <= 1 ? 0 : (col / (cols - 1)) * 2 - 1;
+      const ny = rows <= 1 ? 0 : (row / (rows - 1)) * 2 - 1;
       const edge = Math.max(Math.abs(nx), Math.abs(ny));
       elev -= 0.55 * Math.pow(edge, 3);
 
       // South of the map trends drier (a North-Africa-style desert belt).
-      const moist = fbm(seed, "moist", q, r) - 0.22 * (height <= 1 ? 0 : r / (height - 1));
+      const moist = fbm(seed, "moist", col, row) - 0.22 * (rows <= 1 ? 0 : row / (rows - 1));
 
-      const region = bandName(r, height, bands);
+      const region = bandName(row, rows, bands);
       regionSet.add(region);
-      const key = keyOf({ q, r });
+      const key = keyOf(offsetToAxial(col, row));
       tiles[key] = { terrain: terrainFor(elev, moist), region };
       elevation[key] = elev;
     }
@@ -155,7 +167,7 @@ function carveRivers(
   count: number
 ): Record<string, boolean> {
   const rivers: Record<string, boolean> = {};
-  const inBounds = (c: Coord) => c.q >= 0 && c.r >= 0 && c.q < spec.width && c.r < spec.height;
+  const inBounds = (c: Coord) => tiles[keyOf(c)] !== undefined;
 
   // Sources: the highest land tiles, greedily spaced apart.
   const sources = Object.keys(tiles)
@@ -201,7 +213,7 @@ function largestWalkableComponent(
   tiles: Record<string, { terrain: TerrainType; region: string }>,
   spec: SizeSpec
 ): string[] {
-  const inBounds = (c: Coord) => c.q >= 0 && c.r >= 0 && c.q < spec.width && c.r < spec.height;
+  const inBounds = (c: Coord) => tiles[keyOf(c)] !== undefined;
   const isWalkable = (key: string) => tiles[key] && WALKABLE.has(tiles[key].terrain);
 
   const seen = new Set<string>();
@@ -277,7 +289,7 @@ function placeStarters(
   taken: Set<string>
 ): { warrior: Coord; settler: Coord } {
   const cap = parseKey(capitalKey);
-  const inBounds = (c: Coord) => c.q >= 0 && c.r >= 0 && c.q < spec.width && c.r < spec.height;
+  const inBounds = (c: Coord) => tiles[keyOf(c)] !== undefined;
   const free = neighborsOf(cap).filter(
     (c) => inBounds(c) && tiles[keyOf(c)] && WALKABLE.has(tiles[keyOf(c)].terrain) && !taken.has(keyOf(c))
   );
@@ -366,17 +378,19 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   return tryGenerate(`${baseSeed}#fallback`, spec, 2) ?? buildFlatFallback(spec, baseSeed);
 }
 
-// A guaranteed-valid map: all plains, two capitals on opposite sides.
+// A guaranteed-valid map: all plains rectangle, two capitals on opposite sides.
 function buildFlatFallback(spec: SizeSpec, seed: string): CreateGameConfig {
   const tiles: Record<string, { terrain: TerrainType; region: string }> = {};
-  for (let r = 0; r < spec.height; r += 1) {
-    for (let q = 0; q < spec.width; q += 1) {
-      tiles[keyOf({ q, r })] = { terrain: "plains", region: bandName(r, spec.height, spec.bands) };
+  for (let row = 0; row < spec.height; row += 1) {
+    for (let col = 0; col < spec.width; col += 1) {
+      tiles[keyOf(offsetToAxial(col, row))] = { terrain: "plains", region: bandName(row, spec.height, spec.bands) };
     }
   }
-  const midR = Math.floor(spec.height / 2);
-  const romePos = { q: 1, r: midR };
-  const carthagePos = { q: spec.width - 2, r: midR };
+  const midRow = Math.floor(spec.height / 2);
+  const romePos = offsetToAxial(1, midRow);
+  const carthagePos = offsetToAxial(spec.width - 2, midRow);
+  const romeSettler = offsetToAxial(1, midRow - 1 >= 0 ? midRow - 1 : midRow + 1);
+  const carthageSettler = offsetToAxial(spec.width - 2, midRow - 1 >= 0 ? midRow - 1 : midRow + 1);
   return {
     seed,
     players: [
@@ -394,10 +408,10 @@ function buildFlatFallback(spec: SizeSpec, seed: string): CreateGameConfig {
         carthage_capital: { id: "carthage_capital", ownerId: "carthage", position: carthagePos, population: 2, hp: 40, maxHp: 40, isCapital: true }
       },
       units: {
-        r_warrior: { id: "r_warrior", type: "warrior", ownerId: "rome", position: { q: 2, r: midR } },
-        r_settler: { id: "r_settler", type: "settler", ownerId: "rome", position: { q: 1, r: midR - 1 >= 0 ? midR - 1 : midR + 1 } },
-        c_warrior: { id: "c_warrior", type: "warrior", ownerId: "carthage", position: { q: spec.width - 3, r: midR } },
-        c_settler: { id: "c_settler", type: "settler", ownerId: "carthage", position: { q: spec.width - 2, r: midR - 1 >= 0 ? midR - 1 : midR + 1 } }
+        r_warrior: { id: "r_warrior", type: "warrior", ownerId: "rome", position: offsetToAxial(2, midRow) },
+        r_settler: { id: "r_settler", type: "settler", ownerId: "rome", position: romeSettler },
+        c_warrior: { id: "c_warrior", type: "warrior", ownerId: "carthage", position: offsetToAxial(spec.width - 3, midRow) },
+        c_settler: { id: "c_settler", type: "settler", ownerId: "carthage", position: carthageSettler }
       }
     }
   };

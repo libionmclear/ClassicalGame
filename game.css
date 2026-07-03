@@ -194,16 +194,22 @@ button:hover:not(:disabled) {
 
 /* ===== Hex board ===== */
 .board-wrap {
-  background: #211812;
+  background: radial-gradient(ellipse at 50% 20%, #2a1f16, #1b130d);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 12px;
   overflow: auto;
+  perspective: 1700px;
+  perspective-origin: 50% 32%;
 }
 
+/* Slight forward tilt so the map reads as an inclined 3D plane. */
 .board {
   position: relative;
-  margin: 0 auto;
+  margin: 26px auto 14px;
+  transform: rotateX(17deg);
+  transform-origin: 50% 55%;
+  transform-style: preserve-3d;
 }
 
 .tile {

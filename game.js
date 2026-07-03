@@ -142,14 +142,18 @@
     }
   }
 
+  // Odd-r offset (pointy-top): axial -> offset column/row.
+  function axialToOffset(q, r) {
+    return { col: q + ((r - (r & 1)) >> 1), row: r };
+  }
+
   function hexSize() {
     if (!state) return 28;
-    const cols = state.map.width;
-    const rows = state.map.height;
-    const extentW = cols + (rows - 1) / 2;
-    const avail = Math.max(280, Math.min((window.innerWidth || 1000) - 360, 760));
+    // Offset rectangle is ~cols wide (+0.5 for the alternate-row shift).
+    const extentW = state.map.width + 1;
+    const avail = Math.max(280, Math.min((window.innerWidth || 1000) - 340, 860));
     const size = Math.floor(avail / (extentW * SQRT3));
-    return Math.max(14, Math.min(30, size));
+    return Math.max(13, Math.min(30, size));
   }
 
   function logAction(message) {
@@ -234,6 +238,10 @@
     for (const key of visibility.visible) {
       const [q, r] = key.split(",").map(Number);
       const destination = { q, r };
+
+      // Perf: a unit can only move within its movement budget and attack within
+      // its range, so skip far tiles entirely (matters on big maps).
+      if (engine.distance(unit.position, destination) > Math.max(unitDef.movement, unitDef.range)) continue;
 
       const path = engine.findPath(
         state,
@@ -442,7 +450,7 @@
     });
   }
 
-  function renderTile(q, r, visibility, hints, geom) {
+  function renderTile(q, r, visibility, hints, geom, pos) {
     const key = q + "," + r;
     const tile = state.map.tiles[key];
     const isVisible = visibility.visible.has(key);
@@ -455,11 +463,11 @@
     btn.className = "tile terrain-" + tile.terrain;
     btn.dataset.key = key;
 
-    // Hex layout (pointy-top, axial -> pixel) so on-screen adjacency == engine adjacency.
+    // Offset (odd-r) pixel position: rectangular board, engine adjacency preserved.
     btn.style.width = geom.hexW + "px";
     btn.style.height = geom.hexH + "px";
-    btn.style.left = geom.hexW * (q + r / 2) + "px";
-    btn.style.top = geom.vSpace * r + "px";
+    btn.style.left = pos.x + "px";
+    btn.style.top = pos.y + "px";
 
     if (!isVisible) {
       btn.classList.add("fog");
@@ -549,14 +557,7 @@
     return btn;
   }
 
-  function tileCenter(q, r, geom) {
-    return {
-      x: geom.hexW * (q + r / 2) + geom.hexW / 2,
-      y: geom.vSpace * r + geom.hexH / 2
-    };
-  }
-
-  function renderRivers(geom, visibility) {
+  function renderRivers(geom, visibility, pos) {
     const rivers = state.map.rivers || {};
     for (const edge of Object.keys(rivers)) {
       if (!rivers[edge]) continue;
@@ -564,20 +565,23 @@
       if (parts.length !== 2) continue;
       // Only draw once both banks have been seen.
       if (!visibility.discovered.has(parts[0]) || !visibility.discovered.has(parts[1])) continue;
+      const pa = pos[parts[0]];
+      const pb = pos[parts[1]];
+      if (!pa || !pb) continue;
 
-      const a = parts[0].split(",").map(Number);
-      const b = parts[1].split(",").map(Number);
-      const ca = tileCenter(a[0], a[1], geom);
-      const cb = tileCenter(b[0], b[1], geom);
-      const dx = cb.x - ca.x;
-      const dy = cb.y - ca.y;
+      const cax = pa.x + geom.hexW / 2;
+      const cay = pa.y + geom.hexH / 2;
+      const cbx = pb.x + geom.hexW / 2;
+      const cby = pb.y + geom.hexH / 2;
+      const dx = cbx - cax;
+      const dy = cby - cay;
       const len = Math.sqrt(dx * dx + dy * dy);
       const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
 
       const line = document.createElement("div");
       line.className = "river";
-      line.style.left = (ca.x + cb.x) / 2 + "px";
-      line.style.top = (ca.y + cb.y) / 2 + "px";
+      line.style.left = (cax + cbx) / 2 + "px";
+      line.style.top = (cay + cby) / 2 + "px";
       line.style.width = len + "px";
       line.style.transform = "translate(-50%, -50%) rotate(" + angle + "deg)";
       boardEl.appendChild(line);
@@ -674,17 +678,39 @@
         hexH: 2 * size,
         vSpace: size * 1.5
       };
-      const extentW = state.map.width + (state.map.height - 1) / 2;
-      boardEl.style.width = geom.hexW * extentW + "px";
-      boardEl.style.height = geom.vSpace * (state.map.height - 1) + geom.hexH + "px";
+
+      // Compute offset (rectangular) pixel positions for every tile, then
+      // normalize so the top-left tile sits at (0,0).
+      const keys = Object.keys(state.map.tiles);
+      const pos = {};
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const key of keys) {
+        const c = key.split(",");
+        const off = axialToOffset(+c[0], +c[1]);
+        const x = geom.hexW * (off.col + 0.5 * (off.row & 1));
+        const y = geom.vSpace * off.row;
+        pos[key] = { x: x, y: y };
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      for (const key of keys) {
+        pos[key].x -= minX;
+        pos[key].y -= minY;
+      }
+      boardEl.style.width = maxX - minX + geom.hexW + "px";
+      boardEl.style.height = maxY - minY + geom.hexH + "px";
 
       boardEl.innerHTML = "";
-      for (let r = 0; r < state.map.height; r += 1) {
-        for (let q = 0; q < state.map.width; q += 1) {
-          boardEl.appendChild(renderTile(q, r, visibility, hints, geom));
-        }
+      for (const key of keys) {
+        const c = key.split(",");
+        boardEl.appendChild(renderTile(+c[0], +c[1], visibility, hints, geom, pos[key]));
       }
-      renderRivers(geom, visibility);
+      renderRivers(geom, visibility, pos);
 
       renderHud();
       renderLegend();
