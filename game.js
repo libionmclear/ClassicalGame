@@ -177,6 +177,26 @@
     });
   })();
 
+  // Authored scenarios (real-geography maps), keyed by id, populated into the
+  // map picker's "Scenarios" group. isScenario(id) tells scenarios from sizes.
+  const SCENARIOS = {};
+  (function populateScenarios() {
+    const list = engine.listScenarios ? engine.listScenarios() : [];
+    const og = document.getElementById("scenario-optgroup");
+    list.forEach(function (s) {
+      SCENARIOS[s.id] = s;
+      if (og) {
+        const opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = s.name;
+        og.appendChild(opt);
+      }
+    });
+  })();
+  function isScenario(id) {
+    return Object.prototype.hasOwnProperty.call(SCENARIOS, id);
+  }
+
   const COLOR_STORE_KEY = "hegemon_civ_colors";
 
   function applyCivColor(id, color) {
@@ -1512,10 +1532,12 @@
     const chosenCiv = (civSelectEl && civSelectEl.value) || "rome";
     let config;
     let label;
+    let scenario = null;
     try {
-      if (choice === "italia") {
-        config = engine.loadScenario("italia").config;
-        label = "Italia scenario";
+      if (isScenario(choice)) {
+        scenario = engine.loadScenario(choice);
+        config = scenario.config;
+        label = scenario.name;
       } else {
         const seed = "map-" + choice + "-" + Date.now();
         const playerCount = playerCountSelectEl ? parseInt(playerCountSelectEl.value, 10) || 2 : 2;
@@ -1526,7 +1548,8 @@
       }
     } catch (err) {
       console.error("New game generation failed, falling back:", err);
-      config = engine.loadScenario("italia").config;
+      scenario = engine.loadScenario("italia");
+      config = scenario.config;
       label = "Italia scenario (fallback)";
     }
 
@@ -1583,9 +1606,8 @@
     // setup bar isn't covered before the player has configured anything.
     if (withBriefing === false) return;
     try {
-      if (choice === "italia") {
-        const sc = engine.loadScenario("italia");
-        showBriefing(sc.briefing, sc.name);
+      if (scenario) {
+        showBriefing(scenario.briefing, scenario.name);
       } else {
         const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
         showBriefing(randomMapBriefing(HUMAN_ID, sizeLabel, victoryLine), "Playing " + myCivName);
@@ -1622,7 +1644,10 @@
 
   // Suggest the map's recommended length in the turns box (player can override).
   function recommendedTurnsForSize(size) {
-    if (size === "italia") return 40;
+    if (isScenario(size)) {
+      const sc = SCENARIOS[size];
+      return (sc && sc.config && sc.config.turnLimit) || 60;
+    }
     return (engine.TURN_LIMITS && engine.TURN_LIMITS[size]) || 60;
   }
 
@@ -1636,8 +1661,11 @@
   if (mapSizeSelectEl && playerCountSelectEl) {
     mapSizeSelectEl.addEventListener("change", function () {
       const size = mapSizeSelectEl.value;
-      if (size === "italia") {
-        playerCountSelectEl.value = "2";
+      if (isScenario(size)) {
+        // A scenario fixes its own civs — lock the count to that roster.
+        const sc = SCENARIOS[size];
+        const n = (sc && sc.config && sc.config.players && sc.config.players.length) || 2;
+        playerCountSelectEl.value = String(n);
         playerCountSelectEl.disabled = true;
       } else {
         playerCountSelectEl.disabled = false;

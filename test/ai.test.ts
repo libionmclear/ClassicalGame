@@ -117,10 +117,22 @@ test("ai builds the best unlocked unit once teched (and done expanding)", () => 
 });
 
 test("two AIs actually fight and drive the game to a conclusion", () => {
-  let state = createInitialGameState(loadScenario("italia").config);
+  // A land-connected arena so the two land armies can actually reach each other
+  // (the authored scenarios are amphibious — fighting across them needs fleets).
+  const units = {
+    p1a: { id: "p1a", type: "warrior", ownerId: "p1", position: { q: 1, r: 1 }, movementRemaining: 2 },
+    p1b: { id: "p1b", type: "swordsman", ownerId: "p1", position: { q: 1, r: 2 }, movementRemaining: 2 },
+    p2a: { id: "p2a", type: "warrior", ownerId: "p2", position: { q: 6, r: 6 }, movementRemaining: 2 },
+    p2b: { id: "p2b", type: "swordsman", ownerId: "p2", position: { q: 6, r: 5 }, movementRemaining: 2 }
+  };
+  const cities = {
+    p1c: { id: "p1c", ownerId: "p1", position: { q: 0, r: 0 }, population: 2, isCapital: true, hp: 24, maxHp: 24 },
+    p2c: { id: "p2c", ownerId: "p2", position: { q: 7, r: 7 }, population: 2, isCapital: true, hp: 24, maxHp: 24 }
+  };
+  let state = makeState(units, cities, [], 40);
+
   let attacks = 0;
   let winner: string | null = null;
-
   for (let i = 0; i < 240 && !winner; i += 1) {
     const current = state.players[state.currentPlayerIndex].id;
     const result = runAiTurn(state, current, 12);
@@ -130,5 +142,5 @@ test("two AIs actually fight and drive the game to a conclusion", () => {
   }
 
   assert.ok(attacks > 0, "the AIs should engage in combat");
-  assert.ok(winner === "rome" || winner === "carthage", `expected a decisive winner, got ${winner}`);
+  assert.ok(winner === "p1" || winner === "p2", `expected a decisive winner, got ${winner}`);
 });

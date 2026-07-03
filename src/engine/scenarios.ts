@@ -1,7 +1,9 @@
 import type { CreateGameConfig } from "./types";
 import { italiaScenario } from "./scenarios/italia";
+import { hellasScenario } from "./scenarios/hellas";
+import { oldWorldScenario } from "./scenarios/oldworld";
 
-export type ScenarioId = "italia";
+export type ScenarioId = "italia" | "hellas" | "oldworld";
 
 export interface ScenarioBriefing {
   /** Short dateline, e.g. "264 BC — The eve of the First Punic War". */
@@ -31,16 +33,54 @@ const SCENARIOS: Record<ScenarioId, ScenarioDefinition> = {
     briefing: {
       era: "264 BC — the eve of the First Punic War",
       situation:
-        "Rome has mastered the Italian peninsula through her legions and her web of Latin alliances. Across the Tyrrhenian Sea, Carthage — heir to Phoenician Tyre — commands the richest trade network in the western Mediterranean and a navy without equal. Sicily lies between them like a stepping-stone, and neither power can let the other hold it.",
+        "Rome has mastered the Italian peninsula through her legions and her web of Latin alliances. Across the sea, Carthage — heir to Phoenician Tyre — commands the richest trade network in the western Mediterranean and a navy without equal. Sicily lies between them like a stepping-stone, and neither power can let the other hold it.",
       objectives: [
-        "Grow your cities and out-expand your rival across Italia",
-        "Master the classical arms — spears, horse, sword and siege — for the wars to come",
+        "Grow your cities and out-expand your rival up and down the boot",
+        "Build harbours and a fleet — this is a war fought across water",
         "Win by holding every capital (Domination), or by leading on score when the age ends (Quick)"
       ],
       didYouKnow:
         "The Romans called this war 'Punic' from Poeni, their word for the Phoenician settlers who founded Carthage around 814 BC. Rome had almost no fleet in 264 BC — she reputedly reverse-engineered her first warships from a shipwrecked Carthaginian vessel."
     },
     config: italiaScenario
+  },
+  hellas: {
+    id: "hellas",
+    name: "Hellas: Greeks and Persians",
+    historicalBrief:
+      "Fifth century BC: the Greek city-states and the Persian empire contend for the Aegean, while Egypt watches from the south.",
+    briefing: {
+      era: "431 BC — the Aegean in the age of Pericles",
+      situation:
+        "The mountainous Greek homeland and the Peloponnese look east across an island-strewn sea to the Ionian coast, where the Great King's satraps hold the cities of Asia. Egypt, ancient and grain-rich, guards the southern shore beyond Crete. Triremes, not walls, will decide who commands the Aegean.",
+      objectives: [
+        "Command the sea lanes with harbours and triremes",
+        "Seize the islands and coasts that link the three shores",
+        "Prevail by domination or by leading on score at the age's end"
+      ],
+      didYouKnow:
+        "At Salamis in 480 BC an outnumbered Greek fleet destroyed the Persian navy in the narrows — perhaps 300 triremes against 600 or more. A single trireme carried around 170 rowers, and Athens' power rested on her ability to man scores of them."
+    },
+    config: hellasScenario
+  },
+  oldworld: {
+    id: "oldworld",
+    name: "The Old World",
+    historicalBrief:
+      "The whole classical Mediterranean and Near East: six great powers from Gaul to Persia contend for the age.",
+    briefing: {
+      era: "The Classical Age — from the Pillars of Hercules to the Iranian plateau",
+      situation:
+        "The full sweep of the ancient world lies open: Gaul and Iberia in the west, Rome astride her boot, Carthage on the African shore, the Greek Aegean, the Nile of Egypt, and the empire of Parthia beyond the Euphrates. Six powers, one sea to bind them, and an entire age in which to build a hegemony — or be swallowed by one.",
+      objectives: [
+        "Expand from your homeland across the Mare Nostrum",
+        "Master land and sea — legions, cavalry, siege and fleets",
+        "Outlast five rivals: hold every capital, or lead on score when the age closes"
+      ],
+      didYouKnow:
+        "At its height under Trajan (AD 117) the Roman Empire ran some 5 million square kilometres and perhaps 60–70 million people — around a fifth of humanity. No western state would match its span again for a thousand years."
+    },
+    config: oldWorldScenario
   }
 };
 
