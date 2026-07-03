@@ -34,6 +34,7 @@
         <button id="new-game-btn">New Game</button>
         <button id="end-turn-btn">End Turn</button>
         <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖 Codex</button>
+        <button id="colors-btn" class="ghost-btn" title="Civilization colours">🎨</button>
       </div>
     </header>
 
@@ -96,6 +97,18 @@
       <h2 id="event-title"></h2>
       <p id="event-situation" class="event-situation"></p>
       <div id="event-options" class="event-options"></div>
+    </div>
+  </div>
+
+  <div id="colors-modal" class="result-modal hidden">
+    <div class="result-card colors-card">
+      <div class="codex-header">
+        <h2>🎨 Civilization Colours</h2>
+        <button id="colors-close-btn" class="codex-close" title="Close">×</button>
+      </div>
+      <p class="event-situation">Historic colours by default — change any civ's banner below.</p>
+      <div id="colors-list" class="colors-list"></div>
+      <button id="colors-reset-btn" class="ghost-btn" style="margin-top:12px">Reset to historic colours</button>
     </div>
   </div>
 

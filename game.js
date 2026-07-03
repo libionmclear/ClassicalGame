@@ -37,6 +37,11 @@
   const codexModalEl = document.getElementById("codex-modal");
   const codexBodyEl = document.getElementById("codex-body");
   const codexCloseBtn = document.getElementById("codex-close-btn");
+  const colorsBtn = document.getElementById("colors-btn");
+  const colorsModalEl = document.getElementById("colors-modal");
+  const colorsListEl = document.getElementById("colors-list");
+  const colorsCloseBtn = document.getElementById("colors-close-btn");
+  const colorsResetBtn = document.getElementById("colors-reset-btn");
 
   let state = null;
   let selectedUnitId = null;
@@ -121,12 +126,36 @@
   const HUMAN_ID = "rome";
   // Historic civ colours + names, driven by the engine roster.
   const CIV_COLORS = {};
+  const HISTORIC_COLORS = {};
   const CIV_ADJ = {};
   const CIV_CAPITAL = {};
   for (const c of engine.CIV_ROSTER || []) {
     CIV_COLORS[c.id] = c.color;
+    HISTORIC_COLORS[c.id] = c.color;
     CIV_ADJ[c.id] = c.adjective;
     CIV_CAPITAL[c.id] = c.capital;
+  }
+
+  const COLOR_STORE_KEY = "hegemon_civ_colors";
+
+  function applyCivColor(id, color) {
+    CIV_COLORS[id] = color;
+    try {
+      document.documentElement.style.setProperty("--civ-" + id, color);
+    } catch (e) {}
+  }
+
+  function saveCivColors() {
+    try {
+      window.localStorage.setItem(COLOR_STORE_KEY, JSON.stringify(CIV_COLORS));
+    } catch (e) {}
+  }
+
+  function loadSavedColors() {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(COLOR_STORE_KEY) || "{}");
+      for (const id of Object.keys(saved)) applyCivColor(id, saved[id]);
+    } catch (e) {}
   }
 
   function hexToRgba(hex, a) {
@@ -1371,7 +1400,51 @@
     });
   }
 
+  // ===== Civilization colour picker =====
+  function buildColorControls() {
+    if (!colorsListEl) return;
+    colorsListEl.innerHTML = "";
+    for (const c of engine.CIV_ROSTER || []) {
+      const row = document.createElement("label");
+      row.className = "color-row";
+      const input = document.createElement("input");
+      input.type = "color";
+      input.value = CIV_COLORS[c.id] || c.color;
+      input.addEventListener("input", function () {
+        applyCivColor(c.id, input.value);
+        saveCivColors();
+        if (state) render();
+      });
+      const name = document.createElement("span");
+      name.textContent = c.civ + (c.id === HUMAN_ID ? " (you)" : "");
+      row.appendChild(input);
+      row.appendChild(name);
+      colorsListEl.appendChild(row);
+    }
+  }
+
+  if (colorsBtn && colorsModalEl) {
+    colorsBtn.addEventListener("click", function () {
+      buildColorControls();
+      colorsModalEl.classList.remove("hidden");
+    });
+    if (colorsCloseBtn) colorsCloseBtn.addEventListener("click", function () { colorsModalEl.classList.add("hidden"); });
+    colorsModalEl.addEventListener("click", function (e) {
+      if (e.target === colorsModalEl) colorsModalEl.classList.add("hidden");
+    });
+    if (colorsResetBtn) {
+      colorsResetBtn.addEventListener("click", function () {
+        for (const id of Object.keys(HISTORIC_COLORS)) applyCivColor(id, HISTORIC_COLORS[id]);
+        saveCivColors();
+        buildColorControls();
+        if (state) render();
+      });
+    }
+  }
+
   resultNewGameBtn.addEventListener("click", newGame);
+
+  loadSavedColors();
 
   let resizeTimer = null;
   window.addEventListener("resize", function () {

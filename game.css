@@ -562,27 +562,27 @@ button:hover:not(:disabled) {
 }
 
 .tile.owner-rome {
-  box-shadow: inset 0 0 0 2.5px #c0392b, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px var(--civ-rome, #c0392b), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-carthage {
-  box-shadow: inset 0 0 0 2.5px #8e44ad, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px var(--civ-carthage, #8e44ad), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-greece {
-  box-shadow: inset 0 0 0 2.5px #2e86de, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px var(--civ-greece, #2e86de), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-egypt {
-  box-shadow: inset 0 0 0 2.5px #d4ac0d, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px var(--civ-egypt, #d4ac0d), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-gaul {
-  box-shadow: inset 0 0 0 2.5px #27ae60, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px var(--civ-gaul, #27ae60), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-parthia {
-  box-shadow: inset 0 0 0 2.5px #e67e22, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px var(--civ-parthia, #e67e22), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 /* ===== Command panel ===== */
@@ -994,6 +994,36 @@ button:hover:not(:disabled) {
   border-radius: 2px;
   margin-right: 6px;
   vertical-align: middle;
+}
+
+/* ===== Colour picker ===== */
+.colors-card {
+  width: min(360px, 100%);
+  text-align: left;
+}
+
+.colors-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.color-row input[type="color"] {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
 }
 
 /* ===== Crossroads event card ===== */
