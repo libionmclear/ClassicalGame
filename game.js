@@ -593,6 +593,12 @@
     if (hoveredPathKeys.has(key)) btn.classList.add("path-preview");
     if (combatFlashKeys.has(key)) btn.classList.add("combat-flash");
 
+    // Weather overlay (the game's only luck) on tiles you can currently see.
+    if (isVisible && state.weather && state.weather.current) {
+      const wx = state.weather.current[tile.region];
+      if (wx && wx !== "clear") btn.classList.add("wx-" + wx);
+    }
+
     const selectedUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
     if (selectedUnit && selectedUnit.position.q === q && selectedUnit.position.r === r) {
       btn.classList.add("selected");
