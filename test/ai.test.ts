@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createInitialGameState, getVictoryStatus } from "../src/engine";
-import { chooseAiAction, runAiTurn } from "../src/engine/ai";
+import { chooseAiAction, runAiTurn, aggression } from "../src/engine/ai";
 import { loadScenario } from "../src/engine/scenarios";
-import type { CreateGameConfig } from "../src/engine/types";
+import type { CreateGameConfig, GameState } from "../src/engine/types";
 
 function makeState(
   units: NonNullable<NonNullable<CreateGameConfig["map"]>["units"]>,
@@ -25,6 +25,37 @@ function makeState(
     map: { width: 8, height: 8, regions: ["core"], tiles, units, cities }
   });
 }
+
+test("aggression temperament scales monotonically with difficulty", () => {
+  const easy = aggression({ difficulty: "easy" } as GameState);
+  const normal = aggression({ difficulty: "normal" } as GameState);
+  const hard = aggression({ difficulty: "hard" } as GameState);
+
+  // Aggressive AIs break off later (lower wounded threshold) and prize assaults.
+  assert.ok(hard.wounded < normal.wounded && normal.wounded < easy.wounded);
+  assert.ok(hard.cityBias > normal.cityBias && normal.cityBias > easy.cityBias);
+  // Hard accepts losing trades; easy only takes clearly winning ones.
+  assert.equal(hard.acceptLoss, true);
+  assert.equal(easy.requireBetter, true);
+  assert.equal(normal.acceptLoss, false);
+  assert.equal(normal.requireBetter, false);
+});
+
+test("a bolder AI takes an even trade a cautious AI declines", () => {
+  // An archer striking a spearman is an even swap (both lose the same hp) that
+  // the attacker survives. Normal/hard press it; easy holds out for a clear win.
+  const units = {
+    a: { id: "a", type: "archer", ownerId: "p1", position: { q: 1, r: 1 }, movementRemaining: 1 },
+    d: { id: "d", type: "spearman", ownerId: "p2", position: { q: 2, r: 1 } }
+  };
+  // Enemy city kept far away so no city-assault option competes.
+  const cities = { c2: { id: "c2", ownerId: "p2", position: { q: 7, r: 7 }, population: 1 } };
+  const base = makeState(units, cities);
+
+  assert.equal(chooseAiAction({ ...base, difficulty: "normal" as const }, "p1").type, "ATTACK");
+  assert.equal(chooseAiAction({ ...base, difficulty: "hard" as const }, "p1").type, "ATTACK");
+  assert.notEqual(chooseAiAction({ ...base, difficulty: "easy" as const }, "p1").type, "ATTACK");
+});
 
 test("ai chooses a valid action for the active player", () => {
   const state = createInitialGameState(loadScenario("italia").config);

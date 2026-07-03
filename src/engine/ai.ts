@@ -27,7 +27,32 @@ const RESEARCH_PRIORITY = [
 ];
 
 const EXPANSION_TARGET = 3;
-const WOUNDED_FRACTION = 0.4;
+
+// Difficulty shapes how boldly the AI fights (the economy handicap lives in the
+// engine's income step; this governs combat temperament).
+//  - wounded:      hp fraction below which a unit breaks off to heal
+//  - cityBias:     added to the score of assaulting an enemy city
+//  - minHpFrac:    minimum survivable hp fraction before a cautious AI will strike
+//  - requireBetter: only strike trades it comes out strictly ahead on (easy)
+//  - acceptLoss:   strike whenever it survives — even a losing trade — or can kill (hard)
+export interface AggressionProfile {
+  wounded: number;
+  cityBias: number;
+  minHpFrac: number;
+  requireBetter: boolean;
+  acceptLoss: boolean;
+}
+
+export function aggression(state: GameState): AggressionProfile {
+  switch (state.difficulty) {
+    case "easy":
+      return { wounded: 0.55, cityBias: -150, minHpFrac: 0.35, requireBetter: true, acceptLoss: false };
+    case "hard":
+      return { wounded: 0.25, cityBias: 220, minHpFrac: 0, requireBetter: false, acceptLoss: true };
+    default:
+      return { wounded: 0.4, cityBias: 0, minHpFrac: 0, requireBetter: false, acceptLoss: false };
+  }
+}
 
 function moveCtx(unit: Unit) {
   const def = UNITS[unit.type];
@@ -119,30 +144,46 @@ function foundCityAction(state: GameState, player: Player): GameAction | null {
 
 function attackAction(state: GameState, player: Player): GameAction | null {
   let best: { action: GameAction; score: number } | null = null;
+  const agg = aggression(state);
 
   for (const attacker of unitsOf(state, player)) {
     const def = UNITS[attacker.type];
     if (def.attack <= 0 || attacker.movementRemaining <= 0) continue;
 
-    // Enemy units — only strike when the trade is worth it.
+    // Enemy units — willingness to trade scales with difficulty.
     for (const target of Object.values(state.map.units)) {
       if (target.ownerId === player.id) continue;
       if (distance(attacker.position, target.position) > def.range) continue;
       const preview = computeCombatPreview(state, attacker.id, target.id);
       const kills = preview.defenderRemainingHp <= 0;
       const survives = preview.attackerRemainingHp > 0;
-      const favorable = survives && (kills || preview.damageToDefender >= preview.damageToAttacker);
+      const evenOrBetter = preview.damageToDefender >= preview.damageToAttacker;
+
+      let favorable: boolean;
+      if (agg.acceptLoss) {
+        // Hard: press the attack whenever it survives, can kill, or trades even.
+        favorable = kills || survives || evenOrBetter;
+      } else if (agg.requireBetter) {
+        // Easy: only clean, winning trades that leave the unit reasonably whole.
+        const healthy = preview.attackerRemainingHp >= UNITS[attacker.type].maxHp * agg.minHpFrac;
+        favorable = survives && healthy && (kills || preview.damageToDefender > preview.damageToAttacker);
+      } else {
+        // Normal: any non-losing trade it survives.
+        favorable = survives && (kills || evenOrBetter);
+      }
       if (!favorable) continue;
+
       const score = (kills ? 1000 : 0) + preview.damageToDefender - preview.damageToAttacker;
       if (!best || score > best.score) {
         best = { action: { type: "ATTACK", playerId: player.id, attackerId: attacker.id, defenderId: target.id }, score };
       }
     }
 
-    // Enemy cities — always safe (no retaliation); siege excels.
+    // Enemy cities — always safe (no retaliation); siege excels. Aggressive AIs
+    // prize the assault more, timid ones hang back.
     for (const city of enemyCities(state, player.id)) {
       if (distance(attacker.position, city.position) > def.range) continue;
-      const score = 450 + (def.siegeBonus ? 300 : 0) - city.hp * 0.5;
+      const score = 450 + (def.siegeBonus ? 300 : 0) - city.hp * 0.5 + agg.cityBias;
       if (!best || score > best.score) {
         best = { action: { type: "ATTACK_CITY", playerId: player.id, attackerId: attacker.id, cityId: city.id }, score };
       }
@@ -222,10 +263,11 @@ function reachableAlong(state: GameState, unit: Unit, path: Coord[]): Coord | nu
 }
 
 function maneuverAction(state: GameState, player: Player): GameAction | null {
+  const woundedFraction = aggression(state).wounded;
   for (const unit of unitsOf(state, player)) {
     if (!isMilitary(unit) || unit.movementRemaining <= 0) continue;
 
-    const wounded = unit.hp < UNITS[unit.type].maxHp * WOUNDED_FRACTION;
+    const wounded = unit.hp < UNITS[unit.type].maxHp * woundedFraction;
     const target = wounded
       ? nearestCity(ownCities(state, player.id), unit.position)
       : nearestCity(enemyCities(state, player.id), unit.position);
