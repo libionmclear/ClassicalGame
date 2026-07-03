@@ -12,6 +12,7 @@ export type WeatherType = "clear" | "rain" | "fog" | "storm" | "heat";
 
 export type DomainType = "land" | "naval" | "civilian";
 export type Veterancy = "recruit" | "veteran" | "elite";
+export type Difficulty = "easy" | "normal" | "hard";
 
 export interface Coord {
   q: number;
@@ -124,8 +125,12 @@ export interface GameState {
   version: number;
   seed: string;
   turn: number;
-  /** Match ends and score is tallied once turn passes this. */
+  /** Match ends and score is tallied once turn passes this. 0 = no limit (domination only). */
   turnLimit: number;
+  /** AI economic handicap applied to every non-human player. */
+  difficulty: Difficulty;
+  /** The one player exempt from the difficulty handicap (the human), if any. */
+  humanPlayerId: string | null;
   currentPlayerIndex: number;
   players: Player[];
   playersById: Record<string, Player>;
@@ -252,6 +257,8 @@ export interface CombatPreview {
 export interface CreateGameConfig {
   seed?: string;
   turnLimit?: number;
+  difficulty?: Difficulty;
+  humanPlayerId?: string | null;
   players?: Partial<Player>[];
   map?: {
     width?: number;

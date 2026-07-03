@@ -5,6 +5,7 @@ import {
   applyAction,
   canResearch,
   computeCombatPreview,
+  computePlayerIncome,
   createInitialGameState,
   getVictoryStatus,
   keyOf,
@@ -214,6 +215,30 @@ test("no winner while both capitals stand before the turn limit", () => {
   const victory = getVictoryStatus(state);
   assert.equal(victory.winnerId, null);
   assert.equal(victory.type, null);
+});
+
+test("difficulty handicaps the AI economy but never the human", () => {
+  const base = buildState();
+  base.humanPlayerId = "p1";
+
+  const normalState = { ...base, difficulty: "normal" as const };
+  const hardState = { ...base, difficulty: "hard" as const };
+  const easyState = { ...base, difficulty: "easy" as const };
+
+  const total = (i: { food: number; production: number; gold: number; science: number }) =>
+    i.food + i.production + i.gold + i.science;
+
+  // The AI (p2) earns more on hard and less on easy than on normal.
+  const aiNormal = computePlayerIncome(normalState, "p2");
+  const aiHard = computePlayerIncome(hardState, "p2");
+  const aiEasy = computePlayerIncome(easyState, "p2");
+  assert.ok(total(aiHard) > total(aiNormal), "hard AI out-earns normal AI");
+  assert.ok(total(aiEasy) < total(aiNormal), "easy AI under-earns normal AI");
+
+  // The human (p1) is exempt: identical income at every difficulty.
+  const humanNormal = computePlayerIncome(normalState, "p1");
+  const humanHard = computePlayerIncome(hardState, "p1");
+  assert.deepEqual(humanHard, humanNormal);
 });
 
 test("score victory is awarded to the leader once the turn limit passes", () => {

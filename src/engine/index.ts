@@ -625,15 +625,16 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   assertPlayerTurn(state, action.playerId);
   const endingPlayer = getCurrentPlayer(state);
 
+  const mult = aiEconomyMultiplier(state, endingPlayer.id);
   for (const cityId of endingPlayer.cityIds) {
     const yields = computeCityYield(state, cityId);
-    endingPlayer.gold += yields.gold;
-    endingPlayer.science += yields.science;
+    endingPlayer.gold += Math.round(yields.gold * mult);
+    endingPlayer.science += Math.round(yields.science * mult);
 
     const city = state.map.cities[cityId];
     if (city) {
       // Food is banked per-city and grows population when it fills the bar.
-      city.food = (city.food ?? 0) + yields.food;
+      city.food = (city.food ?? 0) + Math.round(yields.food * mult);
       let need = growthCost(city.population);
       while (city.population < MAX_POPULATION && city.food >= need) {
         city.food -= need;
@@ -641,7 +642,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
         need = growthCost(city.population);
       }
       // Production is banked per-city and drives the build queue.
-      city.production = (city.production ?? 0) + yields.production;
+      city.production = (city.production ?? 0) + Math.round(yields.production * mult);
       processCityQueue(state, city);
     }
   }
@@ -795,6 +796,8 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
     seed: String(config.seed || "hegemon-seed"),
     turn: 1,
     turnLimit: config.turnLimit ?? 60,
+    difficulty: config.difficulty ?? "normal",
+    humanPlayerId: config.humanPlayerId ?? null,
     currentPlayerIndex: 0,
     players,
     playersById: makePlayersById(players),
@@ -829,6 +832,20 @@ export function computeTerritory(state: GameState): Record<string, string> {
   return result;
 }
 
+// Difficulty is a per-turn economic handicap on every non-human player. The
+// human (state.humanPlayerId) is always unaffected — "hard" means the AI grows
+// faster, "easy" means it grows slower. A pure multiplier keeps it deterministic.
+const DIFFICULTY_AI_MULTIPLIER: Record<string, number> = {
+  easy: 0.7,
+  normal: 1,
+  hard: 1.4
+};
+
+export function aiEconomyMultiplier(state: GameState, playerId: string): number {
+  if (!state.humanPlayerId || playerId === state.humanPlayerId) return 1;
+  return DIFFICULTY_AI_MULTIPLIER[state.difficulty] ?? 1;
+}
+
 export function computePlayerIncome(
   state: GameState,
   playerId: string
@@ -836,13 +853,14 @@ export function computePlayerIncome(
   const player = state.playersById[playerId];
   const income = { food: 0, production: 0, gold: 0, science: 0 };
   if (!player) return income;
+  const mult = aiEconomyMultiplier(state, playerId);
   for (const cityId of player.cityIds) {
     if (!state.map.cities[cityId]) continue;
     const y = computeCityYield(state, cityId);
-    income.food += y.food;
-    income.production += y.production;
-    income.gold += y.gold;
-    income.science += y.science;
+    income.food += Math.round(y.food * mult);
+    income.production += Math.round(y.production * mult);
+    income.gold += Math.round(y.gold * mult);
+    income.science += Math.round(y.science * mult);
   }
   const upkeep = player.unitIds.reduce((sum, id) => sum + (state.map.units[id] ? UNITS[state.map.units[id].type].upkeep || 0 : 0), 0);
   income.gold -= upkeep;

@@ -14,6 +14,7 @@
   const victoryModeSelectEl = document.getElementById("victory-mode-select");
   const turnsInputEl = document.getElementById("turns-input");
   const turnsPickerEl = document.getElementById("turns-picker");
+  const difficultySelectEl = document.getElementById("difficulty-select");
   const selectionLineEl = document.getElementById("selection-line");
   const actionLogEl = document.getElementById("action-log");
   const clearSelectionBtn = document.getElementById("clear-selection-btn");
@@ -1359,6 +1360,14 @@
       if (turns > 300) turns = 300;
       config.turnLimit = turns;
       label += " — Quick (" + turns + " turns)";
+    }
+
+    // Difficulty handicaps the AI economy; the human (Rome) is exempt.
+    const difficulty = (difficultySelectEl && difficultySelectEl.value) || "normal";
+    config.difficulty = difficulty;
+    config.humanPlayerId = HUMAN_ID;
+    if (difficulty !== "normal") {
+      label += ", " + difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
     }
 
     state = engine.createInitialGameState(config);
