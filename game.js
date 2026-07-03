@@ -39,12 +39,12 @@
   // Units offered in the city build menu (order = progression).
   const BUILDABLE = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "settler"];
   const UNIT_META = {
-    warrior: { name: "Warrior", role: "Basic melee infantry" },
-    archer: { name: "Archer", role: "Ranged support (range 2, no retaliation from afar)" },
-    spearman: { name: "Spearman", role: "Anti-cavalry: +50% attacking and defending vs mounted" },
-    swordsman: { name: "Swordsman", role: "Heavy melee — high attack" },
-    horseman: { name: "Horseman", role: "Fast cavalry (3 movement)" },
-    siege: { name: "Siege Ballista", role: "Range 2, devastating vs cities, fragile vs troops" },
+    warrior: { name: "Warrior", role: "Basic melee infantry — cheap, no strong matchups" },
+    archer: { name: "Archer", role: "Ranged (range 2): strikes with no reply at distance, but fragile in melee and easy prey for cavalry" },
+    spearman: { name: "Spearman", role: "Anti-cavalry: +60% vs mounted (attack & defence). Weak to heavy infantry" },
+    swordsman: { name: "Swordsman", role: "Heavy infantry: grinds spearmen and skirmishers" },
+    horseman: { name: "Horseman", role: "Cavalry (3 move): runs down archers & light foot — but spears counter it" },
+    siege: { name: "Siege Ballista", role: "Range 2, devastating vs cities, fragile in the open field" },
     settler: { name: "Settler", role: "Founds a new city" }
   };
 
@@ -512,9 +512,13 @@
       }
       try {
         const prev = engine.computeCombatPreview(state, selected.id, enemyUnit.id);
+        const tactic = (prev.modifiers || []).find(
+          (m) => /vs |Combined|Supported|Flanking/.test(m)
+        );
         logAction(
           "⚔️ " + selected.type + " strikes " + enemyUnit.type + ": deals " + prev.damageToDefender +
-          (prev.defenderRemainingHp <= 0 ? " — destroyed!" : ", takes " + prev.damageToAttacker)
+          (prev.defenderRemainingHp <= 0 ? " — destroyed!" : ", takes " + prev.damageToAttacker) +
+          (tactic ? " [" + tactic + "]" : "")
         );
       } catch (e) {}
       flashCombat([key, attackerKey]);
@@ -647,9 +651,12 @@
         try {
           const preview = engine.computeCombatPreview(state, selectedUnit.id, enemyUnit.id);
           hoverHint =
-            "⚔️ Attack " + enemyUnit.type + ": enemy −" + preview.damageToDefender +
-            " HP (→" + preview.defenderRemainingHp + "), you −" + preview.damageToAttacker +
-            " HP (→" + preview.attackerRemainingHp + ")";
+            "⚔️ " + selectedUnit.type + " → " + enemyUnit.type + ": enemy −" + preview.damageToDefender +
+            " (→" + preview.defenderRemainingHp + "), you −" + preview.damageToAttacker +
+            " (→" + preview.attackerRemainingHp + ")";
+          if (preview.modifiers && preview.modifiers.length) {
+            hoverHint += "  ·  " + preview.modifiers.join(" · ");
+          }
         } catch {
           hoverHint = "Target out of range.";
         }

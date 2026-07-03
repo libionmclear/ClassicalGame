@@ -51,6 +51,46 @@ test("spearmen hit cavalry harder than warriors do (anti-cavalry attack)", () =>
   );
 });
 
+test("cavalry runs down archers (counter bonus vs ranged)", () => {
+  const state = makeState({
+    prey: { id: "prey", type: "archer", ownerId: "p2", position: { q: 2, r: 2 } },
+    horse: { id: "horse", type: "horseman", ownerId: "p1", position: { q: 2, r: 1 } },
+    warr: { id: "warr", type: "warrior", ownerId: "p1", position: { q: 3, r: 2 } }
+  });
+  const cav = computeCombatPreview(state, "horse", "prey");
+  const foot = computeCombatPreview(state, "warr", "prey");
+  assert.ok(cav.damageToDefender > foot.damageToDefender, "cavalry should out-damage infantry vs archers");
+  assert.ok(cav.modifiers.some((m) => /cavalry vs ranged/i.test(m)), "modifier list should explain the counter");
+});
+
+test("spears blunt a cavalry charge (defensive counter is visible)", () => {
+  const state = makeState({
+    horse: { id: "horse", type: "horseman", ownerId: "p1", position: { q: 2, r: 2 } },
+    spear: { id: "spear", type: "spearman", ownerId: "p2", position: { q: 2, r: 1 } }
+  });
+  const preview = computeCombatPreview(state, "horse", "spear");
+  assert.ok(preview.modifiers.some((m) => /spearmen vs cavalry/i.test(m)), "defender's anti-cavalry counter should show");
+});
+
+test("combined arms: a mixed force hits harder than a lone unit", () => {
+  const mixed = makeState({
+    lead: { id: "lead", type: "warrior", ownerId: "p1", position: { q: 2, r: 2 } },
+    // adjacent to the attacker but NOT the target, so this is composition, not flanking
+    arch: { id: "arch", type: "archer", ownerId: "p1", position: { q: 1, r: 2 } },
+    horse: { id: "horse", type: "horseman", ownerId: "p1", position: { q: 1, r: 3 } },
+    target: { id: "target", type: "settler", ownerId: "p2", position: { q: 3, r: 2 } }
+  });
+  const solo = makeState({
+    lead: { id: "lead", type: "warrior", ownerId: "p1", position: { q: 2, r: 2 } },
+    target: { id: "target", type: "settler", ownerId: "p2", position: { q: 3, r: 2 } }
+  });
+  const mixedHit = computeCombatPreview(mixed, "lead", "target");
+  const soloHit = computeCombatPreview(solo, "lead", "target");
+  assert.ok(mixedHit.damageToDefender > soloHit.damageToDefender, "combined arms should raise damage");
+  assert.ok(mixedHit.modifiers.some((m) => /combined arms/i.test(m)), "combined-arms modifier should be listed");
+  assert.ok(!mixedHit.modifiers.some((m) => /flanking/i.test(m)), "support units are not adjacent to the target, so no flanking");
+});
+
 test("siege engines crack cities far harder than infantry", () => {
   const city = { c2: { id: "c2", ownerId: "p2", position: { q: 3, r: 3 }, population: 2, hp: 60, maxHp: 60, isCapital: true } };
   const siegeState = makeState(

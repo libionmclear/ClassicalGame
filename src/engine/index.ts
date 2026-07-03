@@ -1,4 +1,13 @@
-import { TECHS, TERRAIN, UNITS, UNIT_BUILD_COSTS, WEATHER_STATES } from "./data";
+import {
+  TECHS,
+  TERRAIN,
+  UNITS,
+  UNIT_BUILD_COSTS,
+  WEATHER_STATES,
+  MELEE_CATEGORIES,
+  RANGED_CATEGORIES,
+  CATEGORY_LABELS
+} from "./data";
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
@@ -262,6 +271,32 @@ function riverAttackPenalty(state: GameState, attacker: Unit, defender: Unit): n
   return state.map.rivers[k] ? 0.25 : 0;
 }
 
+const pct = (n: number): string => `${n >= 0 ? "+" : "−"}${Math.round(Math.abs(n) * 100)}%`;
+const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+function categoryOf(unit: Unit): string {
+  return UNITS[unit.type].category || "infantry";
+}
+
+// A unit fights as part of a "force": itself, anything stacked on its tile, and
+// friendly units adjacent to it. Diversity of roles grants a combined-arms bonus.
+function combinedArmsBonus(state: GameState, attacker: Unit): { bonus: number; label: string | null } {
+  const zone = [attacker.position, ...neighborsOf(attacker.position)];
+  const categories = new Set<string>();
+  for (const unit of Object.values(state.map.units)) {
+    if (unit.ownerId !== attacker.ownerId || unit.hp <= 0) continue;
+    if (zone.some((c) => c.q === unit.position.q && c.r === unit.position.r)) {
+      categories.add(categoryOf(unit));
+    }
+  }
+  const hasMelee = [...categories].some((c) => MELEE_CATEGORIES.has(c));
+  const hasRanged = [...categories].some((c) => RANGED_CATEGORIES.has(c));
+  const hasMounted = categories.has("mounted");
+  if (hasMelee && hasRanged && hasMounted) return { bonus: 0.15, label: "Combined arms +15%" };
+  if (hasMelee && hasRanged) return { bonus: 0.1, label: "Supported +10%" };
+  return { bonus: 0, label: null };
+}
+
 export function computeCombatPreview(state: GameState, attackerId: string, defenderId: string): CombatPreview {
   const attacker = unitAt(state, attackerId);
   const defender = unitAt(state, defenderId);
@@ -274,13 +309,40 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
 
   const defenderTile = tileAt(state, defender.position);
   const weather = state.weather.current[defenderTile.region] || "clear";
+  const atkCat = categoryOf(attacker);
+  const defCat = categoryOf(defender);
+  const modifiers: string[] = [];
 
-  let attackMult =
-    veterancyMultiplier(attacker.veterancy) + flankingBonus(state, attacker, defender) - riverAttackPenalty(state, attacker, defender);
-  if (attackerDef.bonusVsMounted && defenderDef.mounted) attackMult += attackerDef.bonusVsMounted;
+  let attackMult = veterancyMultiplier(attacker.veterancy);
+  const flank = flankingBonus(state, attacker, defender);
+  if (flank > 0) {
+    attackMult += flank;
+    modifiers.push(`Flanking ${pct(flank)}`);
+  }
+  const river = riverAttackPenalty(state, attacker, defender);
+  if (river > 0) {
+    attackMult -= river;
+    modifiers.push(`River crossing ${pct(-river)}`);
+  }
+  const counterAtk = (attackerDef.counters && attackerDef.counters[defCat]) || 0;
+  if (counterAtk > 0) {
+    attackMult += counterAtk;
+    modifiers.push(`${cap(CATEGORY_LABELS[atkCat] || atkCat)} vs ${CATEGORY_LABELS[defCat] || defCat} ${pct(counterAtk)}`);
+  }
+  const combined = combinedArmsBonus(state, attacker);
+  if (combined.bonus > 0) {
+    attackMult += combined.bonus;
+    modifiers.push(combined.label as string);
+  }
 
-  let defenseMult = defenderTerrainBonus(state, defender) + veterancyMultiplier(defender.veterancy);
-  if (defenderDef.bonusVsMounted && attackerDef.mounted) defenseMult += defenderDef.bonusVsMounted;
+  const terrainBonus = defenderTerrainBonus(state, defender);
+  let defenseMult = terrainBonus + veterancyMultiplier(defender.veterancy);
+  if (terrainBonus > 0) modifiers.push(`Enemy terrain ${pct(terrainBonus)}`);
+  const counterDef = (defenderDef.counters && defenderDef.counters[atkCat]) || 0;
+  if (counterDef > 0) {
+    defenseMult += counterDef;
+    modifiers.push(`Enemy ${CATEGORY_LABELS[defCat] || defCat} vs ${CATEGORY_LABELS[atkCat] || atkCat} ${pct(counterDef)}`);
+  }
 
   const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
   const defPower = defenderDef.defense * (defender.hp / defender.maxHp) * Math.max(0.1, defenseMult);
@@ -290,16 +352,21 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
 
   if (weather === "fog") {
     damageToDefender = Math.max(1, Math.round(damageToDefender * 0.95));
+    modifiers.push("Fog −5%");
   }
 
   const rangedNoRetaliation = attackerDef.range > 1 && distance(attacker.position, defender.position) > 1;
-  if (rangedNoRetaliation) damageToAttacker = 0;
+  if (rangedNoRetaliation) {
+    damageToAttacker = 0;
+    modifiers.push("Ranged — no retaliation");
+  }
 
   return {
     damageToDefender,
     damageToAttacker,
     attackerRemainingHp: Math.max(0, attacker.hp - damageToAttacker),
-    defenderRemainingHp: Math.max(0, defender.hp - damageToDefender)
+    defenderRemainingHp: Math.max(0, defender.hp - damageToDefender),
+    modifiers
   };
 }
 

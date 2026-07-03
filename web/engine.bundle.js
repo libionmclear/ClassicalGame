@@ -151,15 +151,70 @@ var HegemonEngine = (() => {
     }
   };
   var UNITS = {
-    warrior: { domain: "land", movement: 2, attack: 20, defense: 18, maxHp: 20, range: 1, upkeep: 1 },
-    archer: { domain: "land", movement: 2, attack: 16, defense: 12, maxHp: 18, range: 2, upkeep: 1 },
-    spearman: { domain: "land", movement: 2, attack: 15, defense: 22, maxHp: 20, range: 1, upkeep: 1, requiresTech: "bronze-working", bonusVsMounted: 0.5 },
-    swordsman: { domain: "land", movement: 2, attack: 27, defense: 20, maxHp: 22, range: 1, upkeep: 2, requiresTech: "iron-working" },
-    horseman: { domain: "land", movement: 3, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "horseback-riding" },
-    siege: { domain: "land", movement: 1, attack: 12, defense: 8, maxHp: 16, range: 2, upkeep: 2, requiresTech: "siegecraft", siegeBonus: 1.2 },
-    trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing" },
-    merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1 },
-    settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1 }
+    warrior: { domain: "land", movement: 2, attack: 20, defense: 18, maxHp: 20, range: 1, upkeep: 1, category: "infantry" },
+    archer: { domain: "land", movement: 2, attack: 16, defense: 12, maxHp: 18, range: 2, upkeep: 1, category: "ranged" },
+    spearman: {
+      domain: "land",
+      movement: 2,
+      attack: 15,
+      defense: 22,
+      maxHp: 20,
+      range: 1,
+      upkeep: 1,
+      requiresTech: "bronze-working",
+      category: "spear",
+      counters: { mounted: 0.6 }
+    },
+    swordsman: {
+      domain: "land",
+      movement: 2,
+      attack: 27,
+      defense: 20,
+      maxHp: 22,
+      range: 1,
+      upkeep: 2,
+      requiresTech: "iron-working",
+      category: "heavy",
+      counters: { ranged: 0.35, spear: 0.2 }
+    },
+    horseman: {
+      domain: "land",
+      movement: 3,
+      attack: 22,
+      defense: 14,
+      maxHp: 20,
+      range: 1,
+      upkeep: 2,
+      mounted: true,
+      requiresTech: "horseback-riding",
+      category: "mounted",
+      counters: { ranged: 0.5, infantry: 0.15 }
+    },
+    siege: {
+      domain: "land",
+      movement: 1,
+      attack: 12,
+      defense: 8,
+      maxHp: 16,
+      range: 2,
+      upkeep: 2,
+      requiresTech: "siegecraft",
+      category: "siege",
+      siegeBonus: 1.2
+    },
+    trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing", category: "ranged" },
+    merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1, category: "infantry" },
+    settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1, category: "infantry" }
+  };
+  var MELEE_CATEGORIES = /* @__PURE__ */ new Set(["infantry", "spear", "heavy"]);
+  var RANGED_CATEGORIES = /* @__PURE__ */ new Set(["ranged", "siege"]);
+  var CATEGORY_LABELS = {
+    infantry: "infantry",
+    spear: "spearmen",
+    heavy: "heavy infantry",
+    ranged: "ranged",
+    mounted: "cavalry",
+    siege: "siege"
   };
   var UNIT_BUILD_COSTS = {
     warrior: 12,
@@ -552,6 +607,27 @@ var HegemonEngine = (() => {
     const k = edgeKey(attacker.position, defender.position);
     return state.map.rivers[k] ? 0.25 : 0;
   }
+  var pct = (n) => `${n >= 0 ? "+" : "\u2212"}${Math.round(Math.abs(n) * 100)}%`;
+  var cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  function categoryOf(unit) {
+    return UNITS[unit.type].category || "infantry";
+  }
+  function combinedArmsBonus(state, attacker) {
+    const zone = [attacker.position, ...neighborsOf(attacker.position)];
+    const categories = /* @__PURE__ */ new Set();
+    for (const unit of Object.values(state.map.units)) {
+      if (unit.ownerId !== attacker.ownerId || unit.hp <= 0) continue;
+      if (zone.some((c) => c.q === unit.position.q && c.r === unit.position.r)) {
+        categories.add(categoryOf(unit));
+      }
+    }
+    const hasMelee = [...categories].some((c) => MELEE_CATEGORIES.has(c));
+    const hasRanged = [...categories].some((c) => RANGED_CATEGORIES.has(c));
+    const hasMounted = categories.has("mounted");
+    if (hasMelee && hasRanged && hasMounted) return { bonus: 0.15, label: "Combined arms +15%" };
+    if (hasMelee && hasRanged) return { bonus: 0.1, label: "Supported +10%" };
+    return { bonus: 0, label: null };
+  }
   function computeCombatPreview(state, attackerId, defenderId) {
     const attacker = unitAt(state, attackerId);
     const defender = unitAt(state, defenderId);
@@ -562,24 +638,57 @@ var HegemonEngine = (() => {
     }
     const defenderTile = tileAt(state, defender.position);
     const weather = state.weather.current[defenderTile.region] || "clear";
-    let attackMult = veterancyMultiplier(attacker.veterancy) + flankingBonus(state, attacker, defender) - riverAttackPenalty(state, attacker, defender);
-    if (attackerDef.bonusVsMounted && defenderDef.mounted) attackMult += attackerDef.bonusVsMounted;
-    let defenseMult = defenderTerrainBonus(state, defender) + veterancyMultiplier(defender.veterancy);
-    if (defenderDef.bonusVsMounted && attackerDef.mounted) defenseMult += defenderDef.bonusVsMounted;
+    const atkCat = categoryOf(attacker);
+    const defCat = categoryOf(defender);
+    const modifiers = [];
+    let attackMult = veterancyMultiplier(attacker.veterancy);
+    const flank = flankingBonus(state, attacker, defender);
+    if (flank > 0) {
+      attackMult += flank;
+      modifiers.push(`Flanking ${pct(flank)}`);
+    }
+    const river = riverAttackPenalty(state, attacker, defender);
+    if (river > 0) {
+      attackMult -= river;
+      modifiers.push(`River crossing ${pct(-river)}`);
+    }
+    const counterAtk = attackerDef.counters && attackerDef.counters[defCat] || 0;
+    if (counterAtk > 0) {
+      attackMult += counterAtk;
+      modifiers.push(`${cap(CATEGORY_LABELS[atkCat] || atkCat)} vs ${CATEGORY_LABELS[defCat] || defCat} ${pct(counterAtk)}`);
+    }
+    const combined = combinedArmsBonus(state, attacker);
+    if (combined.bonus > 0) {
+      attackMult += combined.bonus;
+      modifiers.push(combined.label);
+    }
+    const terrainBonus = defenderTerrainBonus(state, defender);
+    let defenseMult = terrainBonus + veterancyMultiplier(defender.veterancy);
+    if (terrainBonus > 0) modifiers.push(`Enemy terrain ${pct(terrainBonus)}`);
+    const counterDef = defenderDef.counters && defenderDef.counters[atkCat] || 0;
+    if (counterDef > 0) {
+      defenseMult += counterDef;
+      modifiers.push(`Enemy ${CATEGORY_LABELS[defCat] || defCat} vs ${CATEGORY_LABELS[atkCat] || atkCat} ${pct(counterDef)}`);
+    }
     const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
     const defPower = defenderDef.defense * (defender.hp / defender.maxHp) * Math.max(0.1, defenseMult);
     let damageToDefender = Math.max(1, Math.round(20 * atkPower / (atkPower + defPower)));
     let damageToAttacker = Math.max(0, Math.round(14 * defPower / (atkPower + defPower)));
     if (weather === "fog") {
       damageToDefender = Math.max(1, Math.round(damageToDefender * 0.95));
+      modifiers.push("Fog \u22125%");
     }
     const rangedNoRetaliation = attackerDef.range > 1 && distance(attacker.position, defender.position) > 1;
-    if (rangedNoRetaliation) damageToAttacker = 0;
+    if (rangedNoRetaliation) {
+      damageToAttacker = 0;
+      modifiers.push("Ranged \u2014 no retaliation");
+    }
     return {
       damageToDefender,
       damageToAttacker,
       attackerRemainingHp: Math.max(0, attacker.hp - damageToAttacker),
-      defenderRemainingHp: Math.max(0, defender.hp - damageToDefender)
+      defenderRemainingHp: Math.max(0, defender.hp - damageToDefender),
+      modifiers
     };
   }
   function applyCombat(state, action) {
@@ -1417,14 +1526,14 @@ var HegemonEngine = (() => {
     return chosen.slice(0, n);
   }
   function placeStarters(capitalKey, tiles, spec, taken) {
-    const cap = parseKey(capitalKey);
+    const cap2 = parseKey(capitalKey);
     const inBounds = (c) => tiles[keyOf(c)] !== void 0;
-    const free = neighborsOf(cap).filter(
+    const free = neighborsOf(cap2).filter(
       (c) => inBounds(c) && tiles[keyOf(c)] && WALKABLE.has(tiles[keyOf(c)].terrain) && !taken.has(keyOf(c))
     );
-    const warrior = free[0] ?? cap;
+    const warrior = free[0] ?? cap2;
     taken.add(keyOf(warrior));
-    const settler = free.find((c) => keyOf(c) !== keyOf(warrior)) ?? cap;
+    const settler = free.find((c) => keyOf(c) !== keyOf(warrior)) ?? cap2;
     taken.add(keyOf(settler));
     return { warrior, settler };
   }

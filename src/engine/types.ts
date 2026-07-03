@@ -44,8 +44,10 @@ export interface UnitRule {
   mounted?: boolean;
   /** Tech that must be researched before this unit can be built. */
   requiresTech?: string;
-  /** Extra combat multiplier vs mounted units, both attacking and defending (anti-cavalry). */
-  bonusVsMounted?: number;
+  /** Tactical role used for the counter matrix: infantry | spear | heavy | ranged | mounted | siege. */
+  category?: string;
+  /** Combat multiplier bonus vs a defender/attacker of the given category (applies both ways). */
+  counters?: Record<string, number>;
   /** Extra attack multiplier when assaulting a city (siege engines). */
   siegeBonus?: number;
 }
@@ -207,6 +209,8 @@ export interface CombatPreview {
   damageToAttacker: number;
   attackerRemainingHp: number;
   defenderRemainingHp: number;
+  /** Human-readable list of the combat modifiers that applied (for the UI). */
+  modifiers: string[];
 }
 
 export interface CreateGameConfig {

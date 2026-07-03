@@ -103,16 +103,45 @@ export const TECHS: Record<string, TechRule> = {
   }
 };
 
+// Classical rock-paper-scissors, both when attacking and defending:
+//   spears beat cavalry; cavalry runs down skirmishers & light foot;
+//   heavy infantry grinds spears and closes on skirmishers; archers strike
+//   without retaliation at range but are fragile once caught in melee.
 export const UNITS: Record<string, UnitRule> = {
-  warrior: { domain: "land", movement: 2, attack: 20, defense: 18, maxHp: 20, range: 1, upkeep: 1 },
-  archer: { domain: "land", movement: 2, attack: 16, defense: 12, maxHp: 18, range: 2, upkeep: 1 },
-  spearman: { domain: "land", movement: 2, attack: 15, defense: 22, maxHp: 20, range: 1, upkeep: 1, requiresTech: "bronze-working", bonusVsMounted: 0.5 },
-  swordsman: { domain: "land", movement: 2, attack: 27, defense: 20, maxHp: 22, range: 1, upkeep: 2, requiresTech: "iron-working" },
-  horseman: { domain: "land", movement: 3, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "horseback-riding" },
-  siege: { domain: "land", movement: 1, attack: 12, defense: 8, maxHp: 16, range: 2, upkeep: 2, requiresTech: "siegecraft", siegeBonus: 1.2 },
-  trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing" },
-  merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1 },
-  settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1 }
+  warrior: { domain: "land", movement: 2, attack: 20, defense: 18, maxHp: 20, range: 1, upkeep: 1, category: "infantry" },
+  archer: { domain: "land", movement: 2, attack: 16, defense: 12, maxHp: 18, range: 2, upkeep: 1, category: "ranged" },
+  spearman: {
+    domain: "land", movement: 2, attack: 15, defense: 22, maxHp: 20, range: 1, upkeep: 1,
+    requiresTech: "bronze-working", category: "spear", counters: { mounted: 0.6 }
+  },
+  swordsman: {
+    domain: "land", movement: 2, attack: 27, defense: 20, maxHp: 22, range: 1, upkeep: 2,
+    requiresTech: "iron-working", category: "heavy", counters: { ranged: 0.35, spear: 0.2 }
+  },
+  horseman: {
+    domain: "land", movement: 3, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true,
+    requiresTech: "horseback-riding", category: "mounted", counters: { ranged: 0.5, infantry: 0.15 }
+  },
+  siege: {
+    domain: "land", movement: 1, attack: 12, defense: 8, maxHp: 16, range: 2, upkeep: 2,
+    requiresTech: "siegecraft", category: "siege", siegeBonus: 1.2
+  },
+  trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing", category: "ranged" },
+  merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1, category: "infantry" },
+  settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1, category: "infantry" }
+};
+
+// Composition roles for combined-arms bonuses.
+export const MELEE_CATEGORIES = new Set(["infantry", "spear", "heavy"]);
+export const RANGED_CATEGORIES = new Set(["ranged", "siege"]);
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  infantry: "infantry",
+  spear: "spearmen",
+  heavy: "heavy infantry",
+  ranged: "ranged",
+  mounted: "cavalry",
+  siege: "siege"
 };
 
 export const UNIT_BUILD_COSTS: Record<string, number> = {
