@@ -21,8 +21,10 @@ body {
   color: var(--text);
 }
 
+/* Utility: must beat later rules like `.result-modal { display: flex }`
+   (equal specificity would otherwise let the later rule win). */
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .app {
