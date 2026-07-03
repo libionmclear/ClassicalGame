@@ -45,7 +45,7 @@ if (modalVisible) fail("result modal is covering the board on a fresh game");
 
 // 1b) A fresh game auto-selects the capital, so the build menu is live immediately.
 const startSel = await page.locator("#selection-line").textContent();
-if (!/City:/.test(startSel || "")) fail("capital was not auto-selected on new game: " + startSel);
+if (/Nothing selected/.test(startSel || "")) fail("capital was not auto-selected on new game: " + startSel);
 const startBuild = await page.locator("#build-menu .build-item:not([disabled])").count();
 if (startBuild < 1) fail("build menu has no enabled options on a fresh game");
 
@@ -58,26 +58,26 @@ if ((await unitTiles.count()) === 0) fail("no rome unit tiles rendered");
 await unitTiles.first().scrollIntoViewIfNeeded();
 await unitTiles.first().click({ timeout: 3000 });
 let sel = await page.locator("#selection-line").textContent();
-if (!/Unit selected/.test(sel || "")) fail("clicking a unit tile did not select a unit: " + sel);
+if (!/Move /.test(sel || "")) fail("clicking a unit tile did not select a unit: " + sel);
 
-// 3) With a unit selected, clicking a reachable tile issues a move.
+// 3) With a unit selected, clicking a reachable tile issues a move (which
+//    deselects the unit — the selection line changes).
 let moved = false;
 const reachable = page.locator(".tile.reachable");
-if ((await reachable.count()) > 0) {
-  const logBefore = await page.locator("#action-log").textContent();
+async function tryMove() {
+  if ((await reachable.count()) === 0) return false;
+  const selBefore = await page.locator("#selection-line").textContent();
   await reachable.first().click();
-  const logAfter = await page.locator("#action-log").textContent();
-  moved = logAfter !== logBefore;
-} else {
-  // Try another unit if the first had no room (rare on open maps).
+  await page.waitForTimeout(100);
+  const selAfter = await page.locator("#selection-line").textContent();
+  return selBefore !== selAfter;
+}
+moved = await tryMove();
+if (!moved) {
   const n = await unitTiles.count();
   for (let i = 1; i < n && !moved; i += 1) {
     await unitTiles.nth(i).click();
-    if ((await reachable.count()) > 0) {
-      const logBefore = await page.locator("#action-log").textContent();
-      await reachable.first().click();
-      moved = (await page.locator("#action-log").textContent()) !== logBefore;
-    }
+    moved = await tryMove();
   }
 }
 if (!moved) fail("could not move a unit to a reachable tile");

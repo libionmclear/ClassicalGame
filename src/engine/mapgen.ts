@@ -33,14 +33,23 @@ export interface GenerateMapOptions {
   playerCount?: number;
 }
 
+export interface CivInfo {
+  id: string;
+  civ: string;
+  color: string;
+  adjective: string;
+  capital: string;
+}
+
 // Player 0 is always the human (Rome). Rivals are drawn in order.
-export const CIV_ROSTER: ReadonlyArray<{ id: string; civ: string }> = [
-  { id: "rome", civ: "Rome" },
-  { id: "carthage", civ: "Carthage" },
-  { id: "greece", civ: "Greece" },
-  { id: "egypt", civ: "Egypt" },
-  { id: "gaul", civ: "Gaul" },
-  { id: "parthia", civ: "Parthia" }
+// Colours are historically evocative and mutually distinct.
+export const CIV_ROSTER: ReadonlyArray<CivInfo> = [
+  { id: "rome", civ: "Rome", color: "#c0392b", adjective: "Roman", capital: "Roma" },
+  { id: "carthage", civ: "Carthage", color: "#8e44ad", adjective: "Carthaginian", capital: "Carthago" },
+  { id: "greece", civ: "Greece", color: "#2e86de", adjective: "Greek", capital: "Athenai" },
+  { id: "egypt", civ: "Egypt", color: "#d4ac0d", adjective: "Egyptian", capital: "Memphis" },
+  { id: "gaul", civ: "Gaul", color: "#27ae60", adjective: "Gallic", capital: "Bibracte" },
+  { id: "parthia", civ: "Parthia", color: "#e67e22", adjective: "Parthian", capital: "Ktesiphon" }
 ];
 
 export const MAX_PLAYERS = CIV_ROSTER.length;

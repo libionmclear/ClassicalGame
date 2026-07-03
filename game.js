@@ -23,6 +23,7 @@
   const resourceBarEl = document.getElementById("resource-bar");
   const weatherBarEl = document.getElementById("weather-bar");
   const legendEl = document.getElementById("legend");
+  const rankingEl = document.getElementById("ranking");
   const resultModalEl = document.getElementById("result-modal");
   const resultTitleEl = document.getElementById("result-title");
   const resultBodyEl = document.getElementById("result-body");
@@ -113,14 +114,28 @@
     heat: { icon: "🔥", label: "heat" }
   };
   const HUMAN_ID = "rome";
-  const CIV_COLORS = {
-    rome: "#d06b36",
-    carthage: "#4f9ecb",
-    greece: "#6ec1a8",
-    egypt: "#d8b23a",
-    gaul: "#9b6bd0",
-    parthia: "#cf5b7a"
-  };
+  // Historic civ colours + names, driven by the engine roster.
+  const CIV_COLORS = {};
+  const CIV_ADJ = {};
+  const CIV_CAPITAL = {};
+  for (const c of engine.CIV_ROSTER || []) {
+    CIV_COLORS[c.id] = c.color;
+    CIV_ADJ[c.id] = c.adjective;
+    CIV_CAPITAL[c.id] = c.capital;
+  }
+
+  function hexToRgba(hex, a) {
+    const h = (hex || "#888888").replace("#", "");
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+  }
+
+  function civName(id) {
+    const p = state && state.playersById[id];
+    return (p && p.civ) || id;
+  }
 
   function human() {
     return state.playersById[HUMAN_ID];
@@ -279,6 +294,7 @@
   }
 
   function renderLog() {
+    if (!actionLogEl) return;
     actionLogEl.innerHTML = "";
     for (const line of actionLog) {
       const item = document.createElement("div");
@@ -289,6 +305,7 @@
   }
 
   function renderChecklist(items) {
+    if (!turnChecklistEl) return;
     turnChecklistEl.innerHTML = "";
     for (const item of items) {
       const row = document.createElement("div");
@@ -637,39 +654,45 @@
       return;
     }
 
-    // Clicking one of your own units/cities re-selects it (don't move onto it).
+    // Can the selected unit reach this tile this turn?
+    const path = engine.findPath(state, moveCtx, selected.position, { q, r });
+    let cost = Infinity;
+    if (path && path.length >= 2) {
+      cost = 0;
+      for (let i = 0; i < path.length - 1; i += 1) cost += engine.movementCost(state, moveCtx, path[i], path[i + 1]);
+    }
+    const reachable = Boolean(path) && path.length >= 2 && Number.isFinite(cost) && cost <= selected.movementRemaining;
     const ownUnitHere = clickedUnits.find((u) => u.ownerId === HUMAN_ID);
+
+    // Your own city: garrison the unit inside if you can reach it; else select the city.
+    if (clickedCity && clickedCity.ownerId === HUMAN_ID) {
+      if (reachable) {
+        apply({ type: "MOVE_UNIT", playerId: HUMAN_ID, unitId: selected.id, destination: { q, r }, path: path });
+      } else {
+        selectedCityId = clickedCity.id;
+        selectedUnitId = null;
+        render();
+      }
+      return;
+    }
+
+    // Another of your own units in the field: re-select it (no accidental stacking).
     if (ownUnitHere) {
       selectedUnitId = ownUnitHere.id;
       selectedCityId = null;
       render();
       return;
     }
-    if (clickedCity && clickedCity.ownerId === HUMAN_ID) {
-      selectedCityId = clickedCity.id;
-      selectedUnitId = null;
-      render();
-      return;
-    }
 
-    // Otherwise move — but validate first so a bad click never throws.
-    const path = engine.findPath(state, moveCtx, selected.position, { q, r });
-    if (!path || path.length < 2) {
-      hintLineEl.textContent = "Can't move there.";
-      return;
-    }
-    let cost = 0;
-    for (let i = 0; i < path.length - 1; i += 1) {
-      cost += engine.movementCost(state, moveCtx, path[i], path[i + 1]);
-    }
-    if (!Number.isFinite(cost) || cost > selected.movementRemaining) {
-      hintLineEl.textContent = "Not enough movement to reach there.";
+    // Otherwise move to the (empty) tile if reachable.
+    if (!reachable) {
+      hintLineEl.textContent = !path || path.length < 2 ? "Can't move there." : "Not enough movement to reach there.";
       return;
     }
     apply({ type: "MOVE_UNIT", playerId: HUMAN_ID, unitId: selected.id, destination: { q, r }, path: path });
   }
 
-  function renderTile(q, r, visibility, hints, geom, pos) {
+  function renderTile(q, r, visibility, hints, geom, pos, territory) {
     const key = q + "," + r;
     const tile = state.map.tiles[key];
     const isVisible = visibility.visible.has(key);
@@ -715,6 +738,14 @@
     // Build compact visual content + a rich tooltip.
     const tip = ["(" + q + "," + r + ") " + (TERRAIN_LABELS[tile.terrain] || tile.terrain)];
     let inner = '<span class="coord">' + q + "," + r + "</span>";
+
+    // Territory tint (civ-coloured zone of control), on tiles you've seen.
+    const terrOwner = territory && territory[key];
+    if (terrOwner && isDiscovered) {
+      inner = '<span class="terr" style="background:' + hexToRgba(CIV_COLORS[terrOwner] || "#888", 0.24) + '"></span>' + inner;
+      btn.classList.add("claimed");
+      tip.push("Territory of " + civName(terrOwner));
+    }
 
     if (!isVisible) {
       inner += '<span class="glyph">' + (isDiscovered ? "🌥️" : "☁️") + "</span>";
@@ -863,35 +894,62 @@
     return '<span class="' + cls + '"><span style="width:' + pct + '%"></span></span>';
   }
 
+  function cityDisplayName(city) {
+    if (city.isCapital && CIV_CAPITAL[city.ownerId]) return CIV_CAPITAL[city.ownerId];
+    return (CIV_ADJ[city.ownerId] || civName(city.ownerId)) + " city";
+  }
+
+  function unitDisplayName(unit) {
+    const meta = UNIT_META[unit.type];
+    const name = (meta && meta.name) || unit.type;
+    return (CIV_ADJ[unit.ownerId] || "") + " " + name;
+  }
+
   function updatePanelState(victory) {
     const isTurn = isHumanTurn() && !victory.winnerId;
     const selectedUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
     const selectedCity = selectedCityId ? state.map.cities[selectedCityId] : null;
-    const rome = state.playersById.rome;
 
     if (selectedUnit) {
-      selectionLineEl.textContent =
-        `Unit selected: ${selectedUnit.type} (${selectedUnit.id}) HP ${selectedUnit.hp}, Move ${selectedUnit.movementRemaining}`;
+      const vet = selectedUnit.veterancy && selectedUnit.veterancy !== "recruit" ? " · " + selectedUnit.veterancy : "";
+      selectionLineEl.innerHTML =
+        (UNIT_GLYPHS[selectedUnit.type] || "•") + " " + unitDisplayName(selectedUnit) +
+        '<span class="sel-sub"> HP ' + selectedUnit.hp + "/" + selectedUnit.maxHp +
+        " · Move " + selectedUnit.movementRemaining + vet + "</span>";
     } else if (selectedCity) {
       const need = 8 + selectedCity.population * 6;
-      selectionLineEl.textContent =
-        `City: ${selectedCity.id} · Pop ${selectedCity.population} · HP ${selectedCity.hp}/${selectedCity.maxHp}` +
-        ` · Growth ${Math.floor(selectedCity.food || 0)}/${need}`;
+      selectionLineEl.innerHTML =
+        (selectedCity.isCapital ? "🏛️ " : "🏘️ ") + cityDisplayName(selectedCity) +
+        '<span class="sel-sub"> Pop ' + selectedCity.population + " · HP " + selectedCity.hp + "/" + selectedCity.maxHp +
+        " · Growth " + Math.floor(selectedCity.food || 0) + "/" + need + "</span>";
     } else {
-      selectionLineEl.textContent = "Nothing selected.";
+      selectionLineEl.textContent = "Nothing selected";
     }
 
     foundCityBtn.disabled = !(isTurn && selectedUnit && selectedUnit.type === "settler");
-    clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
+    if (clearSelectionBtn) clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
     renderBuildMenu(isTurn, selectedCity);
     renderBuildingMenu(isTurn, selectedCity);
+  }
 
-    const checklist = [];
-    checklist.push(selectedUnit || selectedCity ? "Selection: ready" : "Selection: choose a unit or city");
-    checklist.push(isTurn ? "Turn: issue commands or end turn" : "Turn: waiting for AI" );
-    checklist.push(state.playersById.rome.unitIds.length < 4 ? "Army: consider building more units" : "Army: field force established");
-    checklist.push(state.playersById.rome.cityIds.length < 2 ? "Expansion: found a second city" : "Expansion: multiple cities online");
-    renderChecklist(checklist);
+  function renderRanking() {
+    if (!rankingEl) return;
+    const scores = engine.computeScores(state);
+    const rows = state.players
+      .map((p) => ({ id: p.id, civ: p.civ || p.id, score: scores[p.id] || 0, alive: p.cityIds.length > 0 }))
+      .sort((a, b) => b.score - a.score);
+    rankingEl.innerHTML =
+      '<div class="rank-title">Standings</div>' +
+      rows
+        .map(
+          (r, i) =>
+            '<div class="rank-row' + (r.id === HUMAN_ID ? " me" : "") + (r.alive ? "" : " dead") + '">' +
+            '<span class="rank-pos">' + (i + 1) + "</span>" +
+            '<span class="rank-dot" style="background:' + (CIV_COLORS[r.id] || "#ccc") + '"></span>' +
+            '<span class="rank-civ">' + r.civ + "</span>" +
+            '<span class="rank-score">' + r.score + "</span></div>"
+        )
+        .join("");
   }
 
   function render() {
@@ -899,25 +957,15 @@
     const victory = engine.getVictoryStatus(state);
 
     try {
-      const standings = state.players
-        .map((p) => {
-          const color = CIV_COLORS[p.id] || "#ccc";
-          const active = p.id === current.id ? "font-weight:700;text-decoration:underline" : "";
-          const eliminated = p.cityIds.length === 0 ? "opacity:0.5" : "";
-          return (
-            '<span style="color:' + color + ";" + active + ";" + eliminated + '">' +
-            (p.civ || p.id) + " " + p.cityIds.length + "</span>"
-          );
-        })
-        .join(" · ");
-      statusEl.innerHTML = "Turn " + state.turn + " · Cities — " + standings;
-
-      victoryEl.textContent = victory.winnerId
-        ? "Victory: " + victory.type + " by " + victory.winnerId
-        : "No winner yet.";
+      const activeColor = CIV_COLORS[current.id] || "#ccc";
+      statusEl.innerHTML =
+        "Turn " + state.turn + " — " +
+        '<span style="color:' + activeColor + ';font-weight:700">' + (current.civ || current.id) + "</span>" +
+        (current.id === HUMAN_ID ? " (your move)" : " is moving…");
 
       const visibility = getHumanVisibility();
       const hints = getTileHintsForSelectedUnit(visibility);
+      const territory = engine.computeTerritory ? engine.computeTerritory(state) : {};
 
       const size = hexSize();
       const geom = {
@@ -955,7 +1003,7 @@
       boardEl.innerHTML = "";
       for (const key of keys) {
         const c = key.split(",");
-        boardEl.appendChild(renderTile(+c[0], +c[1], visibility, hints, geom, pos[key]));
+        boardEl.appendChild(renderTile(+c[0], +c[1], visibility, hints, geom, pos[key], territory));
       }
       renderRivers(geom, visibility, pos);
 
@@ -976,6 +1024,7 @@
 
       renderHud();
       renderLegend();
+      renderRanking();
       renderTechTree(victory);
       updatePanelState(victory);
       renderLog();
@@ -1053,25 +1102,39 @@
     }
   }
 
+  const RES_TITLES = {
+    Populus: "Populus — your people. Cities grow as they bank food.",
+    Labor: "Labor — production. Builds units and city works.",
+    Denarii: "Denarii — coin from markets and trade; pays upkeep.",
+    Scientia: "Scientia — learning. Accrues each turn and buys techs.",
+    Doctrinae: "Doctrinae — technologies you have mastered."
+  };
+
   function renderHud() {
     const rome = human();
     const pop = Object.values(state.map.cities)
       .filter((c) => c.ownerId === HUMAN_ID)
       .reduce((sum, c) => sum + c.population, 0);
+    const inc = engine.computePlayerIncome ? engine.computePlayerIncome(state, HUMAN_ID) : {};
     const resources = [
-      { ico: "👥", val: pop, lbl: "pop" },
-      { ico: "🔬", val: rome.science, lbl: "science" },
-      { ico: "⚒️", val: rome.production, lbl: "prod" },
-      { ico: "🪙", val: rome.gold, lbl: "gold" },
-      { ico: "📜", val: rome.techs.length, lbl: "techs" }
+      { ico: "👥", val: pop, lbl: "Populus", delta: null },
+      { ico: "⚒️", val: rome.production, lbl: "Labor", delta: inc.production },
+      { ico: "🪙", val: rome.gold, lbl: "Denarii", delta: inc.gold },
+      { ico: "🔬", val: rome.science, lbl: "Scientia", delta: inc.science },
+      { ico: "📜", val: rome.techs.length, lbl: "Doctrinae", delta: null }
     ];
     resourceBarEl.innerHTML = resources
-      .map(
-        (r) =>
-          '<span class="res"><span class="res-ico">' + r.ico +
-          '</span><span class="res-val">' + r.val +
-          '</span><span class="res-lbl">' + r.lbl + "</span></span>"
-      )
+      .map(function (r) {
+        const delta =
+          r.delta != null && r.delta !== 0
+            ? '<span class="res-delta">(' + (r.delta > 0 ? "+" : "") + r.delta + ")</span>"
+            : "";
+        return (
+          '<span class="res" title="' + (RES_TITLES[r.lbl] || "") + '"><span class="res-ico">' + r.ico +
+          '</span><span class="res-val">' + r.val + "</span>" + delta +
+          '<span class="res-lbl">' + r.lbl + "</span></span>"
+        );
+      })
       .join("");
 
     // Weather is the game's only luck — surface current + forecast per region.
@@ -1163,10 +1226,12 @@
     apply({ type: "END_TURN", playerId: "rome" });
   });
 
-  clearSelectionBtn.addEventListener("click", function () {
-    clearSelection();
-    render();
-  });
+  if (clearSelectionBtn) {
+    clearSelectionBtn.addEventListener("click", function () {
+      clearSelection();
+      render();
+    });
+  }
 
   foundCityBtn.addEventListener("click", function () {
     const unit = selectedUnitId ? state.map.units[selectedUnitId] : null;

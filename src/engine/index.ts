@@ -760,6 +760,65 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
   return state;
 }
 
+const TERRITORY_RADIUS = 2;
+
+// Each city claims nearby tiles; contested tiles go to the closest city. Returns
+// tileKey -> owning playerId. A pure function of city positions (not stored).
+export function computeTerritory(state: GameState): Record<string, string> {
+  const claim: Record<string, { owner: string; dist: number }> = {};
+  for (const city of Object.values(state.map.cities)) {
+    for (const key of Object.keys(state.map.tiles)) {
+      const d = distance(city.position, parseKey(key));
+      if (d > TERRITORY_RADIUS) continue;
+      const existing = claim[key];
+      if (!existing || d < existing.dist) claim[key] = { owner: city.ownerId, dist: d };
+    }
+  }
+  const result: Record<string, string> = {};
+  for (const [key, v] of Object.entries(claim)) result[key] = v.owner;
+  return result;
+}
+
+export function computePlayerIncome(
+  state: GameState,
+  playerId: string
+): { food: number; production: number; gold: number; science: number } {
+  const player = state.playersById[playerId];
+  const income = { food: 0, production: 0, gold: 0, science: 0 };
+  if (!player) return income;
+  for (const cityId of player.cityIds) {
+    if (!state.map.cities[cityId]) continue;
+    const y = computeCityYield(state, cityId);
+    income.food += y.food;
+    income.production += y.production;
+    income.gold += y.gold;
+    income.science += y.science;
+  }
+  const upkeep = player.unitIds.reduce((sum, id) => sum + (state.map.units[id] ? UNITS[state.map.units[id].type].upkeep || 0 : 0), 0);
+  income.gold -= upkeep;
+  return income;
+}
+
+// Score = cities + population + tech + army + claimed land. Drives the ranking.
+export function computeScores(state: GameState): Record<string, number> {
+  const territory = computeTerritory(state);
+  const land: Record<string, number> = {};
+  for (const owner of Object.values(territory)) land[owner] = (land[owner] ?? 0) + 1;
+
+  const scores: Record<string, number> = {};
+  for (const player of state.players) {
+    const population = player.cityIds.reduce((s, id) => s + (state.map.cities[id]?.population ?? 0), 0);
+    scores[player.id] =
+      player.cityIds.length * 10 +
+      population * 3 +
+      player.techs.length * 6 +
+      player.unitIds.length * 2 +
+      (land[player.id] ?? 0) * 1 +
+      Math.floor(player.gold / 10);
+  }
+  return scores;
+}
+
 export function getVictoryStatus(state: GameState): VictoryStatus {
   const capitals = Object.values(state.map.cities).filter((city) => city.isCapital);
   if (capitals.length === 0) {

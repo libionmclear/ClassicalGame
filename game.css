@@ -179,6 +179,12 @@ button:hover:not(:disabled) {
   opacity: 0.7;
 }
 
+.res .res-delta {
+  color: #86d98a;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 #hint-line {
   color: var(--muted);
   margin-top: 6px;
@@ -191,6 +197,90 @@ button:hover:not(:disabled) {
   grid-template-columns: 1fr 300px;
   gap: 12px;
   align-items: start;
+}
+
+/* ===== Ranking (corner standings) ===== */
+.ranking {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  background: rgba(9, 18, 32, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  min-width: 132px;
+  font-size: 0.78rem;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+}
+
+.rank-title {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.rank-row.me .rank-civ {
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.rank-row.dead {
+  opacity: 0.4;
+}
+
+.rank-pos {
+  width: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.rank-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.rank-civ {
+  flex: 1;
+}
+
+.rank-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* territory tint (civ zone of control) */
+.tile .terr {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ===== Selection title ===== */
+.selection-title {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.selection-title .sel-sub {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 2px;
 }
 
 /* ===== Hex board ===== */
@@ -472,27 +562,27 @@ button:hover:not(:disabled) {
 }
 
 .tile.owner-rome {
-  box-shadow: inset 0 0 0 2.5px #d06b36, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px #c0392b, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-carthage {
-  box-shadow: inset 0 0 0 2.5px #4f9ecb, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px #8e44ad, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-greece {
-  box-shadow: inset 0 0 0 2.5px #6ec1a8, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px #2e86de, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-egypt {
-  box-shadow: inset 0 0 0 2.5px #d8b23a, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px #d4ac0d, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-gaul {
-  box-shadow: inset 0 0 0 2.5px #9b6bd0, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px #27ae60, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 .tile.owner-parthia {
-  box-shadow: inset 0 0 0 2.5px #cf5b7a, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 2.5px #e67e22, inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
 }
 
 /* ===== Command panel ===== */

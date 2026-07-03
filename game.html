@@ -38,27 +38,20 @@
 
     <section class="status-panel">
       <div id="status-line"></div>
-      <div id="victory-line"></div>
       <div id="resource-bar" class="res-bar"></div>
       <div id="weather-bar" class="weather-bar"></div>
-      <div id="hint-line">Hint: Select your unit, then click a tile to move or attack.</div>
+      <div id="hint-line">Your turn — click your city to build, or a unit to move it. Then End Turn.</div>
     </section>
 
     <section class="play-area">
       <div class="board-wrap">
+        <div id="ranking" class="ranking"></div>
         <section id="board" class="board"></section>
         <div id="legend" class="legend"></div>
       </div>
 
       <aside class="control-panel">
-        <h2>Command Panel</h2>
-        <div id="selection-line" class="selection-line">Nothing selected.</div>
-        <button id="clear-selection-btn">Clear Selection</button>
-
-        <div class="panel-group">
-          <h3>Turn Checklist</h3>
-          <div id="turn-checklist" class="turn-checklist"></div>
-        </div>
+        <h2 id="selection-line" class="selection-title">Nothing selected</h2>
 
         <div class="panel-group">
           <h3>Unit Actions</h3>
@@ -78,11 +71,6 @@
         <div class="panel-group">
           <h3>Research — Tree of Decisions</h3>
           <div id="tech-tree" class="tech-tree"></div>
-        </div>
-
-        <div class="panel-group">
-          <h3>Action Log</h3>
-          <div id="action-log" class="action-log"></div>
         </div>
       </aside>
     </section>
