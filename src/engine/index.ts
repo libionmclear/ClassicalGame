@@ -14,7 +14,7 @@ import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction } from "./types";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -506,7 +506,7 @@ export function researchCost(techId: string): number {
   return age === 1 ? 18 : age === 2 ? 36 : 60;
 }
 
-function computeCityYield(
+export function computeCityYield(
   state: GameState,
   cityId: string
 ): { food: number; production: number; gold: number; science: number } {
@@ -619,6 +619,39 @@ function applyUnqueueProduction(state: GameState, action: UnqueueProductionActio
   if (city.ownerId !== action.playerId) throw new Error("Cannot edit an enemy city's queue");
   if (!city.queue || action.index < 0 || action.index >= city.queue.length) return;
   city.queue = city.queue.filter((_, i) => i !== action.index);
+}
+
+// Denarii can hurry the front of the build queue: pay coin for the production
+// still missing and the item completes at once (this turn), without waiting for
+// labour to accrue over several turns.
+export const RUSH_GOLD_PER_PRODUCTION = 4;
+
+export function rushProductionCost(
+  state: GameState,
+  cityId: string
+): { itemId: string; missingProduction: number; goldCost: number } | null {
+  const city = state.map.cities[cityId];
+  if (!city || !city.queue || city.queue.length === 0) return null;
+  const itemId = city.queue[0];
+  const cost = productionItemCost(itemId);
+  if (!Number.isFinite(cost)) return null;
+  const missing = Math.max(0, cost - (city.production ?? 0));
+  return { itemId, missingProduction: missing, goldCost: Math.ceil(missing * RUSH_GOLD_PER_PRODUCTION) };
+}
+
+function applyRushProduction(state: GameState, action: RushProductionAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const city = cityAt(state, action.cityId);
+  if (city.ownerId !== action.playerId) throw new Error("Cannot rush an enemy city's queue");
+  const rush = rushProductionCost(state, action.cityId);
+  if (!rush) throw new Error("Nothing to rush");
+  const player = state.playersById[action.playerId];
+  if (player.gold < rush.goldCost) throw new Error("Not enough denarii to rush");
+  player.gold -= rush.goldCost;
+  // Top the city's production up to the front item's cost, then build it now.
+  const cost = productionItemCost(rush.itemId);
+  city.production = Math.max(city.production ?? 0, cost);
+  processCityQueue(state, city);
 }
 
 function applyEndTurn(state: GameState, action: EndTurnAction): void {
@@ -821,6 +854,9 @@ export function computeTerritory(state: GameState): Record<string, string> {
   const claim: Record<string, { owner: string; dist: number }> = {};
   for (const city of Object.values(state.map.cities)) {
     for (const key of Object.keys(state.map.tiles)) {
+      // Open sea is nobody's land — only coastline and dry ground get claimed,
+      // so a coastal capital never tints the ocean with its banner colour.
+      if (state.map.tiles[key].terrain === "sea") continue;
       const d = distance(city.position, parseKey(key));
       if (d > TERRITORY_RADIUS) continue;
       const existing = claim[key];
@@ -955,6 +991,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "UNQUEUE_PRODUCTION":
       applyUnqueueProduction(state, action);
+      break;
+    case "RUSH_PRODUCTION":
+      applyRushProduction(state, action);
       break;
     default: {
       const unknownAction: never = action;

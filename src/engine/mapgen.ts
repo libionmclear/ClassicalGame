@@ -31,6 +31,8 @@ export interface GenerateMapOptions {
   size?: MapSize;
   seed?: string;
   playerCount?: number;
+  /** Civ id the human wants to play — seated first so it is always present. */
+  humanCiv?: string;
 }
 
 export interface CivInfo {
@@ -309,7 +311,12 @@ function placeStarters(
   return { warrior, settler };
 }
 
-function tryGenerate(seed: string, spec: SizeSpec, playerCount: number): CreateGameConfig | null {
+function tryGenerate(
+  seed: string,
+  spec: SizeSpec,
+  playerCount: number,
+  roster: ReadonlyArray<CivInfo> = CIV_ROSTER
+): CreateGameConfig | null {
   const { tiles, regions, elevation } = buildTerrain(seed, spec);
   const component = largestWalkableComponent(tiles, spec);
   const minComponent = Math.max(8, playerCount * 3, Math.floor(spec.width * spec.height * 0.15));
@@ -338,7 +345,7 @@ function tryGenerate(seed: string, spec: SizeSpec, playerCount: number): CreateG
   const units: NonNullable<CreateGameConfig["map"]>["units"] = {};
 
   for (let i = 0; i < playerCount; i += 1) {
-    const { id, civ } = CIV_ROSTER[i];
+    const { id, civ } = roster[i];
     const capitalKey = capitalKeys[i];
     const position = parseKey(capitalKey);
     players.push({ id, civ, food: 8, production: 30, gold: 20 });
@@ -372,6 +379,8 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   const baseSeed = options.seed ?? "hegemon-map";
   const requested = Math.max(2, Math.min(MAX_PLAYERS, Math.floor(options.playerCount ?? 2)));
   const turnLimit = TURN_LIMITS[size] ?? 60;
+  // Seat the human's chosen civ first so it is always in the game (and player 0).
+  const roster = orderRoster(options.humanCiv);
 
   // Deterministic retries: a few noise variants until one yields a big enough
   // landmass with well-separated capitals. If a small map genuinely can't seat
@@ -379,7 +388,7 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   for (let playerCount = requested; playerCount >= 2; playerCount -= 1) {
     for (let attempt = 0; attempt < 12; attempt += 1) {
       const seed = attempt === 0 ? baseSeed : `${baseSeed}#${attempt}`;
-      const config = tryGenerate(seed, spec, playerCount);
+      const config = tryGenerate(seed, spec, playerCount, roster);
       if (config) {
         config.turnLimit = turnLimit;
         return config;
@@ -388,9 +397,17 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   }
 
   // Last resort: a flat 2-player fallback so the caller always gets a playable map.
-  const fallback = tryGenerate(`${baseSeed}#fallback`, spec, 2) ?? buildFlatFallback(spec, baseSeed);
+  const fallback = tryGenerate(`${baseSeed}#fallback`, spec, 2, roster) ?? buildFlatFallback(spec, baseSeed);
   fallback.turnLimit = turnLimit;
   return fallback;
+}
+
+// Roster with the chosen civ moved to the front (rest keep historic order).
+function orderRoster(humanCiv?: string): ReadonlyArray<CivInfo> {
+  if (!humanCiv) return CIV_ROSTER;
+  const chosen = CIV_ROSTER.find((c) => c.id === humanCiv);
+  if (!chosen) return CIV_ROSTER;
+  return [chosen, ...CIV_ROSTER.filter((c) => c.id !== humanCiv)];
 }
 
 export const TURN_LIMITS: Record<MapSize, number> = {

@@ -102,6 +102,15 @@ button:hover:not(:disabled) {
   border-radius: 6px;
   padding: 10px 12px;
   margin-bottom: 12px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.status-main {
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 #status-line {
@@ -204,27 +213,42 @@ button:hover:not(:disabled) {
   align-items: start;
 }
 
-/* ===== Standings (compact, in the status box) ===== */
+/* ===== Standings (table, right column of the status box) ===== */
 .ranking {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 10px;
-  font-size: 0.68rem;
-  margin: 3px 0 7px;
+  flex: 0 0 auto;
+  width: 190px;
+  max-width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.72rem;
 }
 
 .rank-title {
+  display: block;
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--muted);
-  margin-right: 2px;
+  font-size: 0.64rem;
+  margin-bottom: 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--line);
 }
 
 .rank-row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.rank-row.me {
+  background: rgba(242, 204, 105, 0.12);
+  border-radius: 3px;
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .rank-row.me .rank-civ {
@@ -238,13 +262,23 @@ button:hover:not(:disabled) {
 
 .rank-pos {
   color: var(--muted);
+  width: 1.1em;
+  text-align: right;
 }
 
 .rank-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 2px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  flex: 0 0 auto;
+}
+
+.rank-civ {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rank-score {
@@ -260,11 +294,12 @@ button:hover:not(:disabled) {
   line-height: 1;
 }
 
-/* territory tint (civ zone of control) */
+/* territory wash (civ zone of control) — inset so the coloured border shows */
 .tile .terr {
   position: absolute;
-  inset: 0;
+  inset: 3px;
   pointer-events: none;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 
 /* ===== Selection title ===== */
@@ -512,24 +547,25 @@ button:hover:not(:disabled) {
 .tile.terrain-coast { background: #3f7387; }
 .tile.terrain-sea { background: #2f4f77; }
 
-/* Unexplored — rolling cloud / mist over the unknown */
+/* Unexplored — a featureless blur of grey fog, not a distinct hexagon. Flat
+   fill + no bevel + blur makes neighbouring fog tiles melt into one grey field. */
 .tile.fog {
-  background:
-    radial-gradient(circle at 35% 30%, rgba(200, 218, 240, 0.16), transparent 55%),
-    radial-gradient(circle at 70% 65%, rgba(180, 200, 226, 0.12), transparent 55%),
-    #16223a !important;
-  color: rgba(190, 208, 232, 0.5);
-}
-
-.tile.fog .glyph {
-  font-size: 1rem;
-  opacity: 0.55;
-  filter: none;
+  background: #2b313d !important;
+  color: transparent;
+  box-shadow: none !important;
+  filter: blur(3px);
 }
 
 /* Explored but out of sight — remembered terrain, dimmed (no troops shown) */
 .tile.discovered {
   filter: saturate(0.3) brightness(0.5);
+}
+
+/* Territory border — the owning civ's banner colour traced around the hex */
+.tile.claimed {
+  box-shadow:
+    inset 0 0 0 2px var(--terr-color, #888),
+    inset 0 0 0 3px rgba(0, 0, 0, 0.28);
 }
 
 /* movement / combat hints — background gradients get clipped to the hex */
@@ -631,9 +667,49 @@ button:hover:not(:disabled) {
   font-size: 0.95rem;
 }
 
+/* Collapsible sections (click the summary to open) */
+details.panel-collapse > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 3px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+
+details.panel-collapse > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.panel-collapse > summary:hover {
+  color: var(--gold);
+}
+
+.collapse-caret {
+  transition: transform 0.12s ease;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+details.panel-collapse[open] > summary .collapse-caret {
+  transform: rotate(90deg);
+}
+
+details.panel-collapse > *:not(summary) {
+  margin-top: 6px;
+}
+
 .panel-group button {
   width: 100%;
   margin-bottom: 6px;
+}
+
+/* the collapse summary is a button-like row but must not stretch as a button */
+details.panel-collapse > summary {
+  width: auto;
 }
 
 .panel-group button:disabled,
@@ -702,6 +778,55 @@ button:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.queue-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #12233a;
+  border: 1px solid var(--line);
+  margin-bottom: 2px;
+}
+
+.queue-summary b {
+  color: var(--gold);
+}
+
+.queue-summary .qs-hint {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.queue-ready {
+  font-size: 0.74rem;
+  color: #86d98a;
+  padding: 2px 4px;
+}
+
+.rush-btn {
+  width: 100%;
+  margin-top: 4px;
+  background: #3a2a0e;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.rush-btn:hover:not(:disabled) {
+  background: #4a360f;
+}
+
+.rush-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .queue-item {

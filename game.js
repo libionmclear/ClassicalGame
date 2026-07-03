@@ -15,6 +15,7 @@
   const turnsInputEl = document.getElementById("turns-input");
   const turnsPickerEl = document.getElementById("turns-picker");
   const difficultySelectEl = document.getElementById("difficulty-select");
+  const civSelectEl = document.getElementById("civ-select");
   const selectionLineEl = document.getElementById("selection-line");
   const actionLogEl = document.getElementById("action-log");
   const clearSelectionBtn = document.getElementById("clear-selection-btn");
@@ -130,7 +131,7 @@
     storm: { icon: "⛈️", label: "storm" },
     heat: { icon: "🔥", label: "heat" }
   };
-  const HUMAN_ID = "rome";
+  let HUMAN_ID = "rome";
   // Historic civ colours + names, driven by the engine roster.
   const CIV_COLORS = {};
   const HISTORIC_COLORS = {};
@@ -142,6 +143,19 @@
     CIV_ADJ[c.id] = c.adjective;
     CIV_CAPITAL[c.id] = c.capital;
   }
+
+  // Populate the "Play as" picker from the engine roster.
+  (function populateCivPicker() {
+    const sel = document.getElementById("civ-select");
+    if (!sel) return;
+    (engine.CIV_ROSTER || []).forEach(function (c, i) {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = c.civ + " (" + c.capital + ")";
+      if (i === 0) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  })();
 
   const COLOR_STORE_KEY = "hegemon_civ_colors";
 
@@ -270,6 +284,29 @@
     return "";
   }
 
+  // Labour a city generates each turn (population + terrain + workshops). The
+  // human is never handicapped, so this is exactly what accrues per End Turn.
+  function cityLaborPerTurn(city) {
+    try {
+      return engine.computeCityYield ? engine.computeCityYield(state, city.id).production : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  // Turns until `needed` more labour accrues at `perTurn`. 0 = already covered.
+  function turnsToAccrue(needed, perTurn) {
+    if (needed <= 0) return 0;
+    if (perTurn <= 0) return Infinity;
+    return Math.ceil(needed / perTurn);
+  }
+
+  function etaLabel(eta) {
+    if (eta === 0) return "ready";
+    if (!Number.isFinite(eta)) return "no labor";
+    return "~" + eta + "t";
+  }
+
   function renderBuildQueue(selectedCity) {
     if (!buildQueueEl) return;
     buildQueueEl.innerHTML = "";
@@ -277,17 +314,39 @@
       buildQueueEl.innerHTML = '<div class="bm-empty">Select a city to manage its queue.</div>';
       return;
     }
+
+    const banked = Math.floor(selectedCity.production || 0);
+    const perTurn = cityLaborPerTurn(selectedCity);
+
+    // Explain how labour works — this city banks `perTurn` labour each End Turn
+    // and the front item completes once the bank covers its cost.
+    const summary = document.createElement("div");
+    summary.className = "queue-summary";
+    summary.innerHTML =
+      "<span>🏭 Labor <b>+" + perTurn + "</b>/turn · <b>" + banked + "</b> banked</span>" +
+      '<span class="qs-hint">Each city works on its own queue; labor completes the top item at End Turn.</span>';
+    buildQueueEl.appendChild(summary);
+
     const q = selectedCity.queue || [];
     if (!q.length) {
-      buildQueueEl.innerHTML = '<div class="bm-empty">Nothing queued — recruit a unit or start a building above.</div>';
+      const empty = document.createElement("div");
+      empty.className = "bm-empty";
+      empty.textContent = "Nothing queued — recruit a unit or start a building above.";
+      buildQueueEl.appendChild(empty);
       return;
     }
-    const banked = Math.floor(selectedCity.production || 0);
+
+    let cumulativeCost = 0;
     q.forEach(function (id, i) {
       const cost = itemCost(id);
+      cumulativeCost += cost;
+      const eta = turnsToAccrue(cumulativeCost - banked, perTurn);
       const row = document.createElement("div");
       row.className = "queue-item" + (i === 0 ? " active" : "");
-      const progress = i === 0 ? Math.min(banked, cost) + "/" + cost + " ⚒️" : cost + " ⚒️";
+      const progress =
+        i === 0
+          ? Math.min(banked, cost) + "/" + cost + " ⚒️ " + etaLabel(eta)
+          : cost + " ⚒️ " + etaLabel(eta);
       row.innerHTML =
         '<span class="qi-pos">' + (i + 1) + "</span>" +
         '<span class="qi-name">' + itemGlyph(id) + " " + itemName(id) + "</span>" +
@@ -302,6 +361,35 @@
       row.appendChild(rm);
       buildQueueEl.appendChild(row);
     });
+
+    // Denarii rush: hurry the front item to completion this turn.
+    const rush = engine.rushProductionCost ? engine.rushProductionCost(state, selectedCity.id) : null;
+    if (rush) {
+      const me = human();
+      const front = q[0];
+      if (rush.missingProduction <= 0) {
+        const ready = document.createElement("div");
+        ready.className = "queue-ready";
+        ready.textContent = "✓ " + itemName(front) + " is fully funded — it completes when you End Turn.";
+        buildQueueEl.appendChild(ready);
+      } else {
+        const rushBtn = document.createElement("button");
+        rushBtn.className = "rush-btn";
+        const afford = me.gold >= rush.goldCost;
+        rushBtn.disabled = !afford || !isHumanTurn();
+        rushBtn.innerHTML =
+          "⚡ Rush " + itemName(front) + " — " + rush.goldCost + " 🪙" +
+          (afford ? "" : " (need " + (rush.goldCost - me.gold) + " more)");
+        rushBtn.title =
+          "Pay denarii for the " + rush.missingProduction + " labor still missing and finish it now (" +
+          engine.RUSH_GOLD_PER_PRODUCTION + " 🪙 per labor).";
+        rushBtn.addEventListener("click", function () {
+          if (rushBtn.disabled) return;
+          apply({ type: "RUSH_PRODUCTION", playerId: HUMAN_ID, cityId: selectedCity.id });
+        });
+        buildQueueEl.appendChild(rushBtn);
+      }
+    }
   }
 
   function renderBuildingMenu(isTurn, selectedCity) {
@@ -357,11 +445,21 @@
       const btn = document.createElement("button");
       btn.className = "build-item" + (hasTech ? "" : " locked");
       btn.disabled = !(isTurn && !!selectedCity && hasTech);
+      // ETA if built next at this city (a hint — costs are paid in labor over
+      // several turns, not instantly; this is why a cheap unit "isn't building").
+      let etaHint = "";
+      if (typeof cost === "number" && selectedCity) {
+        const perTurn = cityLaborPerTurn(selectedCity);
+        const banked = Math.floor(selectedCity.production || 0);
+        etaHint = " " + etaLabel(turnsToAccrue(cost - banked, perTurn));
+      }
+
       btn.title =
         meta.role + (reqTech ? " — needs " + techName : "") +
+        (typeof cost === "number" ? "\n\nCosts " + cost + " labor — this city banks labor each turn until it is paid, then the unit appears at End Turn." : "") +
         (UNIT_HISTORY[type] ? "\n\n" + UNIT_HISTORY[type] : "");
 
-      const status = !hasTech ? "🔒 " + techName : typeof cost === "number" ? cost + " ⚒️" : "";
+      const status = !hasTech ? "🔒 " + techName : typeof cost === "number" ? cost + " ⚒️" + etaHint : "";
       btn.innerHTML =
         '<span class="bi-name">' + (UNIT_GLYPHS[type] || "•") + " " + meta.name + "</span>" +
         '<span class="bi-cost">' + status + "</span>";
@@ -460,13 +558,14 @@
       } catch (err) {
         standings = "";
       }
+      const myName = civName(HUMAN_ID);
       const lead = humanWon
-        ? `Rome held the greatest realm when the age closed (turn ${state.turnLimit}).`
+        ? `${myName} held the greatest realm when the age closed (turn ${state.turnLimit}).`
         : `${winnerName} held the greatest realm when the age closed (turn ${state.turnLimit}).`;
       resultBodyEl.textContent = standings ? `${lead}   ${standings}` : lead;
     } else {
       resultBodyEl.textContent = humanWon
-        ? "Rome controls every capital. The republic has prevailed."
+        ? `${civName(HUMAN_ID)} controls every capital. Your hegemony is complete.`
         : `${winnerName} controls every capital. ${victory.reason || "Try another campaign."}`;
     }
     resultModalEl.classList.remove("hidden");
@@ -640,21 +739,21 @@
   }
 
   function createCityId() {
-    return `rome_city_${state.turn}_${Date.now().toString().slice(-4)}`;
+    return `${HUMAN_ID}_city_${state.turn}_${Date.now().toString().slice(-4)}`;
   }
 
   function createUnitId(unitType) {
-    return `rome_${unitType}_${state.turn}_${Date.now().toString().slice(-4)}`;
+    return `${HUMAN_ID}_${unitType}_${state.turn}_${Date.now().toString().slice(-4)}`;
   }
 
-  function snapshotRomeState() {
-    const rome = state.playersById.rome;
+  function snapshotHumanState() {
+    const me = state.playersById[HUMAN_ID];
     return {
-      food: rome.food,
-      production: rome.production,
-      gold: rome.gold,
-      cities: rome.cityIds.length,
-      units: rome.unitIds.length
+      food: me.food,
+      production: me.production,
+      gold: me.gold,
+      cities: me.cityIds.length,
+      units: me.unitIds.length
     };
   }
 
@@ -665,12 +764,13 @@
 
   function apply(action) {
     try {
-      const beforeSummary = action.type === "END_TURN" && action.playerId === "rome" ? snapshotRomeState() : null;
+      const beforeSummary = action.type === "END_TURN" && action.playerId === HUMAN_ID ? snapshotHumanState() : null;
       // City-panel actions keep the city selected so you can queue several in a row.
       const keepSelection =
         action.type === "BUILD_UNIT" ||
         action.type === "BUILD_BUILDING" ||
         action.type === "UNQUEUE_PRODUCTION" ||
+        action.type === "RUSH_PRODUCTION" ||
         action.type === "RESEARCH_TECH" ||
         action.type === "RESOLVE_EVENT";
       state = engine.applyAction(state, action);
@@ -682,7 +782,7 @@
       saveGame();
 
       if (beforeSummary) {
-        const afterSummary = snapshotRomeState();
+        const afterSummary = snapshotHumanState();
         logAction(
           "End turn summary | Food " +
             formatSignedDelta(afterSummary.food - beforeSummary.food) +
@@ -880,14 +980,18 @@
       btn.classList.add("selected");
     }
 
-    // Build compact visual content + a rich tooltip.
+    // Build compact visual content + a rich tooltip (coords live in the tooltip
+    // only — they are a debugging aid, not shown on the board).
     const tip = ["(" + q + "," + r + ") " + (TERRAIN_LABELS[tile.terrain] || tile.terrain)];
-    let inner = '<span class="coord">' + q + "," + r + "</span>";
+    let inner = "";
 
-    // Territory tint (civ-coloured zone of control), on tiles you've seen.
+    // Territory (civ zone of control): a coloured hex border in the owner's
+    // banner colour, with a faint matching wash inside. Only on land you've seen.
     const terrOwner = territory && territory[key];
     if (terrOwner && isDiscovered) {
-      inner = '<span class="terr" style="background:' + hexToRgba(CIV_COLORS[terrOwner] || "#888", 0.24) + '"></span>' + inner;
+      const tc = CIV_COLORS[terrOwner] || "#888";
+      btn.style.setProperty("--terr-color", tc);
+      inner = '<span class="terr" style="background:' + hexToRgba(tc, 0.13) + '"></span>' + inner;
       btn.classList.add("claimed");
       tip.push("Territory of " + civName(terrOwner));
     }
@@ -896,7 +1000,7 @@
       if (isDiscovered) {
         tip.push("Explored — you remember the land, but not who holds it now");
       } else {
-        inner += '<span class="glyph">☁️</span>';
+        // Truly unexplored: no glyph, no coord — just featureless fog.
         tip.push("Unexplored");
       }
     } else if (city) {
@@ -1327,6 +1431,7 @@
     resultModalEl.classList.add("hidden");
 
     const choice = (mapSizeSelectEl && mapSizeSelectEl.value) || "medium";
+    const chosenCiv = (civSelectEl && civSelectEl.value) || "rome";
     let config;
     let label;
     try {
@@ -1336,7 +1441,7 @@
       } else {
         const seed = "map-" + choice + "-" + Date.now();
         const playerCount = playerCountSelectEl ? parseInt(playerCountSelectEl.value, 10) || 2 : 2;
-        config = engine.generateMap({ size: choice, seed: seed, playerCount: playerCount });
+        config = engine.generateMap({ size: choice, seed: seed, playerCount: playerCount, humanCiv: chosenCiv });
         const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
         label = sizeLabel + " random map (" + config.map.width + "×" + config.map.height + "), " +
           config.players.length + " civs";
@@ -1346,6 +1451,12 @@
       config = engine.loadScenario("italia").config;
       label = "Italia scenario (fallback)";
     }
+
+    // You play the civ you picked — if that civ is actually seated in this map
+    // (always true for generated maps; scenarios may only offer a couple).
+    HUMAN_ID = (config.players || []).some((p) => p.id === chosenCiv)
+      ? chosenCiv
+      : (config.players && config.players[0] && config.players[0].id) || "rome";
 
     // Victory mode: "domination" removes the turn limit (win by holding every
     // capital); "quick" ends the age at a player-chosen turn count and awards
@@ -1362,13 +1473,15 @@
       label += " — Quick (" + turns + " turns)";
     }
 
-    // Difficulty handicaps the AI economy; the human (Rome) is exempt.
+    // Difficulty handicaps the AI economy; the human's chosen civ is exempt.
     const difficulty = (difficultySelectEl && difficultySelectEl.value) || "normal";
     config.difficulty = difficulty;
     config.humanPlayerId = HUMAN_ID;
     if (difficulty !== "normal") {
       label += ", " + difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
     }
+    const myCivName = (config.players.find((p) => p.id === HUMAN_ID) || {}).civ || HUMAN_ID;
+    label = "Playing " + myCivName + " — " + label;
 
     state = engine.createInitialGameState(config);
     clearSelection();
@@ -1393,6 +1506,10 @@
       return;
     }
     state = saved;
+    // Restore which civ the human was playing (older saves default to Rome).
+    if (state.humanPlayerId && state.playersById[state.humanPlayerId]) {
+      HUMAN_ID = state.humanPlayerId;
+    }
     clearSelection();
     const capital =
       Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
@@ -1444,7 +1561,7 @@
 
   endTurnBtn.addEventListener("click", function () {
     if (!isHumanTurn()) return;
-    apply({ type: "END_TURN", playerId: "rome" });
+    apply({ type: "END_TURN", playerId: HUMAN_ID });
   });
 
   if (clearSelectionBtn) {
@@ -1460,7 +1577,7 @@
 
     apply({
       type: "FOUND_CITY",
-      playerId: "rome",
+      playerId: HUMAN_ID,
       settlerId: unit.id,
       cityId: createCityId()
     });

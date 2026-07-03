@@ -22,6 +22,10 @@
           </select>
         </label>
         <label class="map-picker">
+          Play as
+          <select id="civ-select"></select>
+        </label>
+        <label class="map-picker">
           Civs
           <select id="player-count-select">
             <option value="2">2</option>
@@ -60,11 +64,13 @@
     </header>
 
     <section class="status-panel">
-      <div id="status-line"></div>
+      <div class="status-main">
+        <div id="status-line"></div>
+        <div id="resource-bar" class="res-bar"></div>
+        <div id="weather-bar" class="weather-bar"></div>
+        <div id="hint-line">Your turn — click your city to build, or a unit to move it. Then End Turn.</div>
+      </div>
       <div id="ranking" class="ranking"></div>
-      <div id="resource-bar" class="res-bar"></div>
-      <div id="weather-bar" class="weather-bar"></div>
-      <div id="hint-line">Your turn — click your city to build, or a unit to move it. Then End Turn.</div>
     </section>
 
     <section class="play-area">
@@ -82,24 +88,24 @@
         </div>
 
         <div class="panel-group">
-          <h3>City Actions — Recruit</h3>
-          <div id="build-menu" class="build-menu"></div>
-        </div>
-
-        <div class="panel-group">
-          <h3>City Buildings</h3>
-          <div id="building-menu" class="build-menu"></div>
-        </div>
-
-        <div class="panel-group">
           <h3>Build Queue</h3>
           <div id="build-queue" class="build-queue"></div>
         </div>
 
-        <div class="panel-group">
-          <h3>Research — Tree of Decisions</h3>
+        <details class="panel-group panel-collapse" id="recruit-group">
+          <summary>City Actions — Recruit <span class="collapse-caret">▸</span></summary>
+          <div id="build-menu" class="build-menu"></div>
+        </details>
+
+        <details class="panel-group panel-collapse" id="buildings-group">
+          <summary>City Buildings <span class="collapse-caret">▸</span></summary>
+          <div id="building-menu" class="build-menu"></div>
+        </details>
+
+        <details class="panel-group panel-collapse" id="research-group">
+          <summary>Research — Tree of Decisions <span class="collapse-caret">▸</span></summary>
           <div id="tech-tree" class="tech-tree"></div>
-        </div>
+        </details>
       </aside>
     </section>
   </main>

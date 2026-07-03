@@ -6,11 +6,13 @@ import {
   canResearch,
   computeCombatPreview,
   computePlayerIncome,
+  computeTerritory,
   createInitialGameState,
   getVictoryStatus,
   keyOf,
   movementCost,
-  replayActions
+  replayActions,
+  rushProductionCost
 } from "../src/engine/index";
 
 import type { CreateGameConfig, GameAction } from "../src/engine/types";
@@ -203,6 +205,54 @@ test("city can be captured and domination victory is detected", () => {
   const victory = getVictoryStatus(state);
   assert.equal(victory.type, "domination");
   assert.equal(victory.winnerId, "p1");
+});
+
+test("territory claims coast and land but never open sea", () => {
+  const state = createInitialGameState({
+    seed: "terr",
+    players: [{ id: "a", civ: "A" }],
+    map: {
+      width: 3,
+      height: 1,
+      regions: ["r"],
+      tiles: {
+        "0,0": { terrain: "coast", region: "r" },
+        "1,0": { terrain: "plains", region: "r" },
+        "2,0": { terrain: "sea", region: "r" }
+      },
+      cities: {
+        ca: { id: "ca", ownerId: "a", position: { q: 1, r: 0 }, population: 2 }
+      }
+    }
+  });
+  const terr = computeTerritory(state);
+  assert.equal(terr["1,0"], "a", "the city's own land is claimed");
+  assert.equal(terr["0,0"], "a", "the adjacent coast is claimed");
+  assert.equal(terr["2,0"], undefined, "open sea is never claimed");
+});
+
+test("denarii rush completes the front of the build queue at once", () => {
+  let state = buildState();
+  // p1 queues a warrior in c1 (queue model banks labour over turns).
+  state = applyAction(state, {
+    type: "BUILD_UNIT",
+    playerId: "p1",
+    cityId: "c1",
+    unitType: "warrior",
+    unitId: "queued-warrior"
+  });
+  const unitsBefore = Object.keys(state.map.units).length;
+
+  state.playersById.p1.gold = 999;
+  const goldBefore = state.playersById.p1.gold;
+  const rush = rushProductionCost(state, "c1");
+  assert.ok(rush && rush.goldCost > 0, "there is production still to pay for");
+
+  state = applyAction(state, { type: "RUSH_PRODUCTION", playerId: "p1", cityId: "c1" });
+
+  assert.equal(Object.keys(state.map.units).length, unitsBefore + 1, "the unit is built now");
+  assert.equal((state.map.cities.c1.queue || []).length, 0, "the queue is emptied");
+  assert.equal(state.playersById.p1.gold, goldBefore - rush!.goldCost, "denarii were spent");
 });
 
 test("no winner while both capitals stand before the turn limit", () => {

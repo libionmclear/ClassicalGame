@@ -221,6 +221,12 @@ export interface UnqueueProductionAction {
   index: number;
 }
 
+export interface RushProductionAction {
+  type: "RUSH_PRODUCTION";
+  playerId: string;
+  cityId: string;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -232,7 +238,8 @@ export type GameAction =
   | AttackCityAction
   | ResolveEventAction
   | BuildBuildingAction
-  | UnqueueProductionAction;
+  | UnqueueProductionAction
+  | RushProductionAction;
 
 export interface VictoryStatus {
   winnerId: string | null;
