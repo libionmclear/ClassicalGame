@@ -57,6 +57,48 @@ test("a bolder AI takes an even trade a cautious AI declines", () => {
   assert.notEqual(chooseAiAction({ ...base, difficulty: "easy" as const }, "p1").type, "ATTACK");
 });
 
+test("a coastal AI builds a fleet and fights across the water", () => {
+  // Two coastal capitals separated by a single strait (q=3 is all sea). Land
+  // units can never cross it, so any combat here MUST be naval.
+  const tiles: Record<string, { terrain: "plains" | "sea"; region: string }> = {};
+  for (let r = 0; r < 5; r += 1) {
+    for (let q = 0; q < 7; q += 1) {
+      tiles[`${q},${r}`] = { terrain: q === 3 ? "sea" : "plains", region: "strait" };
+    }
+  }
+  let state = createInitialGameState({
+    seed: "naval-ai",
+    players: [
+      { id: "p1", civ: "Rome", production: 40, science: 0, techs: ["sailing", "open-sea-sailing"] },
+      { id: "p2", civ: "Carthage", production: 40, science: 0, techs: ["sailing", "open-sea-sailing"] }
+    ],
+    map: {
+      width: 7,
+      height: 5,
+      regions: ["strait"],
+      tiles,
+      cities: {
+        c1: { id: "c1", ownerId: "p1", position: { q: 2, r: 2 }, population: 3, isCapital: true, hp: 24, maxHp: 24 },
+        c2: { id: "c2", ownerId: "p2", position: { q: 4, r: 2 }, population: 3, isCapital: true, hp: 24, maxHp: 24 }
+      }
+    }
+  });
+
+  let sawTrireme = false;
+  let navalAttacks = 0;
+  for (let i = 0; i < 160; i += 1) {
+    const current = state.players[state.currentPlayerIndex].id;
+    const result = runAiTurn(state, current, 12);
+    state = result.state;
+    if (Object.values(state.map.units).some((u) => u.type === "trireme")) sawTrireme = true;
+    navalAttacks += result.actions.filter((a) => a.type === "ATTACK" || a.type === "ATTACK_CITY").length;
+    if (getVictoryStatus(state).winnerId) break;
+  }
+
+  assert.ok(sawTrireme, "the AI should build a trireme from its coastal city");
+  assert.ok(navalAttacks > 0, "the fleets should engage across the strait");
+});
+
 test("ai chooses a valid action for the active player", () => {
   const state = createInitialGameState(loadScenario("italia").config);
   assert.equal(chooseAiAction(state, "rome").playerId, "rome");

@@ -1,7 +1,7 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS } from "./data";
 import { applyAction, computeCombatPreview, researchCost, isCoastalCity } from "./index";
 import { getEvent } from "./events";
-import { distance, DIRECTIONS } from "./hex";
+import { distance, DIRECTIONS, keyOf } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import type { City, Coord, GameAction, GameState, Player, Unit } from "./types";
 
@@ -212,11 +212,28 @@ function buildAction(state: GameState, player: Player): GameAction | null {
     return !rule.requiresTech || player.techs.includes(rule.requiresTech);
   };
 
+  // Naval ambition: want roughly one warship per enemy coastal city, so an
+  // amphibious rival can actually be reached and fought across the water.
+  const triremeCount = unitsOf(state, player).filter((u) => u.type === "trireme").length;
+  const enemyCoastalCities = enemyCities(state, player.id).filter((c) => isCoastalCity(state, c.id)).length;
+  const desiredShips = Math.min(4, enemyCoastalCities);
+
   for (const city of cities) {
     // Don't over-queue; production banks and builds these over turns.
     if ((city.queue?.length ?? 0) >= 2) continue;
+    const coastal = isCoastalCity(state, city.id);
     let chosen: string | null = null;
     if (wantSettler && canBuild("settler") && !(city.queue ?? []).includes("settler")) chosen = "settler";
+    // A coastal city yards a warship when the fleet is short of its target size.
+    if (
+      !chosen &&
+      coastal &&
+      canBuild("trireme") &&
+      triremeCount < desiredShips &&
+      !(city.queue ?? []).includes("trireme")
+    ) {
+      chosen = "trireme";
+    }
     if (!chosen) chosen = militaryPref.find(canBuild) ?? null;
     if (!chosen) continue;
     return {
@@ -285,6 +302,51 @@ function maneuverAction(state: GameState, player: Player): GameAction | null {
   return null;
 }
 
+// Sail warships toward the nearest enemy coastal city (to bombard it) or hunt
+// enemy ships, stepping only over water. Once adjacent, attackAction bombards.
+function navalManeuverAction(state: GameState, player: Player): GameAction | null {
+  for (const unit of unitsOf(state, player)) {
+    if (UNITS[unit.type].domain !== "naval" || unit.movementRemaining <= 0) continue;
+
+    // Prefer a coastal enemy city; otherwise chase the nearest enemy ship.
+    const coastalTargets = enemyCities(state, player.id).filter((c) => isCoastalCity(state, c.id));
+    let targetPos: Coord | null = nearestCity(coastalTargets, unit.position)?.position ?? null;
+    if (!targetPos) {
+      let bestDist = Infinity;
+      for (const enemy of Object.values(state.map.units)) {
+        if (enemy.ownerId === player.id) continue;
+        if (UNITS[enemy.type].domain !== "naval") continue;
+        const d = distance(unit.position, enemy.position);
+        if (d < bestDist) {
+          bestDist = d;
+          targetPos = enemy.position;
+        }
+      }
+    }
+    if (!targetPos) continue;
+
+    const ctx = moveCtx(unit);
+    let bestStep: Coord | null = null;
+    let bestScore = distance(unit.position, targetPos);
+    for (const dir of DIRECTIONS) {
+      const next = { q: unit.position.q + dir[0], r: unit.position.r + dir[1] };
+      if (!state.map.tiles[keyOf(next)]) continue;
+      const step = movementCost(state, ctx, unit.position, next);
+      if (!Number.isFinite(step) || step > unit.movementRemaining) continue;
+      if (unitAt(state, next) || cityAtCoord(state, next)) continue;
+      const d = distance(next, targetPos);
+      if (d < bestScore) {
+        bestScore = d;
+        bestStep = next;
+      }
+    }
+    if (bestStep) {
+      return { type: "MOVE_UNIT", playerId: player.id, unitId: unit.id, destination: bestStep };
+    }
+  }
+  return null;
+}
+
 function settlerMoveAction(state: GameState, player: Player): GameAction | null {
   const cities = ownCities(state, player.id);
   for (const unit of unitsOf(state, player)) {
@@ -339,6 +401,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => buildAction(state, player),
     () => buildingAction(state, player),
     () => maneuverAction(state, player),
+    () => navalManeuverAction(state, player),
     () => settlerMoveAction(state, player),
     () => {
       const techId = firstBuildableTech(player);
