@@ -404,6 +404,25 @@ export const RESOURCES: Record<string, ResourceRule> = {
   }
 };
 
+// Controlling a deposit of the mapped resource in your territory makes the build
+// cheaper (BUILD_DISCOUNT off its labour cost). Thematic: timber for hulls & siege
+// engines, iron for metal-armed foot, horses for cavalry, stone for fortification.
+export const BUILD_DISCOUNT = 0.7; // 30% off when you hold the resource
+export const BUILD_RESOURCE: Record<string, string> = {
+  trireme: "timber",
+  siege: "timber",
+  swordsman: "iron",
+  spearman: "iron",
+  hoplite: "iron",
+  legionary: "iron",
+  gaesatae: "iron",
+  barracks: "iron",
+  horseman: "horses",
+  "war-chariot": "horses",
+  "horse-archer": "horses",
+  walls: "stone"
+};
+
 // Composition roles for combined-arms bonuses.
 export const MELEE_CATEGORIES = new Set(["infantry", "spear", "heavy"]);
 export const RANGED_CATEGORIES = new Set(["ranged", "siege"]);

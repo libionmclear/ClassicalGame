@@ -9,10 +9,13 @@ import {
   computePlayerIncome,
   computeTerritory,
   createInitialGameState,
+  effectiveItemCost,
   getVictoryStatus,
   isCoastalCity,
   keyOf,
   movementCost,
+  playerFoodUpkeep,
+  productionItemCost,
   replayActions,
   rushProductionCost,
   tradeRouteIncome
@@ -209,6 +212,36 @@ test("a worked resource deposit adds its yield to the city", () => {
   state.map.tiles["1,0"].resource = "grain";
   const withRes = computeCityYield(state, "c1");
   assert.equal(withRes.food, base.food + 2);
+});
+
+test("holding a resource discounts the builds that need it", () => {
+  const state = buildState();
+  // Trireme needs timber; tile 1,0 is worked by c1 (p1's territory).
+  const full = effectiveItemCost(state, "p1", "trireme");
+  assert.equal(full, productionItemCost("trireme")); // no timber yet -> full price
+  state.map.tiles["1,0"].resource = "timber";
+  const discounted = effectiveItemCost(state, "p1", "trireme");
+  assert.ok(discounted < full);
+});
+
+test("troops levy a food upkeep that reduces net food (soft deficit)", () => {
+  const lean = buildState();
+  const leanUpkeep = playerFoodUpkeep(lean, "p1"); // 2 military - 1 city = 1
+  const leanFood = computePlayerIncome(lean, "p1").food;
+
+  const heavy = buildState();
+  for (let i = 0; i < 8; i += 1) {
+    const id = "w" + i;
+    heavy.map.units[id] = {
+      id, type: "warrior", ownerId: "p1", position: { q: 0, r: 1 },
+      hp: 20, maxHp: 20, movementRemaining: 2, veterancy: "recruit"
+    };
+    heavy.playersById.p1.unitIds.push(id);
+  }
+  const heavyUpkeep = playerFoodUpkeep(heavy, "p1");
+  assert.ok(heavyUpkeep > leanUpkeep);
+  // A bigger army eats more, so net food is lower (and here goes into deficit).
+  assert.ok(computePlayerIncome(heavy, "p1").food < leanFood);
 });
 
 test("replay from action log produces same final state", () => {

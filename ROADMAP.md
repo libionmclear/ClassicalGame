@@ -33,11 +33,13 @@ matters, unique per civilization.
   horses, wine, silver), placed deterministically on generated maps + scenarios,
   shown as on-board badges with tooltips. A city works the deposits in its
   territory for bonus yields (food / labour / gold).
-- [phase 2] Food feeds troops (upkeep in food) as well as growth.
-- [phase 2] Wood/ore/stone gate or cheapen buildings and units (ore for metal
-  units, timber for ships/siege, stone for walls/monuments).
-- [phase 2] Improving a resource tile increases what it yields; labour capped by
-  available resources.
+- [done, phase 2] Food feeds troops: each soldier eats 1 food/turn beyond a free
+  garrison of 1 per city; a deficit softly halts growth (no starvation). Net food
+  shown in the HUD.
+- [done, phase 2] Controlling a deposit gives -30% labour on the related builds
+  (timber→ships/siege, iron→metal foot/barracks, horses→cavalry, stone→walls).
+- [phase 3] Improving a resource tile increases what it yields; a full spendable
+  stockpile (wood/ore/stone) if we want deeper consumption.
 
 ### Research: deeper, historical, civ-unique
 - Many more techs so science isn't exhausted mid-game; costs scale by age.

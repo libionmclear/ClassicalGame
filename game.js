@@ -440,6 +440,21 @@
   }
 
   function itemCost(id) {
+    // Reflect the resource discount (controlling timber/iron/… cheapens a build).
+    if (engine.effectiveItemCost && state) {
+      const c = engine.effectiveItemCost(state, HUMAN_ID, id);
+      if (Number.isFinite(c)) return c;
+    }
+    if (engine.UNITS && engine.UNITS[id]) return (engine.UNIT_BUILD_COSTS || {})[id] || 0;
+    if (engine.BUILDINGS && engine.BUILDINGS[id]) return engine.BUILDINGS[id].cost;
+    return 0;
+  }
+  // Base (undiscounted) labour cost, for showing a strike-through / discount hint.
+  function baseItemCost(id) {
+    if (engine.productionItemCost) {
+      const c = engine.productionItemCost(id);
+      if (Number.isFinite(c)) return c;
+    }
     if (engine.UNITS && engine.UNITS[id]) return (engine.UNIT_BUILD_COSTS || {})[id] || 0;
     if (engine.BUILDINGS && engine.BUILDINGS[id]) return engine.BUILDINGS[id].cost;
     return 0;
@@ -583,10 +598,15 @@
       const hasTech = !reqTech || player.techs.includes(reqTech);
       const needsCoast = b.coastalOnly && !coastal;
       const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
+      const bCost = itemCost(id); // discounted if you hold the needed resource
+      const bDiscounted = bCost < b.cost;
+      const bRes = (engine.BUILD_RESOURCE || {})[id];
+      const bGlyph = bRes && engine.RESOURCES && engine.RESOURCES[bRes] ? engine.RESOURCES[bRes].glyph : "";
       const btn = document.createElement("button");
       btn.className = "build-item" + (has ? " done" : hasTech && !needsCoast ? "" : " locked");
       btn.disabled = has || isQueued || needsCoast || !(isTurn && hasTech);
-      btn.title = b.note + (b.coastalOnly ? "\n\n⚓ Coastal cities only." : "");
+      btn.title = b.note + (b.coastalOnly ? "\n\n⚓ Coastal cities only." : "") +
+        (bDiscounted ? "\n\n" + bGlyph + " -30%: you control " + (engine.RESOURCES[bRes] ? engine.RESOURCES[bRes].name : bRes) + " in your territory." : bRes ? "\n\nControl " + (engine.RESOURCES[bRes] ? engine.RESOURCES[bRes].name : bRes) + " for -30% labour." : "");
       const status = has
         ? "✓ built"
         : isQueued
@@ -595,7 +615,7 @@
             ? "🔒 " + techName
             : needsCoast
               ? "⚓ coastal only"
-              : b.cost + " ⚒️";
+              : (bDiscounted ? bGlyph + " " : "") + bCost + " ⚒️";
       btn.innerHTML =
         '<span class="bi-name">' + (BUILDING_GLYPH[id] || "▪") + " " + b.name + "</span>" +
         '<span class="bi-cost">' + status + "</span>";
@@ -621,11 +641,15 @@
       // Civ-unique units only appear for the people they belong to.
       if (def.civ && !civMatches(player, def.civ)) continue;
       const meta = UNIT_META[type] || { name: type, role: "" };
-      const cost = costs[type];
+      const base = costs[type];
+      const cost = itemCost(type); // discounted if you hold the needed resource
+      const discounted = typeof base === "number" && cost < base;
       const reqTech = def.requiresTech;
       const hasTech = !reqTech || player.techs.includes(reqTech);
       const needsCoast = def.domain === "naval" && !coastal;
       const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
+      const discRes = (engine.BUILD_RESOURCE || {})[type];
+      const discGlyph = discRes && engine.RESOURCES && engine.RESOURCES[discRes] ? engine.RESOURCES[discRes].glyph : "";
 
       const btn = document.createElement("button");
       btn.className = "build-item" + (hasTech && !needsCoast ? "" : " locked");
@@ -643,6 +667,7 @@
         meta.role + (reqTech ? " — needs " + techName : "") +
         (def.domain === "naval" ? "\n\n⚓ Coastal cities only; launches into the water." : "") +
         (typeof cost === "number" ? "\n\nCosts " + cost + " labor — this city banks labor each turn until it is paid, then the unit appears at End Turn." : "") +
+        (discounted ? "\n\n" + discGlyph + " -30%: you control " + (engine.RESOURCES[discRes] ? engine.RESOURCES[discRes].name : discRes) + " in your territory." : discRes ? "\n\nControl " + (engine.RESOURCES[discRes] ? engine.RESOURCES[discRes].name : discRes) + " in your territory for -30% labour." : "") +
         (UNIT_HISTORY[type] ? "\n\n" + UNIT_HISTORY[type] : "");
 
       const status = !hasTech
@@ -650,7 +675,7 @@
         : needsCoast
           ? "⚓ coastal only"
           : typeof cost === "number"
-            ? cost + " ⚒️" + etaHint
+            ? (discounted ? discGlyph + " " : "") + cost + " ⚒️" + etaHint
             : "";
       btn.innerHTML =
         '<span class="bi-name">' + (UNIT_GLYPHS[type] || "•") + " " + meta.name + "</span>" +
@@ -2059,6 +2084,7 @@
 
   const RES_TITLES = {
     Populus: "Populus — your people. Cities grow as they bank food.",
+    Food: "Food — net per turn after your army's upkeep (1 food per soldier beyond a free garrison of one per city). A surplus grows your cities; a deficit (red) stalls growth until you feed or shrink the army.",
     "Labor/turn": "Labor — production made across all your cities each turn. It is NOT a shared pool: every city banks its OWN labor and builds only from that, so select a city to see what it has and how long its work will take.",
     Denarii: "Denarii — a shared treasury from markets and trade; pays upkeep and can rush-buy.",
     Scientia: "Scientia — learning. A shared pool that accrues each turn and buys techs.",
@@ -2070,8 +2096,12 @@
     const humanCities = Object.values(state.map.cities).filter((c) => c.ownerId === HUMAN_ID);
     const pop = humanCities.reduce((sum, c) => sum + c.population, 0);
     const inc = engine.computePlayerIncome ? engine.computePlayerIncome(state, HUMAN_ID) : {};
+    // Net food per turn (after the army's food upkeep). Negative = a deficit that
+    // stalls growth — flag it so the player can feed or shrink the army.
+    const netFood = inc.food || 0;
     const resources = [
       { ico: "👥", val: pop, lbl: "Populus", delta: null },
+      { ico: "🌾", val: (netFood >= 0 ? "+" : "") + netFood + "/t", lbl: "Food", delta: null, warn: netFood < 0 },
       // Labor is per-city, not a shared pool — show the empire's output RATE, not
       // a banked total (which read as spendable and confused players).
       { ico: "⚒️", val: (inc.production || 0) + "/t", lbl: "Labor", delta: null },
@@ -2085,7 +2115,7 @@
             ? '<span class="res-delta">(' + (r.delta > 0 ? "+" : "") + r.delta + ")</span>"
             : "";
         return (
-          '<span class="res" title="' + (RES_TITLES[r.lbl] || "") + '"><span class="res-ico">' + r.ico +
+          '<span class="res' + (r.warn ? " res-warn" : "") + '" title="' + (RES_TITLES[r.lbl] || "") + '"><span class="res-ico">' + r.ico +
           '</span><span class="res-val">' + r.val + "</span>" + delta +
           '<span class="res-lbl">' + r.lbl + "</span></span>"
         );

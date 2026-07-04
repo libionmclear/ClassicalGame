@@ -9,7 +9,9 @@ import {
   CATEGORY_LABELS,
   BUILDINGS,
   IMPROVEMENTS,
-  RESOURCES
+  RESOURCES,
+  BUILD_RESOURCE,
+  BUILD_DISCOUNT
 } from "./data";
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -644,6 +646,45 @@ export function productionItemCost(id: string): number {
   return Infinity;
 }
 
+// The distinct strategic resources a player works anywhere in their territory.
+export function controlledResources(state: GameState, ownerId: string): Set<string> {
+  const owned = new Set<string>();
+  for (const [key, tile] of Object.entries(state.map.tiles)) {
+    if (!tile.resource) continue;
+    const claim = claimingCity(state, parseKey(key));
+    if (claim && claim.ownerId === ownerId) owned.add(tile.resource);
+  }
+  return owned;
+}
+
+// 0.7 if the owner holds the resource this build needs (a discount), else 1.
+export function buildDiscount(state: GameState, ownerId: string, id: string): number {
+  const need = BUILD_RESOURCE[id];
+  if (!need) return 1;
+  return controlledResources(state, ownerId).has(need) ? BUILD_DISCOUNT : 1;
+}
+
+// Labour cost after any resource discount the owner qualifies for.
+export function effectiveItemCost(state: GameState, ownerId: string, id: string): number {
+  const base = productionItemCost(id);
+  if (!Number.isFinite(base)) return base;
+  return Math.max(1, Math.round(base * buildDiscount(state, ownerId, id)));
+}
+
+// Food eaten by an empire's standing army each turn: 1 per non-civilian unit,
+// with a free garrison allowance of one unit per city.
+export const FOOD_UPKEEP_FREE_PER_CITY = 1;
+export function playerFoodUpkeep(state: GameState, playerId: string): number {
+  const player = state.playersById[playerId];
+  if (!player) return 0;
+  const military = player.unitIds.reduce((n, id) => {
+    const u = state.map.units[id];
+    return n + (u && UNITS[u.type].domain !== "civilian" ? 1 : 0);
+  }, 0);
+  const free = player.cityIds.length * FOOD_UPKEEP_FREE_PER_CITY;
+  return Math.max(0, military - free);
+}
+
 // Pick an empty water tile next to a coastal city to launch a new ship. Falls
 // back to the city tile if the city is somehow landlocked or the water is full.
 function navalLaunchTile(state: GameState, city: City): Coord {
@@ -724,7 +765,7 @@ function processCityQueue(state: GameState, city: City): void {
         continue;
       }
     }
-    const cost = productionItemCost(id);
+    const cost = effectiveItemCost(state, city.ownerId, id);
     if (!Number.isFinite(cost) || (city.production ?? 0) < cost) break;
     city.production = (city.production ?? 0) - cost;
     completeQueueItem(state, city, id);
@@ -775,7 +816,7 @@ export function rushProductionCost(
   const city = state.map.cities[cityId];
   if (!city || !city.queue || city.queue.length === 0) return null;
   const itemId = city.queue[0];
-  const cost = productionItemCost(itemId);
+  const cost = effectiveItemCost(state, city.ownerId, itemId);
   if (!Number.isFinite(cost)) return null;
   const missing = Math.max(0, cost - (city.production ?? 0));
   return { itemId, missingProduction: missing, goldCost: Math.ceil(missing * RUSH_GOLD_PER_PRODUCTION) };
@@ -791,7 +832,7 @@ function applyRushProduction(state: GameState, action: RushProductionAction): vo
   if (player.gold < rush.goldCost) throw new Error("Not enough denarii to rush");
   player.gold -= rush.goldCost;
   // Top the city's production up to the front item's cost, then build it now.
-  const cost = productionItemCost(rush.itemId);
+  const cost = effectiveItemCost(state, city.ownerId, rush.itemId);
   city.production = Math.max(city.production ?? 0, cost);
   processCityQueue(state, city);
 }
@@ -928,6 +969,21 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   const endingPlayer = getCurrentPlayer(state);
 
   const mult = aiEconomyMultiplier(state, endingPlayer.id);
+
+  // Troops eat food: the empire's total food output is taxed by the army's
+  // upkeep before it banks toward growth. A surplus still grows cities (slower);
+  // a deficit halts growth and slowly drains stored food (never starves — soft).
+  const foodByCity: Record<string, number> = {};
+  let foodProd = 0;
+  for (const cityId of endingPlayer.cityIds) {
+    const gained = Math.round(computeCityYield(state, cityId).food * mult);
+    foodByCity[cityId] = gained;
+    foodProd += gained;
+  }
+  const foodUpkeep = playerFoodUpkeep(state, endingPlayer.id);
+  const net = foodProd - foodUpkeep;
+  const foodMult = foodProd > 0 ? Math.max(0, net / foodProd) : 0;
+
   for (const cityId of endingPlayer.cityIds) {
     const yields = computeCityYield(state, cityId);
     endingPlayer.gold += Math.round(yields.gold * mult);
@@ -935,8 +991,8 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
 
     const city = state.map.cities[cityId];
     if (city) {
-      // Food is banked per-city and grows population when it fills the bar.
-      city.food = (city.food ?? 0) + Math.round(yields.food * mult);
+      // Food is banked per-city (after the army's food-tax) and grows population.
+      city.food = (city.food ?? 0) + Math.round((foodByCity[cityId] ?? 0) * foodMult);
       let need = growthCost(city.population);
       while (city.population < MAX_POPULATION && city.food >= need) {
         city.food -= need;
@@ -953,6 +1009,20 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
       if (city.hp < city.maxHp && (city.lastAttackedTurn ?? -1) < state.turn) {
         city.hp = Math.min(city.maxHp, city.hp + CITY_REGEN);
       }
+    }
+  }
+
+  // Deficit: drain stored food from cities to cover the shortfall (floored at 0,
+  // no population loss).
+  if (net < 0) {
+    let deficit = -net;
+    for (const cityId of endingPlayer.cityIds) {
+      if (deficit <= 0) break;
+      const city = state.map.cities[cityId];
+      if (!city) continue;
+      const take = Math.min(city.food ?? 0, deficit);
+      city.food = (city.food ?? 0) - take;
+      deficit -= take;
     }
   }
 
@@ -1270,6 +1340,8 @@ export function computePlayerIncome(
   const upkeep = player.unitIds.reduce((sum, id) => sum + (state.map.units[id] ? UNITS[state.map.units[id].type].upkeep || 0 : 0), 0);
   income.gold -= upkeep;
   income.gold += tradeRouteIncome(state, playerId);
+  // Net food after the army's food-tax (can go negative — a deficit stalls growth).
+  income.food -= playerFoodUpkeep(state, playerId);
   return income;
 }
 
@@ -1416,6 +1488,7 @@ export {
   BUILDINGS,
   IMPROVEMENTS,
   RESOURCES,
+  BUILD_RESOURCE,
   EVENTS,
   getEvent
 };

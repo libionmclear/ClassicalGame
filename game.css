@@ -902,6 +902,12 @@ button:hover:not(:disabled) {
   color: var(--muted);
 }
 
+/* Food (or any stat) in deficit — flag it red. */
+.res-bar.hud-tl .res.res-warn .res-val {
+  color: #ff6b6b;
+  font-weight: 700;
+}
+
 .standings-panel {
   background: rgba(10, 20, 36, 0.95);
   border: 1px solid #2a4a70;
