@@ -80,6 +80,10 @@
   let lastVisibility = { visible: new Set(), discovered: new Set() };
   let boardLayoutKey = "";
   let overlayEl = null;
+  // 3D board (Three.js) — used when WebGL is available; the DOM board is the fallback.
+  let board3d = null;
+  let USE_3D = false;
+  let last3DHoverKey = null;
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
@@ -1355,6 +1359,107 @@
     }
   }
 
+  // Build the plain view object the 3D board renders from — a light per-tile
+  // classification (visibility, owner, highlight), the visible sprites, and the
+  // realm border edges. All game logic (sprite tiers, hints) stays in game.js.
+  function build3DView(visibility, hints, territory) {
+    const tiles = [];
+    const sprites = [];
+    const borders = [];
+    const selUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
+    const selCity = selectedCityId ? state.map.cities[selectedCityId] : null;
+    for (const key of Object.keys(state.map.tiles)) {
+      const tile = state.map.tiles[key];
+      const c = key.split(",");
+      const q = +c[0];
+      const r = +c[1];
+      const isVis = visibility.visible.has(key);
+      const isDisc = visibility.discovered.has(key);
+      const v = isVis ? 2 : isDisc ? 1 : 0;
+      const owner = v > 0 ? territory[key] || null : null;
+      let h = 0;
+      if (combatFlashKeys.has(key)) h = 6;
+      else if ((selUnit && selUnit.position.q === q && selUnit.position.r === r) ||
+               (selCity && selCity.position.q === q && selCity.position.r === r)) h = 3;
+      else if (selectedTileKey === key) h = 4;
+      else if (hints.attackable.has(key)) h = 2;
+      else if (hints.reachable.has(key)) h = 1;
+      else if (hoveredPathKeys.has(key)) h = 5;
+      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h });
+      if (owner && v > 0) {
+        for (const d of AXIAL_DIRS) {
+          const nk = q + d[0] + "," + (r + d[1]);
+          if (!state.map.tiles[nk] || territory[nk] === owner) continue;
+          borders.push({ q: q, r: r, nq: q + d[0], nr: r + d[1], color: CIV_COLORS[owner] || "#888" });
+        }
+      }
+    }
+    for (const city of Object.values(state.map.cities)) {
+      if (!visibility.visible.has(city.position.q + "," + city.position.r)) continue;
+      sprites.push({
+        civ: city.ownerId, kind: "city", name: citySpriteName(city.ownerId, city) || "",
+        color: CIV_COLORS[city.ownerId] || "#888", q: city.position.q, r: city.position.r
+      });
+    }
+    for (const unit of Object.values(state.map.units)) {
+      if (!visibility.visible.has(unit.position.q + "," + unit.position.r)) continue;
+      if (getCityAt(unit.position.q, unit.position.r)) continue; // shown as the city
+      const embarked = engine.isEmbarked && engine.isEmbarked(state, unit);
+      sprites.push({
+        civ: unit.ownerId, kind: "unit", name: unitSpriteName(unit.ownerId, unit) || "",
+        color: CIV_COLORS[unit.ownerId] || "#888", q: unit.position.q, r: unit.position.r,
+        badge: embarked ? "⛵" : (UNIT_GLYPHS[unit.type] || "•")
+      });
+    }
+    const view = { tiles: tiles, sprites: sprites, borders: borders, civColors: CIV_COLORS };
+    if (pendingRecenter) {
+      const home =
+        Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
+        Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
+      if (home) view.focus = { q: home.position.q, r: home.position.r };
+      pendingRecenter = false;
+    }
+    return view;
+  }
+
+  // Hover on the 3D board: recompute the movement path preview + hint for the
+  // hovered tile (only when it changes) and re-render so the path lights up.
+  function handle3DHover(key) {
+    if (key === last3DHoverKey) return;
+    last3DHoverKey = key;
+    if (!key) {
+      hoveredPathKeys = new Set();
+      hintLineEl.textContent = defaultHintText;
+      render();
+      return;
+    }
+    const c = key.split(",");
+    const q = +c[0];
+    const r = +c[1];
+    hoveredPathKeys = computePathPreviewKeys(q, r, lastVisibility);
+    hintLineEl.textContent = hover3DHint(q, r) || defaultHintText;
+    render();
+  }
+
+  function hover3DHint(q, r) {
+    const selUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
+    if (!selUnit) return "";
+    const units = getUnitsAt(q, r);
+    const city = getCityAt(q, r);
+    const enemyUnit = units.find((u) => u.ownerId !== selUnit.ownerId);
+    if (enemyUnit) {
+      try {
+        const p = engine.computeCombatPreview(state, selUnit.id, enemyUnit.id);
+        return "⚔️ " + selUnit.type + " → " + enemyUnit.type + ": enemy −" + p.damageToDefender +
+          " (→" + p.defenderRemainingHp + "), you −" + p.damageToAttacker + " (→" + p.attackerRemainingHp + ")";
+      } catch (e) {
+        return "Target out of range.";
+      }
+    }
+    if (city && city.ownerId !== selUnit.ownerId) return "🏛️ Siege " + city.id;
+    return "Move here";
+  }
+
   // Render a unit as a small cluster of figures — count thins with damage,
   // and veteran/elite units gain a highlighted standard-bearer.
   function unitCluster(unit) {
@@ -1614,6 +1719,10 @@
       const hints = getTileHintsForSelectedUnit(visibility);
       const territory = engine.computeTerritory ? engine.computeTerritory(state) : {};
 
+      if (USE_3D && board3d) {
+        // The 3D board is fed a plain view object; all game logic stays here.
+        board3d.render(build3DView(visibility, hints, territory));
+      } else {
       const size = hexSize();
       const geom = {
         hexW: SQRT3 * size,
@@ -1694,6 +1803,7 @@
         }
         pendingRecenter = false;
       }
+      } // end DOM board branch
 
       renderHud();
       renderLegend();
@@ -2211,6 +2321,7 @@
     let startScrollX = 0;
     let startScrollY = 0;
     boardWrap.addEventListener("mousedown", function (e) {
+      if (USE_3D) return; // the 3D camera handles pan/zoom itself
       if (e.button !== 0) return;
       panning = true;
       panMoved = false;
@@ -2241,8 +2352,49 @@
   loadSavedColors();
   // Note: the actual first render happens via resumeOrNew() at the very end.
 
+  // Bring up the 3D board if WebGL is available; fall back to the DOM board.
+  (function init3D() {
+    try {
+      // Allow forcing the classic 2D board (URL ?board=2d or the toggle button).
+      const force2d = /[?&]board=2d/.test(location.search) || window.localStorage.getItem("hegemon_board") === "2d";
+      if (force2d) return;
+      const canvas = document.getElementById("board3d-canvas");
+      if (!canvas || !window.Board3D || !window.Board3D.createBoard) return;
+      board3d = window.Board3D.createBoard(canvas);
+      USE_3D = true;
+      const wrap = boardEl.parentElement;
+      if (wrap) wrap.classList.add("three");
+      board3d.resize(); // the canvas is now visible with a real size
+      board3d.onPick(function (key) {
+        if (!key) return;
+        const c = key.split(",");
+        onTileClick(+c[0], +c[1]);
+      });
+      board3d.onHover(handle3DHover);
+    } catch (e) {
+      console.warn("3D board unavailable — using the 2D board.", e);
+      USE_3D = false;
+      board3d = null;
+    }
+  })();
+
+  // 2D / 3D board toggle (persists; reloads to swap the renderer cleanly).
+  (function wireBoardToggle() {
+    const btn = document.getElementById("board-toggle-btn");
+    if (!btn) return;
+    btn.textContent = USE_3D ? "🗺️ 2D" : "🧊 3D";
+    btn.title = USE_3D ? "Switch to the classic 2D board" : "Switch to the 3D board";
+    btn.addEventListener("click", function () {
+      try {
+        window.localStorage.setItem("hegemon_board", USE_3D ? "2d" : "3d");
+      } catch (e) {}
+      location.reload();
+    });
+  })();
+
   let resizeTimer = null;
   window.addEventListener("resize", function () {
+    if (board3d) board3d.resize();
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function () {
       if (state) render();

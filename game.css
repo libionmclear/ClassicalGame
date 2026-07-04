@@ -339,6 +339,39 @@ button:hover:not(:disabled) {
   cursor: grabbing;
 }
 
+/* 3D board mode: the WebGL canvas fills the frame; no DOM scroll (the camera
+   handles pan/zoom), and the DOM tile board is hidden. */
+#board3d-canvas {
+  display: none;
+  width: 100%;
+  height: 78vh;
+}
+
+.board-wrap.three {
+  overflow: hidden;
+  padding: 0;
+  cursor: default;
+  perspective: none;
+}
+
+.board-wrap.three #board3d-canvas {
+  display: block;
+}
+
+.board-wrap.three .board {
+  display: none;
+}
+
+.board-wrap.three .legend {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 5;
+  background: rgba(10, 20, 36, 0.72);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
 /* Tilted 3D-inclined plane. IMPORTANT: no `transform-style: preserve-3d`
    here — that breaks pointer hit-testing on the clip-path hex tiles. A plain
    rotateX flattens the children onto the tilted plane, so clicks still land. */

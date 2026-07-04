@@ -60,6 +60,7 @@
         <button id="end-turn-btn">End Turn</button>
         <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖 Codex</button>
         <button id="colors-btn" class="ghost-btn" title="Civilization colours">🎨</button>
+        <button id="board-toggle-btn" class="ghost-btn" title="Switch 2D / 3D board">🧊 3D</button>
         <button id="zoom-out-btn" class="ghost-btn zoom-btn" title="Zoom out">−</button>
         <button id="zoom-in-btn" class="ghost-btn zoom-btn" title="Zoom in">+</button>
       </div>
@@ -77,6 +78,7 @@
 
     <section class="play-area">
       <div class="board-wrap">
+        <canvas id="board3d-canvas"></canvas>
         <section id="board" class="board"></section>
         <div id="legend" class="legend"></div>
       </div>
@@ -175,6 +177,7 @@
 
   <script src="web/engine.bundle.js"></script>
   <script src="web/sprites.js"></script>
+  <script src="web/board3d.bundle.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

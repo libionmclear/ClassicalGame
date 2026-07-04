@@ -7,7 +7,9 @@ import { chromium } from "playwright";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const fileUrl = pathToFileURL(path.resolve("public/game.html")).href;
+// Force the classic 2D board — this test drives DOM tiles (the 3D board is
+// verified separately with WebGL flags).
+const fileUrl = pathToFileURL(path.resolve("public/game.html")).href + "?board=2d";
 const fail = (msg) => {
   console.error("FAIL:", msg);
   process.exitCode = 1;
