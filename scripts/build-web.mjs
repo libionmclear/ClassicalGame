@@ -13,7 +13,8 @@ await mkdir(publicWebDir, { recursive: true });
 await Promise.all([
   copyFile(path.join(root, "game.html"), path.join(publicDir, "game.html")),
   copyFile(path.join(root, "game.css"), path.join(publicDir, "game.css")),
-  copyFile(path.join(root, "game.js"), path.join(publicDir, "game.js"))
+  copyFile(path.join(root, "game.js"), path.join(publicDir, "game.js")),
+  copyFile(path.join(root, "board3d.html"), path.join(publicDir, "board3d.html"))
 ]);
 
 await build({
@@ -23,6 +24,15 @@ await build({
   globalName: "HegemonEngine",
   platform: "browser",
   outfile: path.join(publicWebDir, "engine.bundle.js")
+});
+
+// The Three.js 3D board prototype (self-contained: bundles three + the engine).
+await build({
+  entryPoints: [path.join(root, "src", "render3d", "board3d.ts")],
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  outfile: path.join(publicWebDir, "board3d.bundle.js")
 });
 
 // Sliced civ sprites (if any have been generated) ship as static assets, and the

@@ -22,5 +22,9 @@
     "pngjs": "^7.0.0",
     "tsx": "^4.20.3",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@types/three": "^0.185.0",
+    "three": "^0.185.1"
   }
 }

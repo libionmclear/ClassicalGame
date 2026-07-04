@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HEGEMON — 3D board prototype</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a1a2f; color: #cfe0f2; font-family: system-ui, sans-serif; overflow: hidden; }
+    #stage { position: fixed; inset: 0; display: block; width: 100vw; height: 100vh; }
+    .hud {
+      position: fixed; left: 12px; top: 12px; z-index: 10;
+      background: rgba(10, 20, 36, 0.72); border: 1px solid #26466e; border-radius: 8px;
+      padding: 10px 12px; font-size: 13px; line-height: 1.5; max-width: 320px;
+    }
+    .hud h1 { margin: 0 0 4px; font-size: 15px; }
+    .hud select { margin-top: 6px; background: #12233a; color: #cfe0f2; border: 1px solid #26466e; border-radius: 4px; padding: 3px 6px; }
+    .hud .muted { color: #8fb0d6; }
+    #pick { margin-top: 6px; color: #f2cc69; }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div class="hud">
+    <h1>HEGEMON — 3D board (prototype)</h1>
+    <div class="muted">Left-drag: pan · Right-drag: tilt/orbit · Wheel: zoom · Click a tile to inspect.</div>
+    <label class="muted">Map
+      <select id="map">
+        <option value="oikoumene">The Known World</option>
+        <option value="italia">Italia</option>
+        <option value="hellas">Hellas</option>
+        <option value="large" selected>Large (random)</option>
+        <option value="medium">Medium (random)</option>
+      </select>
+    </label>
+    <div id="pick">—</div>
+  </div>
+
+  <script src="web/sprites.js"></script>
+  <script src="web/board3d.bundle.js"></script>
+  <script>
+    (function () {
+      const canvas = document.getElementById("stage");
+      const sel = document.getElementById("map");
+      function start() {
+        // Recreate the demo by reloading with the chosen map (simplest reset).
+        window.Board3D.initDemo(canvas, sel.value);
+      }
+      sel.addEventListener("change", function () { location.hash = sel.value; location.reload(); });
+      if (location.hash) sel.value = location.hash.slice(1);
+      start();
+    })();
+  </script>
+</body>
+</html>
