@@ -762,10 +762,18 @@
       return { visible: new Set(), discovered: new Set() };
     }
     const visibility = engine.computeVisibility(state, HUMAN_ID);
-    return {
-      visible: new Set(visibility.visibleTiles),
-      discovered: new Set(visibility.discoveredTiles)
-    };
+    const visible = new Set(visibility.visibleTiles);
+    const discovered = new Set(visibility.discoveredTiles);
+    // Your own realm is always watched — every tile inside your borders stays in
+    // full view (and you can see who stands on it), not just what a unit sees.
+    const territory = engine.computeTerritory ? engine.computeTerritory(state) : {};
+    for (const key in territory) {
+      if (territory[key] === HUMAN_ID) {
+        visible.add(key);
+        discovered.add(key);
+      }
+    }
+    return { visible: visible, discovered: discovered };
   }
 
   function isHumanTurn() {

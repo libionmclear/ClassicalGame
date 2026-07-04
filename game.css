@@ -604,15 +604,60 @@ button:hover:not(:disabled) {
   background: #e0533d;
 }
 
-/* terrain */
-.tile.terrain-plains { background: #6f7d47; }
-.tile.terrain-valley { background: #7d9749; }
-.tile.terrain-forest { background: #33553a; }
-.tile.terrain-hills { background: #7a6a4a; }
-.tile.terrain-mountains { background: #6d6459; }
-.tile.terrain-desert { background: #b79860; }
-.tile.terrain-coast { background: #3f7387; }
-.tile.terrain-sea { background: #2f4f77; }
+/* Terrain — layered CSS gradients give each tile depth and a characteristic
+   texture (grass mottle, tree canopy, rocky peaks, dunes, waves) without going
+   back to cartoon icons: still "colours", just no longer flat and barren. */
+.tile.terrain-plains {
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.09), transparent 55%),
+    radial-gradient(circle at 70% 72%, rgba(60, 78, 40, 0.35), transparent 45%),
+    linear-gradient(160deg, #7c8a4f, #63713c);
+}
+.tile.terrain-valley {
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.12), transparent 55%),
+    radial-gradient(circle at 68% 74%, rgba(70, 92, 45, 0.3), transparent 45%),
+    linear-gradient(160deg, #8aa354, #6f8a41);
+}
+.tile.terrain-forest {
+  background:
+    radial-gradient(circle at 30% 34%, rgba(24, 48, 30, 0.75) 3px, transparent 5px),
+    radial-gradient(circle at 58% 30%, rgba(24, 48, 30, 0.6) 3px, transparent 5px),
+    radial-gradient(circle at 44% 58%, rgba(24, 48, 30, 0.7) 4px, transparent 6px),
+    radial-gradient(circle at 70% 60%, rgba(24, 48, 30, 0.55) 3px, transparent 5px),
+    radial-gradient(circle at 40% 30%, rgba(255, 255, 255, 0.05), transparent 60%),
+    linear-gradient(160deg, #3b5e41, #2b4a33);
+}
+.tile.terrain-hills {
+  background:
+    radial-gradient(ellipse 70% 55% at 42% 40%, rgba(255, 255, 255, 0.13), transparent 60%),
+    radial-gradient(ellipse 60% 45% at 62% 72%, rgba(0, 0, 0, 0.22), transparent 60%),
+    linear-gradient(160deg, #86744f, #6a5b3c);
+}
+.tile.terrain-mountains {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, transparent 42%),
+    linear-gradient(45deg, rgba(0, 0, 0, 0.3) 0%, transparent 48%),
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.1), transparent 45%),
+    linear-gradient(160deg, #7a6f5e, #575046);
+}
+.tile.terrain-desert {
+  background:
+    repeating-linear-gradient(118deg, rgba(255, 255, 255, 0.06) 0 5px, rgba(120, 90, 40, 0.06) 5px 11px),
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.1), transparent 60%),
+    linear-gradient(160deg, #c6a86a, #ac8f55);
+}
+.tile.terrain-coast {
+  background:
+    repeating-linear-gradient(92deg, rgba(255, 255, 255, 0.08) 0 7px, transparent 7px 15px),
+    linear-gradient(160deg, #4c88a2, #38718b);
+}
+.tile.terrain-sea {
+  background:
+    repeating-linear-gradient(92deg, rgba(255, 255, 255, 0.045) 0 9px, transparent 9px 20px),
+    radial-gradient(circle at 50% 20%, rgba(90, 140, 190, 0.25), transparent 60%),
+    linear-gradient(160deg, #315479, #26436a);
+}
 
 /* Unexplored — a featureless blur of grey fog, not a distinct hexagon. Flat
    fill + no bevel + blur makes neighbouring fog tiles melt into one grey field. */
