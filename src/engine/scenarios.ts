@@ -2,8 +2,9 @@ import type { CreateGameConfig } from "./types";
 import { italiaScenario } from "./scenarios/italia";
 import { hellasScenario } from "./scenarios/hellas";
 import { oldWorldScenario } from "./scenarios/oldworld";
+import { oikoumeneScenario } from "./scenarios/oikoumene";
 
-export type ScenarioId = "italia" | "hellas" | "oldworld";
+export type ScenarioId = "italia" | "hellas" | "oldworld" | "oikoumene";
 
 export interface ScenarioBriefing {
   /** Short dateline, e.g. "264 BC — The eve of the First Punic War". */
@@ -81,6 +82,25 @@ const SCENARIOS: Record<ScenarioId, ScenarioDefinition> = {
         "At its height under Trajan (AD 117) the Roman Empire ran some 5 million square kilometres and perhaps 60–70 million people — around a fifth of humanity. No western state would match its span again for a thousand years."
     },
     config: oldWorldScenario
+  },
+  oikoumene: {
+    id: "oikoumene",
+    name: "The Known World (huge)",
+    historicalBrief:
+      "The whole classical oikoumene at grand scale — from Iberia and Britain to the Indus, the world as the ancients mapped it.",
+    briefing: {
+      era: "The Known World — the oikoumene, Pillars of Hercules to the Indus",
+      situation:
+        "This is the world as Herodotus, Eratosthenes and Ptolemy knew it: the Mediterranean at its heart, Europe to the north, Africa and the great desert to the south, and the roads of Asia running east past the Euphrates to Persia and the edge of India. Six powers begin in their true homelands — Rome in Italy, Carthage on the African shore, Greece on the Aegean, Egypt on the Nile, the Gauls in the west, and Parthia in Mesopotamia. The stage is vast; an age will pass before it is decided.",
+      objectives: [
+        "Build an empire across a continent-spanning map — expect a long campaign",
+        "Command land and sea across the whole Mediterranean world",
+        "Win by holding every capital, or by leading on score when the age closes"
+      ],
+      didYouKnow:
+        "Around 240 BC Eratosthenes, chief librarian at Alexandria, measured the Earth's circumference from the angle of shadows at Syene and Alexandria — landing within a few percent of the true 40,000 km, using nothing but geometry and a well."
+    },
+    config: oikoumeneScenario
   }
 };
 
