@@ -49,6 +49,11 @@
   const eventTitleEl = document.getElementById("event-title");
   const eventSituationEl = document.getElementById("event-situation");
   const eventOptionsEl = document.getElementById("event-options");
+  const researchBtn = document.getElementById("research-btn");
+  const researchModalEl = document.getElementById("research-modal");
+  const researchCloseBtn = document.getElementById("research-close-btn");
+  const standingsBtn = document.getElementById("standings-btn");
+  const standingsPanelEl = document.getElementById("standings-panel");
   const codexBtn = document.getElementById("codex-btn");
   const codexModalEl = document.getElementById("codex-modal");
   const codexBodyEl = document.getElementById("codex-body");
@@ -1950,6 +1955,7 @@
       renderLegend();
       renderRanking();
       renderTechTree(victory);
+      updateResearchIndicator();
       updatePanelState(victory);
       renderLog();
     } catch (err) {
@@ -2046,10 +2052,9 @@
       { ico: "👥", val: pop, lbl: "Populus", delta: null },
       // Labor is per-city, not a shared pool — show the empire's output RATE, not
       // a banked total (which read as spendable and confused players).
-      { ico: "⚒️", val: (inc.production || 0) + "/t", lbl: "Labor/turn", delta: null },
+      { ico: "⚒️", val: (inc.production || 0) + "/t", lbl: "Labor", delta: null },
       { ico: "🪙", val: rome.gold, lbl: "Denarii", delta: inc.gold },
-      { ico: "🔬", val: rome.science, lbl: "Scientia", delta: inc.science },
-      { ico: "📜", val: rome.techs.length, lbl: "Doctrinae", delta: null }
+      { ico: "🔬", val: rome.science, lbl: "Scientia", delta: inc.science }
     ];
     resourceBarEl.innerHTML = resources
       .map(function (r) {
@@ -2159,12 +2164,7 @@
 
     state = engine.createInitialGameState(config);
     clearSelection();
-    // Pre-select the capital so the command panel is immediately actionable
-    // (build menu live, city highlighted) — makes it obvious you can play.
-    const capital =
-      Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
-      Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
-    if (capital) selectedCityId = capital.id;
+    // Start with nothing selected — the in-play menu opens where you click.
     actionLog = ["New game started: " + label];
     hintLineEl.textContent = defaultHintText;
     pendingRecenter = true;
@@ -2200,10 +2200,6 @@
       HUMAN_ID = state.humanPlayerId;
     }
     clearSelection();
-    const capital =
-      Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
-      Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
-    if (capital) selectedCityId = capital.id;
     actionLog = ["Resumed your saved game — turn " + state.turn];
     hintLineEl.textContent = defaultHintText;
     pendingRecenter = true;
@@ -2373,6 +2369,41 @@
     });
   }
 
+  // ===== Research (the glowing tech button opens the tree) =====
+  if (researchBtn && researchModalEl) {
+    researchBtn.addEventListener("click", function () {
+      renderTechTree(engine.getVictoryStatus(state));
+      researchModalEl.classList.remove("hidden");
+    });
+    if (researchCloseBtn) researchCloseBtn.addEventListener("click", function () { researchModalEl.classList.add("hidden"); });
+    researchModalEl.addEventListener("click", function (e) {
+      if (e.target === researchModalEl) researchModalEl.classList.add("hidden");
+    });
+  }
+
+  // ===== Standings (openable from the bottom-right) =====
+  if (standingsBtn && standingsPanelEl) {
+    standingsBtn.addEventListener("click", function () {
+      standingsPanelEl.classList.toggle("hidden");
+    });
+  }
+
+  // Glow the Research button when a tech is both available and affordable.
+  function updateResearchIndicator() {
+    if (!researchBtn || !state) return;
+    const player = human();
+    let ready = 0;
+    for (const id of Object.keys(engine.TECHS || {})) {
+      const t = engine.TECHS[id];
+      if (t.civ && !civMatches(player, t.civ)) continue;
+      if (!canResearchSafe(player, id)) continue;
+      const cost = engine.researchCost ? engine.researchCost(id) : 0;
+      if (player.science >= cost) ready += 1;
+    }
+    researchBtn.classList.toggle("glow", ready > 0 && isHumanTurn());
+    researchBtn.textContent = ready > 0 ? "🔬 Research (" + ready + ")" : "🔬 Research";
+  }
+
   // ===== Civilization colour picker =====
   function buildColorControls() {
     if (!colorsListEl) return;
@@ -2521,12 +2552,12 @@
   loadSavedColors();
   // Note: the actual first render happens via resumeOrNew() at the very end.
 
-  // Bring up the 3D board if WebGL is available; fall back to the DOM board.
+  // The flat, frontal 2D board is the default. The tilted 3D board is opt-in
+  // (URL ?board=3d or the toggle button, which persists the choice).
   (function init3D() {
     try {
-      // Allow forcing the classic 2D board (URL ?board=2d or the toggle button).
-      const force2d = /[?&]board=2d/.test(location.search) || window.localStorage.getItem("hegemon_board") === "2d";
-      if (force2d) return;
+      const force3d = /[?&]board=3d/.test(location.search) || window.localStorage.getItem("hegemon_board") === "3d";
+      if (!force3d) return;
       const canvas = document.getElementById("board3d-canvas");
       if (!canvas || !window.Board3D || !window.Board3D.createBoard) return;
       board3d = window.Board3D.createBoard(canvas);

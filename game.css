@@ -328,8 +328,7 @@ button:hover:not(:disabled) {
   padding: 12px;
   overflow: auto;
   max-height: 82vh;
-  perspective: 1500px;
-  perspective-origin: 50% 42%;
+  perspective: none;
   cursor: grab;
 }
 
@@ -370,14 +369,12 @@ button:hover:not(:disabled) {
   padding: 4px 8px;
 }
 
-/* Tilted 3D-inclined plane. IMPORTANT: no `transform-style: preserve-3d`
-   here — that breaks pointer hit-testing on the clip-path hex tiles. A plain
-   rotateX flattens the children onto the tilted plane, so clicks still land. */
+/* Flat, frontal board — a fixed rectangular map seen head-on, no tilt. */
 .board {
   position: relative;
-  margin: 22px auto 18px;
-  transform: rotateX(26deg);
-  transform-origin: 50% 58%;
+  margin: 16px auto 18px;
+  transform: none;
+  transform-origin: 50% 50%;
 }
 
 .tile {
@@ -844,6 +841,82 @@ button:hover:not(:disabled) {
   margin: 0 0 6px;
 }
 
+/* ===== Floating HUD overlays over the board ===== */
+.hud-tl {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 30;
+}
+
+.hud-br {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* Compact resource readout, top-left */
+.res-bar.hud-tl {
+  display: flex;
+  gap: 6px;
+  background: rgba(10, 20, 36, 0.82);
+  border: 1px solid #2a4a70;
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.res-bar.hud-tl .res {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 0.82rem;
+}
+
+.res-bar.hud-tl .res-lbl {
+  display: none;
+}
+
+.res-bar.hud-tl .res-val {
+  font-weight: 700;
+}
+
+.res-bar.hud-tl .res-delta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.standings-panel {
+  background: rgba(10, 20, 36, 0.95);
+  border: 1px solid #2a4a70;
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 200px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+
+.standings-panel.hidden {
+  display: none;
+}
+
+/* Research button glows when a tech is ready to research */
+#research-btn.glow {
+  border-color: #7ed957;
+  color: #eafff0;
+  box-shadow: 0 0 0 0 rgba(126, 217, 87, 0.7);
+  animation: research-pulse 1.6s ease-out infinite;
+}
+
+@keyframes research-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(126, 217, 87, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(126, 217, 87, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(126, 217, 87, 0); }
+}
+
 .selection-line {
   color: var(--muted);
   margin-bottom: 8px;
@@ -1222,6 +1295,7 @@ details.panel-collapse > summary {
 .result-modal {
   position: fixed;
   inset: 0;
+  z-index: 100;
   background: rgba(12, 9, 7, 0.72);
   display: flex;
   align-items: center;

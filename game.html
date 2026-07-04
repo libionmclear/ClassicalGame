@@ -58,6 +58,7 @@
         </label>
         <button id="new-game-btn">New Game</button>
         <button id="end-turn-btn">End Turn</button>
+        <button id="research-btn" class="ghost-btn" title="Research (open the tech tree)">🔬 Research</button>
         <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖 Codex</button>
         <button id="colors-btn" class="ghost-btn" title="Civilization colours">🎨</button>
         <button id="board-toggle-btn" class="ghost-btn" title="Switch 2D / 3D board">🧊 3D</button>
@@ -69,11 +70,9 @@
     <section class="status-panel">
       <div class="status-main">
         <div id="status-line"></div>
-        <div id="resource-bar" class="res-bar"></div>
         <div id="weather-bar" class="weather-bar"></div>
         <div id="hint-line">Your turn — click your city to build, or a unit to move it. Then End Turn.</div>
       </div>
-      <div id="ranking" class="ranking"></div>
     </section>
 
     <section class="play-area">
@@ -81,6 +80,15 @@
         <canvas id="board3d-canvas"></canvas>
         <section id="board" class="board"></section>
         <div id="legend" class="legend"></div>
+      </div>
+
+      <!-- Compact resource readout, top-left over the board -->
+      <div id="resource-bar" class="res-bar hud-tl"></div>
+
+      <!-- Standings, openable from the bottom-right -->
+      <div id="standings-wrap" class="hud-br">
+        <button id="standings-btn" class="ghost-btn" title="Show standings">📊 Standings</button>
+        <div id="standings-panel" class="standings-panel hidden"><div id="ranking" class="ranking"></div></div>
       </div>
 
       <aside class="control-panel hidden" id="control-panel">
@@ -115,11 +123,6 @@
         <details class="panel-group panel-collapse" id="buildings-group">
           <summary>City Buildings <span class="collapse-caret">▸</span></summary>
           <div id="building-menu" class="build-menu"></div>
-        </details>
-
-        <details class="panel-group panel-collapse" id="research-group">
-          <summary>Research — Tree of Decisions <span class="collapse-caret">▸</span></summary>
-          <div id="tech-tree" class="tech-tree"></div>
         </details>
       </aside>
     </section>
@@ -177,6 +180,16 @@
         <button id="codex-close-btn" class="codex-close" title="Close">×</button>
       </div>
       <div id="codex-body" class="codex-body"></div>
+    </div>
+  </div>
+
+  <div id="research-modal" class="result-modal hidden">
+    <div class="result-card codex-card">
+      <div class="codex-header">
+        <h2>🔬 Research — Tree of Decisions</h2>
+        <button id="research-close-btn" class="codex-close" title="Close">×</button>
+      </div>
+      <div id="tech-tree" class="tech-tree"></div>
     </div>
   </div>
 
