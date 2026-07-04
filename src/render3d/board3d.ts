@@ -182,7 +182,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     new THREE.MeshStandardMaterial({ color: 0x24446a, roughness: 0.35, metalness: 0.15 })
   );
   seaMesh.rotation.x = -Math.PI / 2;
-  seaMesh.position.y = -0.17;
+  // Sit the water backdrop clearly BELOW the sea tiles (tops at -0.18) so the two
+  // are no longer at the same depth — that coplanarity was the dark-area flicker
+  // (z-fighting between the ocean plane and the deep/undiscovered sea tiles).
+  seaMesh.position.y = -0.3;
   seaMesh.receiveShadow = true;
   scene.add(seaMesh);
 
