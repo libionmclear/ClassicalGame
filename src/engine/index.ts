@@ -1108,15 +1108,20 @@ const TERRITORY_RADIUS = 2;
 // tileKey -> owning playerId. A pure function of city positions (not stored).
 export function computeTerritory(state: GameState): Record<string, string> {
   const claim: Record<string, { owner: string; dist: number }> = {};
+  // Only scan each city's own neighbourhood (not every tile on the map), so cost
+  // is O(cities x radius^2) rather than O(cities x tiles) — huge maps stay fast.
   for (const city of Object.values(state.map.cities)) {
-    for (const key of Object.keys(state.map.tiles)) {
-      // Open sea is nobody's land — only coastline and dry ground get claimed,
-      // so a coastal capital never tints the ocean with its banner colour.
-      if (state.map.tiles[key].terrain === "sea") continue;
-      const d = distance(city.position, parseKey(key));
-      if (d > TERRITORY_RADIUS) continue;
-      const existing = claim[key];
-      if (!existing || d < existing.dist) claim[key] = { owner: city.ownerId, dist: d };
+    for (let dq = -TERRITORY_RADIUS; dq <= TERRITORY_RADIUS; dq += 1) {
+      for (let dr = -TERRITORY_RADIUS; dr <= TERRITORY_RADIUS; dr += 1) {
+        const d = distance({ q: 0, r: 0 }, { q: dq, r: dr });
+        if (d > TERRITORY_RADIUS) continue;
+        const key = `${city.position.q + dq},${city.position.r + dr}`;
+        const tile = state.map.tiles[key];
+        // Open sea is nobody's land — only coastline and dry ground get claimed.
+        if (!tile || tile.terrain === "sea") continue;
+        const existing = claim[key];
+        if (!existing || d < existing.dist) claim[key] = { owner: city.ownerId, dist: d };
+      }
     }
   }
   const result: Record<string, string> = {};

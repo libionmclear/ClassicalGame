@@ -505,6 +505,17 @@ button:hover:not(:disabled) {
   z-index: 3;
 }
 
+/* Overlay layer for rivers/roads/borders — sits above the tiles, ignores
+   clicks, and is cleared/redrawn each render without touching the tile DOM. */
+.board-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
 /* Roads — a tan track linking road tiles into a network */
 .road-seg {
   position: absolute;

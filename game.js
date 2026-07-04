@@ -70,6 +70,16 @@
   let combatFlashKeys = new Set();
   let zoomLevel = 1;
   let panMoved = false; // set true while dragging the map, so the drag doesn't select a tile
+  // Incremental board rendering: tile elements are created once per layout and
+  // then updated in place (content diffed) instead of rebuilding thousands of
+  // DOM nodes every action — essential on the huge "Known World" map.
+  const tileEls = {};
+  const tileInnerCache = {};
+  const tileTitleCache = {};
+  const tileHover = {};
+  let lastVisibility = { visible: new Set(), discovered: new Set() };
+  let boardLayoutKey = "";
+  let overlayEl = null;
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
@@ -1091,97 +1101,88 @@
     apply({ type: "MOVE_UNIT", playerId: HUMAN_ID, unitId: selected.id, destination: { q, r }, path: path });
   }
 
-  function renderTile(q, r, visibility, hints, geom, pos, territory) {
+  // Create a tile button once (position, size, stable listeners). Content is
+  // filled by paintTile on every render. Listeners read live state, not the
+  // per-render closure, so the element can persist across renders.
+  function createTileEl(q, r, geom, pos) {
     const key = q + "," + r;
-    const tile = state.map.tiles[key];
-    const isVisible = visibility.visible.has(key);
-    const isDiscovered = visibility.discovered.has(key);
-
-    const units = isVisible ? getUnitsAt(q, r) : [];
-    const city = isVisible ? getCityAt(q, r) : null;
-
     const btn = document.createElement("button");
-    btn.className = "tile terrain-" + tile.terrain;
     btn.dataset.key = key;
-
-    // Offset (odd-r) pixel position: rectangular board, engine adjacency preserved.
     btn.style.width = geom.hexW + "px";
     btn.style.height = geom.hexH + "px";
     btn.style.left = pos.x + "px";
     btn.style.top = pos.y + "px";
+    btn.addEventListener("click", function () {
+      if (panMoved) { panMoved = false; return; } // this "click" was a map drag
+      onTileClick(q, r);
+    });
+    btn.addEventListener("mouseenter", function () {
+      hoveredPathKeys = computePathPreviewKeys(q, r, lastVisibility);
+      updateHoverHighlight();
+      hintLineEl.textContent = tileHover[key] || defaultHintText;
+    });
+    btn.addEventListener("mouseleave", function () {
+      hoveredPathKeys = new Set();
+      updateHoverHighlight();
+      hintLineEl.textContent = defaultHintText;
+    });
+    return btn;
+  }
 
-    if (!isVisible) {
-      // Explored-but-not-in-sight tiles keep the terrain (dimmed) — a remembered
-      // map — but show no troops. Truly unexplored tiles are clouded over.
-      if (isDiscovered) btn.classList.add("discovered");
-      else btn.classList.add("fog");
-    }
-    if (hints.reachable.has(key)) btn.classList.add("reachable");
-    if (hints.attackable.has(key)) btn.classList.add("attackable");
-    if (hoveredPathKeys.has(key)) btn.classList.add("path-preview");
-    if (combatFlashKeys.has(key)) btn.classList.add("combat-flash");
+  // Update an existing tile element: class list every render (cheap), but only
+  // touch innerHTML/title when they actually change (the expensive part).
+  function paintTile(btn, q, r, visibility, hints, territory) {
+    const key = q + "," + r;
+    const tile = state.map.tiles[key];
+    const isVisible = visibility.visible.has(key);
+    const isDiscovered = visibility.discovered.has(key);
+    const units = isVisible ? getUnitsAt(q, r) : [];
+    const city = isVisible ? getCityAt(q, r) : null;
 
-    // Weather overlay (the game's only luck) on tiles you can currently see.
+    let cls = "tile terrain-" + tile.terrain;
+    if (!isVisible) cls += isDiscovered ? " discovered" : " fog";
+    if (hints.reachable.has(key)) cls += " reachable";
+    if (hints.attackable.has(key)) cls += " attackable";
+    if (hoveredPathKeys.has(key)) cls += " path-preview";
+    if (combatFlashKeys.has(key)) cls += " combat-flash";
     if (isVisible && state.weather && state.weather.current) {
       const wx = state.weather.current[tile.region];
-      if (wx && wx !== "clear") btn.classList.add("wx-" + wx);
+      if (wx && wx !== "clear") cls += " wx-" + wx;
     }
-
     const selectedUnit = selectedUnitId ? state.map.units[selectedUnitId] : null;
-    if (selectedUnit && selectedUnit.position.q === q && selectedUnit.position.r === r) {
-      btn.classList.add("selected");
-    }
+    if (selectedUnit && selectedUnit.position.q === q && selectedUnit.position.r === r) cls += " selected";
     const citySelected = selectedCityId ? state.map.cities[selectedCityId] : null;
-    if (citySelected && citySelected.position.q === q && citySelected.position.r === r) {
-      btn.classList.add("selected");
-    }
+    if (citySelected && citySelected.position.q === q && citySelected.position.r === r) cls += " selected";
+    if (selectedTileKey === key) cls += " tile-selected";
 
-    // Build compact visual content + a rich tooltip (coords live in the tooltip
-    // only — they are a debugging aid, not shown on the board).
     const tip = ["(" + q + "," + r + ") " + (TERRAIN_LABELS[tile.terrain] || tile.terrain)];
     let inner = "";
 
-    // Territory (civ zone of control): a coloured hex border in the owner's
-    // banner colour, with a faint matching wash inside. Only on land you've seen.
     const terrOwner = territory && territory[key];
     if (terrOwner && isDiscovered) {
       const tc = CIV_COLORS[terrOwner] || "#888";
-      btn.style.setProperty("--terr-color", tc);
-      inner = '<span class="terr" style="background:' + hexToRgba(tc, 0.13) + '"></span>' + inner;
-      btn.classList.add("claimed");
+      inner = '<span class="terr" style="background:' + hexToRgba(tc, 0.13) + '"></span>';
+      cls += " claimed";
       tip.push("Territory of " + civName(terrOwner));
     }
 
     if (!isVisible) {
-      if (isDiscovered) {
-        tip.push("Explored — you remember the land, but not who holds it now");
-      } else {
-        // Truly unexplored: no glyph, no coord — just featureless fog.
-        tip.push("Unexplored");
-      }
+      tip.push(isDiscovered ? "Explored — you remember the land, but not who holds it now" : "Unexplored");
     } else if (city) {
-      btn.classList.add("owner-" + city.ownerId);
+      cls += " owner-" + city.ownerId;
       const citySprite = citySpriteName(city.ownerId, city);
-      if (citySprite) {
-        inner += spriteImg(city.ownerId, "city", citySprite, "city-sprite" + (city.isCapital ? " capital" : ""));
-      } else {
-        inner += '<span class="glyph">' + (city.isCapital ? "🏛️" : "🏘️") + "</span>";
-      }
+      inner += citySprite
+        ? spriteImg(city.ownerId, "city", citySprite, "city-sprite" + (city.isCapital ? " capital" : ""))
+        : '<span class="glyph">' + (city.isCapital ? "🏛️" : "🏘️") + "</span>";
       inner += hpBar(city.hp, city.maxHp);
       tip.push((city.isCapital ? "Capital " : "City ") + city.id + " — " + city.ownerId);
       tip.push("Pop " + city.population + " · HP " + city.hp + "/" + city.maxHp);
       if (units.length > 0) tip.push("Garrison: " + units.map((u) => u.type).join(", "));
     } else if (units.length > 0) {
       const top = units[0];
-      btn.classList.add("owner-" + top.ownerId);
+      cls += " owner-" + top.ownerId;
       const unitSprite = unitSpriteName(top.ownerId, top);
-      if (unitSprite) {
-        inner += spriteImg(top.ownerId, "unit", unitSprite, "unit-sprite");
-      } else {
-        inner += unitCluster(top);
-      }
-      // Always badge the unit type — all soldiers share the civ art, so the
-      // little symbol (🏹 archer, 🔱 spearman, …) is what tells them apart.
+      inner += unitSprite ? spriteImg(top.ownerId, "unit", unitSprite, "unit-sprite") : unitCluster(top);
       const embarkedHere = engine.isEmbarked && engine.isEmbarked(state, top);
       inner += '<span class="utype">' + (embarkedHere ? "⛵" : (UNIT_GLYPHS[top.type] || "•")) + "</span>";
       inner += hpBar(top.hp, top.maxHp);
@@ -1194,15 +1195,11 @@
         );
       }
     }
-    // (Empty land shows terrain by colour only — no glyph.)
 
-    // A worked improvement shows a small icon; a queued one shows it faintly.
     if (isVisible && tile.improvement && !city && units.length === 0) {
       inner += '<span class="improvement">' + (IMPROVEMENT_GLYPH[tile.improvement] || "▪") + "</span>";
       tip.push("Improvement: " + tile.improvement);
     }
-    // Selected land tile (for improvements) gets a highlight ring.
-    if (selectedTileKey === key) btn.classList.add("tile-selected");
 
     let hoverHint = "";
     if (isVisible && selectedUnit) {
@@ -1214,9 +1211,7 @@
             "⚔️ " + selectedUnit.type + " → " + enemyUnit.type + ": enemy −" + preview.damageToDefender +
             " (→" + preview.defenderRemainingHp + "), you −" + preview.damageToAttacker +
             " (→" + preview.attackerRemainingHp + ")";
-          if (preview.modifiers && preview.modifiers.length) {
-            hoverHint += "  ·  " + preview.modifiers.join(" · ");
-          }
+          if (preview.modifiers && preview.modifiers.length) hoverHint += "  ·  " + preview.modifiers.join(" · ");
         } catch {
           hoverHint = "Target out of range.";
         }
@@ -1227,24 +1222,17 @@
       }
     }
 
-    btn.innerHTML = inner;
-    btn.title = tip.join("\n");
-    btn.addEventListener("click", function () {
-      if (panMoved) { panMoved = false; return; } // this "click" was a map drag
-      onTileClick(q, r);
-    });
-    btn.addEventListener("mouseenter", function () {
-      hoveredPathKeys = computePathPreviewKeys(q, r, visibility);
-      updateHoverHighlight();
-      hintLineEl.textContent = hoverHint || defaultHintText;
-    });
-    btn.addEventListener("mouseleave", function () {
-      hoveredPathKeys = new Set();
-      updateHoverHighlight();
-      hintLineEl.textContent = defaultHintText;
-    });
-
-    return btn;
+    btn.className = cls;
+    if (tileInnerCache[key] !== inner) {
+      btn.innerHTML = inner;
+      tileInnerCache[key] = inner;
+    }
+    const title = tip.join("\n");
+    if (tileTitleCache[key] !== title) {
+      btn.title = title;
+      tileTitleCache[key] = title;
+    }
+    tileHover[key] = hoverHint;
   }
 
   function renderRivers(geom, visibility, pos) {
@@ -1274,7 +1262,7 @@
       line.style.top = (cay + cby) / 2 + "px";
       line.style.width = len + "px";
       line.style.transform = "translate(-50%, -50%) rotate(" + angle + "deg)";
-      boardEl.appendChild(line);
+      overlayEl.appendChild(line);
     }
   }
 
@@ -1308,7 +1296,7 @@
         seg.style.width = edgeLen + "px";
         seg.style.setProperty("--bc", CIV_COLORS[owner] || "#888");
         seg.style.transform = "translate(-50%,-50%) rotate(" + ang + "deg)";
-        boardEl.appendChild(seg);
+        overlayEl.appendChild(seg);
       }
     }
   }
@@ -1346,7 +1334,7 @@
         seg.style.top = (cy + my) / 2 + "px";
         seg.style.width = len + "px";
         seg.style.transform = "translate(-50%,-50%) rotate(" + ang + "deg)";
-        boardEl.appendChild(seg);
+        overlayEl.appendChild(seg);
       }
       if (connected === 0) {
         const dot = document.createElement("div");
@@ -1354,7 +1342,7 @@
         dot.style.left = cx + "px";
         dot.style.top = cy + "px";
         dot.style.transform = "translate(-50%,-50%)";
-        boardEl.appendChild(dot);
+        overlayEl.appendChild(dot);
       }
     }
   }
@@ -1651,11 +1639,35 @@
       boardEl.style.width = maxX - minX + geom.hexW + "px";
       boardEl.style.height = maxY - minY + geom.hexH + "px";
 
-      boardEl.innerHTML = "";
+      // Rebuild the tile elements only when the layout changes (new map or zoom);
+      // otherwise reuse them and just repaint content. This is the big perf win.
+      const layoutKey = state.seed + "|" + keys.length + "|" + Math.round(geom.hexW * 100);
+      if (layoutKey !== boardLayoutKey) {
+        boardEl.innerHTML = "";
+        for (const k in tileEls) delete tileEls[k];
+        for (const k in tileInnerCache) delete tileInnerCache[k];
+        for (const k in tileTitleCache) delete tileTitleCache[k];
+        const frag = document.createDocumentFragment();
+        for (const key of keys) {
+          const c = key.split(",");
+          const btn = createTileEl(+c[0], +c[1], geom, pos[key]);
+          tileEls[key] = btn;
+          frag.appendChild(btn);
+        }
+        boardEl.appendChild(frag);
+        overlayEl = document.createElement("div");
+        overlayEl.className = "board-overlay";
+        boardEl.appendChild(overlayEl);
+        boardLayoutKey = layoutKey;
+      }
+
+      lastVisibility = visibility;
       for (const key of keys) {
         const c = key.split(",");
-        boardEl.appendChild(renderTile(+c[0], +c[1], visibility, hints, geom, pos[key], territory));
+        paintTile(tileEls[key], +c[0], +c[1], visibility, hints, territory);
       }
+
+      overlayEl.innerHTML = "";
       renderRivers(geom, visibility, pos);
       renderRoads(geom, visibility, pos);
       renderBorders(geom, visibility, pos, territory);
