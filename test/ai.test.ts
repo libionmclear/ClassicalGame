@@ -99,6 +99,21 @@ test("a coastal AI builds a fleet and fights across the water", () => {
   assert.ok(navalAttacks > 0, "the fleets should engage across the strait");
 });
 
+test("the AI works its land with tile improvements", () => {
+  const cities = {
+    c1: { id: "c1", ownerId: "p1", position: { q: 3, r: 3 }, population: 3, hp: 40, maxHp: 40 }
+  };
+  let state = makeState({}, cities, [], 40);
+  for (let i = 0; i < 70 && !Object.values(state.map.tiles).some((t) => t.improvement); i += 1) {
+    const current = state.players[state.currentPlayerIndex].id;
+    state = runAiTurn(state, current, 12).state;
+  }
+  assert.ok(
+    Object.values(state.map.tiles).some((t) => t.improvement),
+    "the AI improved at least one tile it works"
+  );
+});
+
 test("ai chooses a valid action for the active player", () => {
   const state = createInitialGameState(loadScenario("italia").config);
   assert.equal(chooseAiAction(state, "rome").playerId, "rome");

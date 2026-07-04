@@ -1,7 +1,7 @@
-import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS } from "./data";
-import { applyAction, computeCombatPreview, researchCost, isCoastalCity } from "./index";
+import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
+import { applyAction, computeCombatPreview, researchCost, isCoastalCity, claimingCity } from "./index";
 import { getEvent } from "./events";
-import { distance, DIRECTIONS, keyOf } from "./hex";
+import { distance, DIRECTIONS, keyOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import type { City, Coord, GameAction, GameState, Player, Unit } from "./types";
 
@@ -311,6 +311,41 @@ function maneuverAction(state: GameState, player: Player): GameAction | null {
   return null;
 }
 
+// Best improvement for a terrain — favour labour, then food, then gold.
+const IMPROVE_PREFERENCE = ["mine", "lumber-camp", "farm", "pasture", "trade-post"];
+function pickImprovement(terrain: string): string | null {
+  for (const id of IMPROVE_PREFERENCE) {
+    const rule = IMPROVEMENTS[id];
+    if (rule && rule.terrains.includes(terrain)) return id;
+  }
+  return null;
+}
+
+// Work the land: queue an improvement on an unimproved tile a city claims. Gated
+// to a spare queue slot so it never starves the war effort.
+function improveAction(state: GameState, player: Player): GameAction | null {
+  for (const cityId of player.cityIds) {
+    const city = state.map.cities[cityId];
+    if (!city) continue;
+    if ((city.queue?.length ?? 0) >= 3) continue; // leave the first slots for units
+    for (let dq = -2; dq <= 2; dq += 1) {
+      for (let dr = -2; dr <= 2; dr += 1) {
+        if (distance({ q: 0, r: 0 }, { q: dq, r: dr }) > 2) continue;
+        const key = `${city.position.q + dq},${city.position.r + dr}`;
+        const tile = state.map.tiles[key];
+        if (!tile || tile.improvement) continue;
+        const claim = claimingCity(state, parseKey(key));
+        if (!claim || claim.id !== city.id) continue;
+        if ((city.queue ?? []).some((q) => q.startsWith("imp:") && q.endsWith(`:${key}`))) continue;
+        const imp = pickImprovement(tile.terrain);
+        if (!imp) continue;
+        return { type: "IMPROVE_TILE", playerId: player.id, cityId: city.id, tileKey: key, improvement: imp };
+      }
+    }
+  }
+  return null;
+}
+
 // A merchant standing in one of the player's cities opens an internal trade
 // route back to the nearest other city — instant gold every turn thereafter.
 function tradeAction(state: GameState, player: Player): GameAction | null {
@@ -442,6 +477,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => buildAction(state, player),
     () => buildingAction(state, player),
     () => tradeAction(state, player),
+    () => improveAction(state, player),
     () => maneuverAction(state, player),
     () => navalManeuverAction(state, player),
     () => settlerMoveAction(state, player),
