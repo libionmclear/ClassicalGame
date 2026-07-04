@@ -1,5 +1,5 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
-import { applyAction, computeCombatPreview, researchCost, isCoastalCity, claimingCity } from "./index";
+import { applyAction, computeCombatPreview, researchCost, isCoastalCity, claimingCity, isEmbarked } from "./index";
 import { getEvent } from "./events";
 import { distance, DIRECTIONS, keyOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -150,6 +150,7 @@ function attackAction(state: GameState, player: Player): GameAction | null {
   for (const attacker of unitsOf(state, player)) {
     const def = UNITS[attacker.type];
     if (def.attack <= 0 || attacker.movementRemaining <= 0) continue;
+    if (isEmbarked(state, attacker)) continue; // must land before it can fight
 
     // Enemy units — willingness to trade scales with difficulty.
     for (const target of Object.values(state.map.units)) {

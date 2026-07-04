@@ -353,6 +353,59 @@ test("a trade route dies when its home city is lost", () => {
   assert.equal(tradeRouteIncome(state, "a"), 0);
 });
 
+function embarkState(techs: string[]) {
+  return createInitialGameState({
+    seed: "embark",
+    players: [
+      { id: "a", civ: "A", techs },
+      { id: "b", civ: "B", techs: ["sailing", "open-sea-sailing"] }
+    ],
+    map: {
+      width: 3,
+      height: 1,
+      regions: ["r"],
+      tiles: {
+        "0,0": { terrain: "plains", region: "r" },
+        "1,0": { terrain: "coast", region: "r" },
+        "2,0": { terrain: "sea", region: "r" }
+      },
+      units: {
+        u: { id: "u", type: "warrior", ownerId: "a", position: { q: 0, r: 0 }, movementRemaining: 3 }
+      }
+    }
+  });
+}
+
+test("a land army can embark onto water only once its people can sail", () => {
+  const withSail = embarkState(["sailing"]);
+  const noSail = embarkState([]);
+  const ctx = { ownerId: "a", domain: "land" as const };
+  assert.ok(
+    Number.isFinite(movementCost(withSail, ctx, { q: 0, r: 0 }, { q: 1, r: 0 })),
+    "a sailing civ's land unit can embark onto the coast"
+  );
+  assert.ok(
+    !Number.isFinite(movementCost(noSail, ctx, { q: 0, r: 0 }, { q: 1, r: 0 })),
+    "without sailing it cannot enter the water"
+  );
+  // Open sea still needs the deeper tech even with sailing.
+  assert.ok(!Number.isFinite(movementCost(withSail, ctx, { q: 1, r: 0 }, { q: 2, r: 0 })));
+});
+
+test("an embarked army is a soft target and cannot attack", () => {
+  const state = embarkState(["sailing"]);
+  state.map.units.emb = { id: "emb", type: "warrior", ownerId: "a", position: { q: 1, r: 0 }, hp: 20, maxHp: 20, movementRemaining: 2, veterancy: "recruit" };
+  state.map.units.landv = { id: "landv", type: "warrior", ownerId: "b", position: { q: 0, r: 0 }, hp: 20, maxHp: 20, movementRemaining: 2, veterancy: "recruit" };
+  state.map.units.ship = { id: "ship", type: "trireme", ownerId: "b", position: { q: 2, r: 0 }, hp: 24, maxHp: 24, movementRemaining: 3, veterancy: "recruit" };
+
+  assert.throws(
+    () => applyAction(state, { type: "ATTACK", playerId: "a", attackerId: "emb", defenderId: "landv" }),
+    /land|embark/i
+  );
+  const prev = computeCombatPreview(state, "ship", "emb");
+  assert.ok(prev.modifiers.some((m) => /Embarked/.test(m)), "the embarked penalty applies against a warship");
+});
+
 test("a resting unit heals, and one that moved does not", () => {
   let rested = buildState();
   rested.map.units.u1.hp = 5;

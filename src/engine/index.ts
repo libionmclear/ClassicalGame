@@ -308,6 +308,16 @@ function combinedArmsBonus(state: GameState, attacker: Unit): { bonus: number; l
   return { bonus: 0, label: null };
 }
 
+// A land unit sitting on a water tile is "embarked" (aboard transports): it is
+// derived from position, so no stored flag is needed. Embarked units are soft
+// targets and cannot themselves attack until they land.
+export function isEmbarked(state: GameState, unit: Unit): boolean {
+  const def = UNITS[unit.type];
+  if (!def || def.domain !== "land") return false;
+  const tile = state.map.tiles[keyOf(unit.position)];
+  return !!tile && (tile.terrain === "coast" || tile.terrain === "sea");
+}
+
 export function computeCombatPreview(state: GameState, attackerId: string, defenderId: string): CombatPreview {
   const attacker = unitAt(state, attackerId);
   const defender = unitAt(state, defenderId);
@@ -356,7 +366,12 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   }
 
   const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
-  const defPower = defenderDef.defense * (defender.hp / defender.maxHp) * Math.max(0.1, defenseMult);
+  let defPower = defenderDef.defense * (defender.hp / defender.maxHp) * Math.max(0.1, defenseMult);
+  // An army caught embarked at sea is desperately exposed to warships.
+  if (isEmbarked(state, defender)) {
+    defPower *= 0.4;
+    modifiers.push("Embarked at sea −60%");
+  }
 
   let damageToDefender = Math.max(1, Math.round((20 * atkPower) / (atkPower + defPower)));
   let damageToAttacker = Math.max(0, Math.round((14 * defPower) / (atkPower + defPower)));
@@ -387,6 +402,7 @@ function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTA
   const defender = unitAt(state, action.defenderId);
   if (attacker.ownerId !== action.playerId) throw new Error("Cannot attack with enemy unit");
   if (defender.ownerId === action.playerId) throw new Error("Cannot attack friendly unit");
+  if (isEmbarked(state, attacker)) throw new Error("Embarked units must land before they can fight");
 
   const preview = computeCombatPreview(state, attacker.id, defender.id);
   attacker.hp = preview.attackerRemainingHp;
@@ -430,6 +446,7 @@ function applyAttackCity(state: GameState, action: AttackCityAction): void {
 
   if (attacker.ownerId !== action.playerId) throw new Error("Cannot attack city with enemy unit");
   if (city.ownerId === action.playerId) throw new Error("Cannot attack friendly city");
+  if (isEmbarked(state, attacker)) throw new Error("Embarked units must land before they can assault a city");
 
   const attackerDef = UNITS[attacker.type];
   if (distance(attacker.position, city.position) > attackerDef.range) {

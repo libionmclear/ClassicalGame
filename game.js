@@ -782,6 +782,7 @@
 
     const unitDef = engine.UNITS[unit.type];
     if (!unitDef) return hints;
+    const embarked = engine.isEmbarked && engine.isEmbarked(state, unit); // can't attack at sea
 
     for (const key of visibility.visible) {
       const [q, r] = key.split(",").map(Number);
@@ -818,7 +819,7 @@
 
       // Only combat units get attack markers, and only on enemies in range now.
       const dist = engine.distance(unit.position, destination);
-      if (unitDef.attack > 0 && dist <= unitDef.range) {
+      if (unitDef.attack > 0 && !embarked && dist <= unitDef.range) {
         const hasEnemyUnit = getUnitsAt(q, r).some((u) => u.ownerId !== unit.ownerId);
         const city = getCityAt(q, r);
         const enemyCity = city && city.ownerId !== unit.ownerId;
@@ -1181,7 +1182,8 @@
       }
       // Always badge the unit type — all soldiers share the civ art, so the
       // little symbol (🏹 archer, 🔱 spearman, …) is what tells them apart.
-      inner += '<span class="utype">' + (UNIT_GLYPHS[top.type] || "•") + "</span>";
+      const embarkedHere = engine.isEmbarked && engine.isEmbarked(state, top);
+      inner += '<span class="utype">' + (embarkedHere ? "⛵" : (UNIT_GLYPHS[top.type] || "•")) + "</span>";
       inner += hpBar(top.hp, top.maxHp);
       if (units.length > 1) inner += '<span class="stack">+' + (units.length - 1) + "</span>";
       for (const u of units) {
@@ -1375,6 +1377,7 @@
 
     if (selectedUnit) {
       const vet = selectedUnit.veterancy && selectedUnit.veterancy !== "recruit" ? " · " + selectedUnit.veterancy : "";
+      const atSea = engine.isEmbarked && engine.isEmbarked(state, selectedUnit) ? ' · <span class="heal-note" style="color:#7dd3fc">⛵ at sea (can\'t attack)</span>' : "";
       // Show the recovery on offer if the unit is hurt (heals by resting in place).
       let healNote = "";
       if (selectedUnit.hp < selectedUnit.maxHp && engine.restHealAmount) {
@@ -1385,7 +1388,7 @@
       selectionLineEl.innerHTML =
         (UNIT_GLYPHS[selectedUnit.type] || "•") + " " + unitDisplayName(selectedUnit) +
         '<span class="sel-sub"> HP ' + selectedUnit.hp + "/" + selectedUnit.maxHp +
-        " · Move " + selectedUnit.movementRemaining + vet + healNote + "</span>";
+        " · Move " + selectedUnit.movementRemaining + vet + healNote + atSea + "</span>";
     } else if (selectedCity) {
       const need = 8 + selectedCity.population * 6;
       const q = selectedCity.queue || [];

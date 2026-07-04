@@ -15,7 +15,12 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
   const terrain = TERRAIN[toTile.terrain];
   if (!terrain) return Number.POSITIVE_INFINITY;
 
-  if (terrain.navalOnly && unit.domain !== "naval") return Number.POSITIVE_INFINITY;
+  // Land units may embark onto water (coast, then open sea with the deeper tech)
+  // once their people know how to sail; naval units never come ashore.
+  if (terrain.navalOnly && unit.domain !== "naval") {
+    const owner = state.playersById[unit.ownerId];
+    if (!owner || !owner.techs.includes("sailing")) return Number.POSITIVE_INFINITY;
+  }
   if (!terrain.navalOnly && unit.domain === "naval") return Number.POSITIVE_INFINITY;
 
   if (terrain.requiresTech && !state.playersById[unit.ownerId].techs.includes(terrain.requiresTech)) {
