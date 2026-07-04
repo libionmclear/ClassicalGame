@@ -199,10 +199,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   scene.add(borderGroup);
   const texCache = new Map<string, THREE.Texture>();
   const loader = new THREE.TextureLoader();
+  let lastView: BoardView | null = null;
   function tex(url: string): THREE.Texture {
     let t = texCache.get(url);
     if (!t) {
-      t = loader.load(url);
+      // Re-place sprites once the art loads so we can size to its true aspect.
+      t = loader.load(url, () => { if (lastView) placeSprites(lastView); });
       t.colorSpace = THREE.SRGBColorSpace;
       texCache.set(url, t);
     }
@@ -289,34 +291,47 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
   function placeSprites(view: BoardView): void {
     spriteGroup.clear();
+    const cam = camera.position;
     for (const sv of view.sprites) {
       const w = axialToWorld(sv.q, sv.r);
       const top = topOf(sv.t || "plains"); // the tile's real surface height
-      // Smaller than before so a figure sits on ITS tile instead of spilling
-      // across its neighbours.
-      const scale = sv.kind === "city" ? 1.5 : 1.0;
 
-      // A contact shadow flat on the tile grounds the billboard.
-      const shadow = new THREE.Mesh(shadowGeo, shadowMat);
-      shadow.rotation.x = -Math.PI / 2;
-      shadow.position.set(w.x, top + 0.02, w.z);
-      const shScale = sv.kind === "city" ? 1.5 : 1.05;
-      shadow.scale.set(shScale, shScale, 1);
-      spriteGroup.add(shadow);
+      // Plant the figure toward the camera-facing (front) edge of its tile, so
+      // its feet meet the ground the viewer actually sees instead of hovering at
+      // the tile's centre with a strip of surface showing in front of them.
+      let ox = cam.x - w.x, oz = cam.z - w.z;
+      const ol = Math.hypot(ox, oz) || 1;
+      const front = sv.kind === "city" ? 0.2 : 0.42;
+      const fx = w.x + (ox / ol) * front;
+      const fz = w.z + (oz / ol) * front;
 
       const map = sv.name
         ? tex("assets/sprites/" + sv.civ + "/" + sv.kind + "-" + sv.name + ".png")
         : markerTexture(sv.color || "#cccccc", sv.kind); // civ without art -> coloured marker
+      // Size to the art's real aspect (square until it loads) so figures aren't
+      // squished; height is the tuned world size for the kind.
+      const img = (map as THREE.Texture).image as { width?: number; height?: number } | undefined;
+      const aspect = img && img.width && img.height ? img.width / img.height : 0.82;
+      const h = sv.kind === "city" ? 1.7 : 1.2;
+      const wdt = h * aspect;
+
+      // A visible round contact shadow at the feet grounds the billboard.
+      const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.set(fx, top + 0.03, fz);
+      shadow.scale.set(wdt * 0.92, wdt * 0.58, 1);
+      spriteGroup.add(shadow);
+
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false }));
-      sp.center.set(0.5, 0); // anchor at the figure's feet so it stands ON the tile
-      sp.scale.set(scale, scale, scale);
-      sp.position.set(w.x, top - 0.02, w.z); // feet just into the surface
+      sp.center.set(0.5, 0); // feet at the sprite's bottom edge
+      sp.scale.set(wdt, h, 1);
+      sp.position.set(fx, top, fz); // feet on the surface
       spriteGroup.add(sp);
       if (sv.badge) {
         const b = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(sv.badge), transparent: true, depthWrite: false, depthTest: false }));
         b.center.set(0.5, 0);
         b.scale.set(0.44, 0.44, 0.44);
-        b.position.set(w.x, top + scale * 0.82, w.z); // just above the figure's head
+        b.position.set(fx, top + h * 0.9, fz); // just above the figure's head
         b.renderOrder = 999;
         spriteGroup.add(b);
       }
@@ -402,6 +417,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
   return {
     render(view) {
+      lastView = view;
       buildTiles(view);
       paintTiles(view);
       placeSprites(view);
