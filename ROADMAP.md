@@ -14,6 +14,9 @@ matters, unique per civilization.
 - In-play context menu: the command panel floats at the clicked tile and shows
   only the relevant groups (unit / city / tile).
 - Unit upgrades: advance a base unit into its people's elite for gold.
+- Flat, frontal, fixed-rectangular board by default (tilt removed); 3D is opt-in.
+- HUD: compact top-left readout (Populus/Labour/Denarii/Scientia), standings
+  openable bottom-right, a Research button that glows when a tech is ready.
 - Mountains: +2 vision (see further), move cost 3 (slow), impassable without
   Mountain Paths.
 - City borders grow with population: pop ≤2 → 1 hex ring, ≤5 → 2, else 3.
@@ -49,13 +52,12 @@ matters, unique per civilization.
   cataphracts and horse archers. Study the real armies; keep it accurate.
 - Upgrade action on a selected unit (spend resources/gold to advance a type).
 
-### UI: everything on the play screen
+### UI: everything on the play screen — DONE
 - [done] Select a city → contextual city menu; unit → actions incl. upgrade;
   tile → improvements/info, as an on-board floating popover.
-- Research: a glowing indicator when a tech is available; click to open the tree.
-- Standings: openable from the bottom-right.
-- Compact top-left resource readout (Populus, Labour, Denarii, Scientia).
-  (Doctrinae is minor.)
+- [done] Research: a glowing indicator when a tech is available; click to open.
+- [done] Standings: openable from the bottom-right.
+- [done] Compact top-left resource readout (Populus, Labour, Denarii, Scientia).
 
 ### Graphics / 3D polish
 - Redo the sprites with better, animated art (unit idle/attack, city bustle).
