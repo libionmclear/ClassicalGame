@@ -1,0 +1,66 @@
+{
+  "rome": {
+    "unit": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "city": [
+      "settlement",
+      "town",
+      "small-city",
+      "major-city",
+      "metropolis"
+    ]
+  },
+  "greece": {
+    "unit": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "city": [
+      "settlement",
+      "town",
+      "small-city",
+      "major-city",
+      "metropolis"
+    ]
+  },
+  "gaul": {
+    "unit": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "city": [
+      "settlement",
+      "town",
+      "small-city",
+      "major-city",
+      "metropolis"
+    ]
+  },
+  "egypt": {
+    "unit": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "city": [
+      "settlement",
+      "town",
+      "small-city",
+      "major-city",
+      "metropolis"
+    ]
+  }
+}

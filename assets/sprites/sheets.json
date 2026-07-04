@@ -1,21 +1,11 @@
 {
-  "rome": {
-    "file": "rome.png",
-    "bands": [
-      {
-        "kind": "unit",
-        "yTop": 0.12,
-        "yBottom": 0.35,
-        "count": 5,
-        "names": ["1", "2", "3", "4", "5"]
-      },
-      {
-        "kind": "city",
-        "yTop": 0.6,
-        "yBottom": 0.9,
-        "count": 5,
-        "names": ["settlement", "town", "small-city", "major-city", "metropolis"]
-      }
-    ]
-  }
+  "_bands": "Shared layout for these HD sheets (1408x768): unit tiers 1-5 across the top band, city tiers (settlement..metropolis) across the lower band. Fractions calibrated from the row-ink profile.",
+  "rome": { "file": "rome.png", "bands": "@standard" },
+  "greece": { "file": "greece.png", "bands": "@standard" },
+  "gaul": { "file": "gaul.png", "bands": "@standard" },
+  "egypt": { "file": "egypt.png", "bands": "@standard" },
+  "@standard": [
+    { "kind": "unit", "yTop": 0.125, "yBottom": 0.36, "count": 5, "names": ["1", "2", "3", "4", "5"] },
+    { "kind": "city", "yTop": 0.615, "yBottom": 0.92, "count": 5, "names": ["settlement", "town", "small-city", "major-city", "metropolis"] }
+  ]
 }

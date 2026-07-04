@@ -60,7 +60,8 @@ if (startBuild < 1) fail("build menu has no enabled options on a fresh game");
 // 2) Clicking a unit tile selects that unit.
 const owned = page.locator(".tile.owner-rome");
 if ((await owned.count()) === 0) fail("no owner-rome tiles rendered");
-const unitTiles = owned.filter({ has: page.locator(".figures") });
+// A unit tile shows either the figure-cluster fallback or a civ unit sprite.
+const unitTiles = owned.filter({ has: page.locator(".figures, .unit-sprite") });
 if ((await unitTiles.count()) === 0) fail("no rome unit tiles rendered");
 await unitTiles.first().scrollIntoViewIfNeeded();
 await unitTiles.first().click({ timeout: 3000 });
