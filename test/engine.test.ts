@@ -144,6 +144,35 @@ test("civ-unique tech and unit are gated to their people", () => {
   );
 });
 
+test("a unit upgrades into its civ's elite for gold", () => {
+  const state = buildState();
+  const rome = state.playersById.p1;
+  rome.techs.push("iron-working", "legionary-system");
+  rome.gold = 100;
+  rome.unitIds.push("sw");
+  state.map.units.sw = {
+    id: "sw", type: "swordsman", ownerId: "p1", position: { q: 1, r: 1 },
+    hp: 22, maxHp: 22, movementRemaining: 2, veterancy: "recruit"
+  };
+
+  const before = rome.gold;
+  const after = applyAction(state, { type: "UPGRADE_UNIT", playerId: "p1", unitId: "sw" });
+  assert.equal(after.map.units.sw.type, "legionary");
+  assert.ok(after.map.units.sw.maxHp === 26);
+  assert.ok(after.playersById.p1.gold < before);
+
+  // Carthage can't turn a swordsman into a Roman legionary.
+  const carthage = buildState();
+  carthage.playersById.p1.civ = "Carthage";
+  carthage.playersById.p1.techs.push("iron-working");
+  carthage.playersById.p1.unitIds.push("sw");
+  carthage.map.units.sw = {
+    id: "sw", type: "swordsman", ownerId: "p1", position: { q: 1, r: 1 },
+    hp: 22, maxHp: 22, movementRemaining: 2, veterancy: "recruit"
+  };
+  assert.throws(() => applyAction(carthage, { type: "UPGRADE_UNIT", playerId: "p1", unitId: "sw" }));
+});
+
 test("improvements requiring a tech are gated until it is researched", () => {
   const state = buildState();
   // Make an adjacent tile hills so c1 (at 0,0) works it, then test the Quarry's

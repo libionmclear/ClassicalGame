@@ -152,32 +152,38 @@ export const UNITS: Record<string, UnitRule> = {
   // Rome — the legion: drilled heavy foot, a clear step beyond the swordsman.
   legionary: {
     domain: "land", movement: 2, attack: 30, defense: 26, maxHp: 26, range: 1, upkeep: 2,
-    requiresTech: "legionary-system", civ: "rome", category: "heavy", counters: { ranged: 0.35, spear: 0.25 }
+    requiresTech: "legionary-system", civ: "rome", category: "heavy", counters: { ranged: 0.35, spear: 0.25 },
+    upgradesFrom: "swordsman"
   },
   // Greece — the hoplite phalanx: an immovable shield-wall that shatters cavalry.
   hoplite: {
     domain: "land", movement: 2, attack: 22, defense: 30, maxHp: 24, range: 1, upkeep: 2,
-    requiresTech: "hoplite-phalanx", civ: "greece", category: "spear", counters: { mounted: 0.7 }
+    requiresTech: "hoplite-phalanx", civ: "greece", category: "spear", counters: { mounted: 0.7 },
+    upgradesFrom: "spearman"
   },
   // Carthage — the war elephant: shock beast that tramples massed infantry.
   "war-elephant": {
     domain: "land", movement: 2, attack: 34, defense: 22, maxHp: 32, range: 1, upkeep: 3,
-    requiresTech: "war-elephants", civ: "carthage", category: "heavy", counters: { infantry: 0.4, ranged: 0.3 }
+    requiresTech: "war-elephants", civ: "carthage", category: "heavy", counters: { infantry: 0.4, ranged: 0.3 },
+    upgradesFrom: "swordsman"
   },
   // Egypt — the war chariot: fast archer-platform that rides down light troops.
   "war-chariot": {
     domain: "land", movement: 4, attack: 24, defense: 16, maxHp: 22, range: 1, upkeep: 2, mounted: true,
-    requiresTech: "chariotry", civ: "egypt", category: "mounted", counters: { ranged: 0.5, infantry: 0.2 }
+    requiresTech: "chariotry", civ: "egypt", category: "mounted", counters: { ranged: 0.5, infantry: 0.2 },
+    upgradesFrom: "horseman"
   },
   // Gaul — the gaesatae: ferocious naked charge, murderous but poorly guarded.
   gaesatae: {
     domain: "land", movement: 2, attack: 32, defense: 15, maxHp: 22, range: 1, upkeep: 2,
-    requiresTech: "iron-mastery", civ: "gaul", category: "heavy", counters: { ranged: 0.3 }
+    requiresTech: "iron-mastery", civ: "gaul", category: "heavy", counters: { ranged: 0.3 },
+    upgradesFrom: "swordsman"
   },
   // Parthia — the horse archer: the Parthian shot, striking from range then fleeing.
   "horse-archer": {
     domain: "land", movement: 4, attack: 20, defense: 14, maxHp: 18, range: 2, upkeep: 2, mounted: true,
-    requiresTech: "horse-archery", civ: "parthia", category: "mounted", counters: { infantry: 0.25, spear: 0.3 }
+    requiresTech: "horse-archery", civ: "parthia", category: "mounted", counters: { infantry: 0.25, spear: 0.3 },
+    upgradesFrom: "horseman"
   }
 };
 

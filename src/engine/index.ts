@@ -1083,6 +1083,46 @@ function applyFoundCity(state: GameState, action: FoundCityAction): void {
 
 // Recruiting a unit now enqueues it in the city's build queue; it completes over
 // turns as the city banks production (see processCityQueue).
+// The elite type a unit could upgrade into, if the owner qualifies (right civ,
+// tech researched). Null if this unit has no upgrade available to this player.
+export function upgradeTargetFor(player: Player, unit: Unit): string | null {
+  for (const [type, rule] of Object.entries(UNITS)) {
+    if (rule.upgradesFrom !== unit.type) continue;
+    if (rule.civ && !playerControlsCiv(player, rule.civ)) continue;
+    if (rule.requiresTech && !player.techs.includes(rule.requiresTech)) continue;
+    return type;
+  }
+  return null;
+}
+
+// Gold to upgrade — the difference in build cost, floored, plus a small premium.
+export function upgradeCost(fromType: string, toType: string): number {
+  const base = UNIT_BUILD_COSTS[toType] ?? 24;
+  const had = UNIT_BUILD_COSTS[fromType] ?? 0;
+  return Math.max(12, Math.round((base - had) * 1.5) + 12);
+}
+
+function applyUpgradeUnit(state: GameState, action: { playerId: string; unitId: string }): void {
+  assertPlayerTurn(state, action.playerId);
+  const player = state.playersById[action.playerId];
+  const unit = state.map.units[action.unitId];
+  if (!unit) throw new Error(`Unknown unit ${action.unitId}`);
+  if (unit.ownerId !== action.playerId) throw new Error("Cannot upgrade another player's unit");
+
+  const target = upgradeTargetFor(player, unit);
+  if (!target) throw new Error(`No upgrade available for ${unit.type}`);
+
+  const cost = upgradeCost(unit.type, target);
+  if (player.gold < cost) throw new Error(`Insufficient gold to upgrade: needs ${cost}, has ${player.gold}`);
+  player.gold -= cost;
+
+  const rule = UNITS[target];
+  const frac = unit.maxHp > 0 ? unit.hp / unit.maxHp : 1;
+  unit.type = target;
+  unit.maxHp = rule.maxHp;
+  unit.hp = Math.max(1, Math.round(rule.maxHp * frac));
+}
+
 function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   assertPlayerTurn(state, action.playerId);
   const city = cityAt(state, action.cityId);
@@ -1317,6 +1357,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "IMPROVE_TILE":
       applyImproveTile(state, action);
+      break;
+    case "UPGRADE_UNIT":
+      applyUpgradeUnit(state, action);
       break;
     default: {
       const unknownAction: never = action;

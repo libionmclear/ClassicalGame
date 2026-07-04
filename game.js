@@ -22,6 +22,14 @@
   const turnChecklistEl = document.getElementById("turn-checklist");
   const foundCityBtn = document.getElementById("found-city-btn");
   const tradeRouteBtn = document.getElementById("trade-route-btn");
+  const upgradeBtn = document.getElementById("upgrade-btn");
+  const controlPanelEl = document.getElementById("control-panel");
+  const cpCloseBtn = document.getElementById("cp-close");
+  const unitActionsGroupEl = document.getElementById("unit-actions-group");
+  const queueGroupEl = document.getElementById("queue-group");
+  const recruitGroupEl = document.getElementById("recruit-group");
+  const buildingsGroupEl = document.getElementById("buildings-group");
+  const researchGroupEl = document.getElementById("research-group");
   const buildMenuEl = document.getElementById("build-menu");
   const improveGroupEl = document.getElementById("improve-group");
   const improveMenuEl = document.getElementById("improve-menu");
@@ -65,6 +73,11 @@
   let selectedCityId = null;
   let selectedTileKey = null;
   let actionLog = [];
+  // Where the player last pressed on the board — the in-play menu opens there.
+  let lastBoardPointer = null;
+  // The selection the floating menu was last positioned for (so it only re-anchors
+  // when the selection changes, not on every re-render).
+  let ctxPositionedFor = null;
   let hoveredPathKeys = new Set();
   let pendingRecenter = true;
   let combatFlashKeys = new Set();
@@ -1613,6 +1626,7 @@
     }
 
     foundCityBtn.disabled = !(isTurn && selectedUnit && selectedUnit.type === "settler");
+    foundCityBtn.style.display = selectedUnit && selectedUnit.type === "settler" ? "" : "none";
 
     // Trade route: a merchant standing at/next to a city can open a route back
     // to your nearest other city. Show the gold it would earn each turn.
@@ -1625,11 +1639,79 @@
       tradeRouteBtn.style.display = selectedUnit && selectedUnit.type === "merchant" ? "" : "none";
     }
 
+    // Upgrade: a unit standing on a base type its people can advance (e.g. a
+    // Roman swordsman into a Legionary) for gold.
+    if (upgradeBtn) {
+      const target = selectedUnit && engine.upgradeTargetFor ? engine.upgradeTargetFor(human(), selectedUnit) : null;
+      if (target) {
+        const cost = engine.upgradeCost ? engine.upgradeCost(selectedUnit.type, target) : 0;
+        const tName = (UNIT_META[target] && UNIT_META[target].name) || target;
+        upgradeBtn.style.display = "";
+        upgradeBtn.disabled = !(isTurn && human().gold >= cost);
+        upgradeBtn.innerHTML = (UNIT_GLYPHS[target] || "⭐") + " Upgrade → " + tName + " <span class=\"bi-cost\">" + cost + " 🪙</span>";
+        upgradeBtn.title = "Advance this " + (UNIT_META[selectedUnit.type] ? UNIT_META[selectedUnit.type].name : selectedUnit.type) +
+          " into a " + tName + " for " + cost + " gold.";
+      } else {
+        upgradeBtn.style.display = "none";
+      }
+    }
+
     if (clearSelectionBtn) clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
     renderBuildMenu(isTurn, selectedCity);
     renderBuildingMenu(isTurn, selectedCity);
     renderBuildQueue(selectedCity);
     renderImproveMenu(isTurn);
+
+    // ---- Float the panel at the selection and show only the relevant groups ----
+    positionContextPanel(selectedUnit, selectedCity);
+  }
+
+  // Show/hide the floating command panel, position it near where the player
+  // clicked on the board, and reveal only the groups that fit the selection.
+  function positionContextPanel(selectedUnit, selectedCity) {
+    if (!controlPanelEl) return;
+    const tileSel = !selectedUnit && !selectedCity && selectedTileKey && state.map.tiles[selectedTileKey];
+    const anything = selectedUnit || selectedCity || tileSel;
+    if (!anything) {
+      controlPanelEl.classList.add("hidden");
+      ctxPositionedFor = null;
+      return;
+    }
+    controlPanelEl.classList.remove("hidden");
+
+    const show = function (el, on) { if (el) el.style.display = on ? "" : "none"; };
+    show(unitActionsGroupEl, !!selectedUnit);
+    show(improveGroupEl, !!tileSel);
+    show(queueGroupEl, !!selectedCity);
+    show(recruitGroupEl, !!selectedCity);
+    show(buildingsGroupEl, !!selectedCity);
+    // Research is a city concern; open it by default when a city is picked.
+    show(researchGroupEl, !!selectedCity);
+    if (selectedCity && recruitGroupEl && recruitGroupEl.tagName === "DETAILS") recruitGroupEl.open = true;
+
+    // Anchor only when the selection identity changes (so it doesn't jump while
+    // you interact with it).
+    const selKey = selectedUnit ? "u:" + selectedUnit.id : selectedCity ? "c:" + selectedCity.id : "t:" + selectedTileKey;
+    if (selKey === ctxPositionedFor) return;
+    ctxPositionedFor = selKey;
+
+    const playArea = controlPanelEl.parentElement; // .play-area (position:relative)
+    const pa = playArea.getBoundingClientRect();
+    const pw = controlPanelEl.offsetWidth || 288;
+    const ph = controlPanelEl.offsetHeight || 320;
+    let left, top;
+    if (lastBoardPointer) {
+      left = lastBoardPointer.x - pa.left + 22; // to the right of the cursor
+      if (left + pw > pa.width - 6) left = lastBoardPointer.x - pa.left - pw - 22; // flip left
+      top = lastBoardPointer.y - pa.top - 10;
+    } else {
+      left = pa.width - pw - 12;
+      top = 12;
+    }
+    left = Math.max(6, Math.min(left, pa.width - pw - 6));
+    top = Math.max(6, Math.min(top, Math.max(6, pa.height - ph - 6)));
+    controlPanelEl.style.left = left + "px";
+    controlPanelEl.style.top = top + "px";
   }
 
   // Improvements for the selected land tile: build a farm/mine/… funded by the
@@ -2207,6 +2289,25 @@
     });
   }
 
+  if (upgradeBtn) {
+    upgradeBtn.addEventListener("click", function () {
+      const unit = selectedUnitId ? state.map.units[selectedUnitId] : null;
+      if (!unit) return;
+      const target = engine.upgradeTargetFor ? engine.upgradeTargetFor(human(), unit) : null;
+      if (!target) return;
+      const tName = (UNIT_META[target] && UNIT_META[target].name) || target;
+      logAction("⭐ " + (UNIT_META[unit.type] ? UNIT_META[unit.type].name : unit.type) + " upgraded to " + tName);
+      apply({ type: "UPGRADE_UNIT", playerId: HUMAN_ID, unitId: unit.id });
+    });
+  }
+
+  if (cpCloseBtn) {
+    cpCloseBtn.addEventListener("click", function () {
+      clearSelection();
+      render();
+    });
+  }
+
   // ===== Codex (browsable historical encyclopedia) =====
   function buildCodex() {
     if (!codexBodyEl) return;
@@ -2338,6 +2439,12 @@
 
   const boardWrap = boardEl && boardEl.parentElement;
   if (boardWrap) {
+    // Remember where the player presses on the board so the in-play menu opens
+    // right there. Capture phase, so it lands before the pick/select fires.
+    boardWrap.addEventListener("pointerdown", function (e) {
+      lastBoardPointer = { x: e.clientX, y: e.clientY };
+    }, true);
+
     boardWrap.addEventListener(
       "wheel",
       function (e) {

@@ -207,10 +207,8 @@ button:hover:not(:disabled) {
 }
 
 .play-area {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 12px;
-  align-items: start;
+  position: relative;
+  display: block;
 }
 
 /* ===== Standings (table, right column of the status box) ===== */
@@ -784,17 +782,66 @@ button:hover:not(:disabled) {
    is drawn around each town or unit tile (the .owner-* classes carry no
    outline; they remain only as hooks for scripting/tests). */
 
-/* ===== Command panel ===== */
+/* ===== Command panel — a floating popover anchored to the selection ===== */
 .control-panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
+  position: absolute;
+  z-index: 40;
+  width: 288px;
+  max-height: 76vh;
+  overflow-y: auto;
+  background: rgba(14, 26, 44, 0.97);
+  border: 1px solid #33608f;
+  border-radius: 8px;
+  padding: 8px 12px 12px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.control-panel.hidden {
+  display: none;
+}
+
+.cp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  background: rgba(14, 26, 44, 0.97);
+  padding-top: 2px;
+  margin: 0 -4px 2px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.cp-close {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  line-height: 1;
   border-radius: 6px;
-  padding: 10px 12px;
+  background: #21395a;
+  border: 1px solid #33608f;
+  color: #cfe0f5;
+  cursor: pointer;
+}
+
+.cp-close:hover {
+  background: #2c4a72;
+  color: #fff;
 }
 
 .control-panel h2 {
   margin: 0 0 8px;
   font-size: 1.1rem;
+}
+
+.cp-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0 0 6px;
 }
 
 .selection-line {

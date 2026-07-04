@@ -83,13 +83,18 @@
         <div id="legend" class="legend"></div>
       </div>
 
-      <aside class="control-panel">
-        <h2 id="selection-line" class="selection-title">Nothing selected</h2>
+      <aside class="control-panel hidden" id="control-panel">
+        <div class="cp-head">
+          <h2 id="selection-line" class="selection-title">Nothing selected</h2>
+          <button id="cp-close" class="cp-close" title="Close (deselect)" aria-label="Close">✕</button>
+        </div>
 
-        <div class="panel-group">
+        <div class="panel-group" id="unit-actions-group">
           <h3>Unit Actions</h3>
+          <div id="unit-hint" class="cp-hint">Click a tile to move · an enemy to attack.</div>
           <button id="found-city-btn">Found City</button>
           <button id="trade-route-btn">Establish Trade Route</button>
+          <button id="upgrade-btn">Upgrade</button>
         </div>
 
         <div class="panel-group" id="improve-group">
@@ -97,7 +102,7 @@
           <div id="improve-menu" class="build-menu"></div>
         </div>
 
-        <div class="panel-group">
+        <div class="panel-group" id="queue-group">
           <h3>Build Queue</h3>
           <div id="build-queue" class="build-queue"></div>
         </div>

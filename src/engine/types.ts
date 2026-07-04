@@ -57,6 +57,8 @@ export interface UnitRule {
   siegeBonus?: number;
   /** Civ id (lowercase, e.g. "rome") this unit is unique to — only that people may field it. */
   civ?: string;
+  /** Base unit type this one upgrades from in the field (e.g. legionary from swordsman). */
+  upgradesFrom?: string;
 }
 
 export interface TechRule {
@@ -259,6 +261,12 @@ export interface EstablishTradeRouteAction {
   cityId: string;
 }
 
+export interface UpgradeUnitAction {
+  type: "UPGRADE_UNIT";
+  playerId: string;
+  unitId: string;
+}
+
 export interface ImproveTileAction {
   type: "IMPROVE_TILE";
   playerId: string;
@@ -284,7 +292,8 @@ export type GameAction =
   | UnqueueProductionAction
   | RushProductionAction
   | EstablishTradeRouteAction
-  | ImproveTileAction;
+  | ImproveTileAction
+  | UpgradeUnitAction;
 
 export interface VictoryStatus {
   winnerId: string | null;
