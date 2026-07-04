@@ -588,11 +588,17 @@ button:hover:not(:disabled) {
   width: 108%;
 }
 
-/* Territory border — the owning civ's banner colour traced around the hex */
-.tile.claimed {
-  box-shadow:
-    inset 0 0 0 2px var(--terr-color, #888),
-    inset 0 0 0 3px rgba(0, 0, 0, 0.28);
+/* Territory is shown as a faint civ-colour wash (.terr) plus a border line
+   drawn ONLY along the realm's outer edges (see .terr-border), not a ring
+   around every hex. .claimed itself carries no outline. */
+.terr-border {
+  position: absolute;
+  height: 3px;
+  background: var(--bc, #888);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 3;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
 }
 
 /* movement / combat hints — background gradients get clipped to the hex */

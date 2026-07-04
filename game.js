@@ -1242,6 +1242,41 @@
     }
   }
 
+  // Draw the OUTER edge of each realm only — a coloured line on every hex edge
+  // that faces a different owner (or the sea), not a ring around every cell.
+  const AXIAL_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+  function renderBorders(geom, visibility, pos, territory) {
+    const edgeLen = geom.hexW / SQRT3 + 1; // hex side length (+1 to close corners)
+    for (const key of Object.keys(state.map.tiles)) {
+      const owner = territory[key];
+      if (!owner || !visibility.discovered.has(key)) continue;
+      const p = pos[key];
+      if (!p) continue;
+      const c = key.split(",");
+      const q = +c[0];
+      const r = +c[1];
+      const cx = p.x + geom.hexW / 2;
+      const cy = p.y + geom.hexH / 2;
+      for (const d of AXIAL_DIRS) {
+        const nkey = q + d[0] + "," + (r + d[1]);
+        if (territory[nkey] === owner) continue; // interior edge — skip
+        const np = pos[nkey];
+        if (!np) continue; // neighbour off the map — skip
+        const ncx = np.x + geom.hexW / 2;
+        const ncy = np.y + geom.hexH / 2;
+        const ang = (Math.atan2(ncy - cy, ncx - cx) * 180) / Math.PI + 90;
+        const seg = document.createElement("div");
+        seg.className = "terr-border";
+        seg.style.left = (cx + ncx) / 2 + "px";
+        seg.style.top = (cy + ncy) / 2 + "px";
+        seg.style.width = edgeLen + "px";
+        seg.style.setProperty("--bc", CIV_COLORS[owner] || "#888");
+        seg.style.transform = "translate(-50%,-50%) rotate(" + ang + "deg)";
+        boardEl.appendChild(seg);
+      }
+    }
+  }
+
   // Render a unit as a small cluster of figures — count thins with damage,
   // and veteran/elite units gain a highlighted standard-bearer.
   function unitCluster(unit) {
@@ -1449,6 +1484,7 @@
         boardEl.appendChild(renderTile(+c[0], +c[1], visibility, hints, geom, pos[key], territory));
       }
       renderRivers(geom, visibility, pos);
+      renderBorders(geom, visibility, pos, territory);
 
       // On a new game, scroll the view to the human's capital so the player
       // always starts looking at their own city and units.

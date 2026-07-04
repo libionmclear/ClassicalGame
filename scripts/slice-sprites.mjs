@@ -34,7 +34,7 @@ const alphaAt = (png, x, y) => png.data[(y * png.width + x) * 4 + 3];
 function isBackground(r, g, b) {
   const max = Math.max(r, g, b);
   const sat = max - Math.min(r, g, b);
-  return max >= 158 && sat <= 46;
+  return max >= 150 && sat <= 52;
 }
 
 // Flood-fill the checkerboard from the borders and make it transparent. Flooding
@@ -66,10 +66,16 @@ export function keyOutBackground(png) {
     data[p * 4 + 3] = 0;
     const x = p % W;
     const y = (p - x) / W;
+    // 8-connectivity so the flood crosses the checker's diagonal corners and
+    // clears isolated squares left by anti-aliasing shade variation.
     consider(x + 1, y);
     consider(x - 1, y);
     consider(x, y + 1);
     consider(x, y - 1);
+    consider(x + 1, y + 1);
+    consider(x - 1, y - 1);
+    consider(x + 1, y - 1);
+    consider(x - 1, y + 1);
   }
   return png;
 }
