@@ -293,8 +293,20 @@ function reachableAlong(state: GameState, unit: Unit, path: Coord[]): Coord | nu
 
 function maneuverAction(state: GameState, player: Player): GameAction | null {
   const woundedFraction = aggression(state).wounded;
+  const myCities = ownCities(state, player.id);
+  const myMilitary = unitsOf(state, player).filter(isMilitary);
   for (const unit of unitsOf(state, player)) {
     if (!isMilitary(unit) || unit.movementRemaining <= 0) continue;
+
+    // Keep a garrison: don't march off the last defender of a city. Undefended
+    // capitals get rushed and eliminated — the main source of runaway games.
+    const guarding = myCities.find((c) => distance(unit.position, c.position) <= 1);
+    if (guarding) {
+      const otherDefender = myMilitary.some(
+        (u) => u.id !== unit.id && distance(u.position, guarding.position) <= 1
+      );
+      if (!otherDefender) continue; // hold this city
+    }
 
     const wounded = unit.hp < UNITS[unit.type].maxHp * woundedFraction;
     const target = wounded

@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "build:engine": "tsc -p tsconfig.json",
     "simulate:italia": "node --import tsx src/simulate-italia.ts",
+    "balance": "node --import tsx scripts/balance-sim.ts",
     "build:web": "node scripts/build-web.mjs",
     "slice-sprites": "node scripts/slice-sprites.mjs",
     "play:web": "npm run build:web",

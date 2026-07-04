@@ -455,6 +455,7 @@ function applyAttackCity(state: GameState, action: AttackCityAction): void {
 
   const damage = computeCityAttackDamage(state, attacker, city);
   city.hp = Math.max(0, city.hp - damage);
+  city.lastAttackedTurn = state.turn; // besieged cities don't heal this turn
   attacker.movementRemaining = 0;
 
   if (city.hp <= 0) {
@@ -878,6 +879,7 @@ function applyImproveTile(state: GameState, action: ImproveTileAction): void {
 export const HEAL_IN_CITY = 8;
 export const HEAL_IN_TERRITORY = 4;
 export const HEAL_IN_FIELD = 1;
+export const CITY_REGEN = 3;
 
 // How much a unit would heal if left to rest this turn (0 if it is at full HP
 // or has already moved/fought). Location decides the rate.
@@ -915,6 +917,13 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
       // Production is banked per-city and drives the build queue.
       city.production = (city.production ?? 0) + Math.round(yields.production * mult);
       processCityQueue(state, city);
+
+      // A city left in peace repairs its walls; one under assault this turn does
+      // not — so taking a city needs sustained, concentrated force, not a lone
+      // unit chipping at it turn after turn.
+      if (city.hp < city.maxHp && (city.lastAttackedTurn ?? -1) < state.turn) {
+        city.hp = Math.min(city.maxHp, city.hp + CITY_REGEN);
+      }
     }
   }
 

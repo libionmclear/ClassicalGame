@@ -91,6 +91,8 @@ export interface City {
   production?: number;
   /** Ordered build queue of item ids (unit type or building id). */
   queue?: string[];
+  /** Turn this city was last assaulted — it only heals when left in peace. */
+  lastAttackedTurn?: number;
 }
 
 export interface Player {

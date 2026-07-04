@@ -337,6 +337,21 @@ test("improving a tile queues in the claiming city and completes with labour", (
   assert.equal(s.map.tiles["1,0"].improvement, "farm", "the farm is built at end of turn");
 });
 
+test("a city repairs itself in peace but not while besieged", () => {
+  let calm = buildState();
+  calm.map.cities.c1.maxHp = 40;
+  calm.map.cities.c1.hp = 10;
+  calm = applyAction(calm, { type: "END_TURN", playerId: "p1" });
+  assert.ok(calm.map.cities.c1.hp > 10, "an unattacked city repairs its walls");
+
+  let siege = buildState();
+  siege.map.cities.c1.maxHp = 40;
+  siege.map.cities.c1.hp = 10;
+  siege.map.cities.c1.lastAttackedTurn = siege.turn; // assaulted this turn
+  siege = applyAction(siege, { type: "END_TURN", playerId: "p1" });
+  assert.equal(siege.map.cities.c1.hp, 10, "a city under assault does not repair");
+});
+
 test("a road is built through the labour queue and speeds movement", () => {
   let s = seaState();
   s.map.tiles["1,0"].terrain = "hills"; // normally slow to cross
