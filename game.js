@@ -21,6 +21,7 @@
   const clearSelectionBtn = document.getElementById("clear-selection-btn");
   const turnChecklistEl = document.getElementById("turn-checklist");
   const foundCityBtn = document.getElementById("found-city-btn");
+  const tradeRouteBtn = document.getElementById("trade-route-btn");
   const buildMenuEl = document.getElementById("build-menu");
   const buildingMenuEl = document.getElementById("building-menu");
   const buildQueueEl = document.getElementById("build-queue");
@@ -68,7 +69,7 @@
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
-  const BUILDABLE = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "trireme", "settler"];
+  const BUILDABLE = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "trireme", "merchant", "settler"];
   const UNIT_META = {
     warrior: { name: "Warrior", role: "Basic melee infantry — cheap, no strong matchups" },
     archer: { name: "Archer", role: "Ranged (range 2): strikes with no reply at distance, but fragile in melee and easy prey for cavalry" },
@@ -77,6 +78,7 @@
     horseman: { name: "Horseman", role: "Cavalry (3 move): runs down archers & light foot — but spears counter it" },
     siege: { name: "Siege Ballista", role: "Range 2, devastating vs cities, fragile in the open field" },
     trireme: { name: "Trireme", role: "Warship — rules the sea lanes, carries war to the coast. Built only in coastal cities; launches into the water" },
+    merchant: { name: "Merchant", role: "Caravan — send it to another of your cities (or a foreign one) and 'Establish Trade Route' for gold every turn" },
     settler: { name: "Settler", role: "Founds a new city" }
   };
   // One-line historical grounding for each unit (the educational layer).
@@ -88,6 +90,7 @@
     horseman: "Companion and Numidian cavalry — the shock and pursuit arm that rode down fleeing skirmishers.",
     siege: "The ballista and onager — torsion artillery that hurled bolts and stones over the highest walls.",
     trireme: "Three banks of oars and a bronze ram — the trireme decided Salamis (480 BC) and every contest for the Mediterranean thereafter.",
+    merchant: "The caravans of the Silk and Incense roads and the grain fleets of the Mediterranean — commerce built the wealth that raised armies.",
     settler: "Colonists sent to found a new colonia or polis, carrying the sacred fire from the mother city."
   };
 
@@ -237,6 +240,7 @@
       // Re-link playersById to the SAME player objects (JSON breaks the sharing).
       s.playersById = {};
       for (const p of s.players) s.playersById[p.id] = p;
+      if (!Array.isArray(s.tradeRoutes)) s.tradeRoutes = []; // older saves
       return s;
     } catch (e) {
       return null;
@@ -1281,10 +1285,51 @@
     }
 
     foundCityBtn.disabled = !(isTurn && selectedUnit && selectedUnit.type === "settler");
+
+    // Trade route: a merchant standing at/next to a city can open a route back
+    // to your nearest other city. Show the gold it would earn each turn.
+    if (tradeRouteBtn) {
+      const plan = selectedUnit && selectedUnit.type === "merchant" ? tradeRoutePlan(selectedUnit) : null;
+      tradeRouteBtn.disabled = !(isTurn && plan);
+      tradeRouteBtn.textContent = plan
+        ? "Trade Route → " + plan.destName + " (+" + plan.gold + " 🪙/turn)"
+        : "Establish Trade Route";
+      tradeRouteBtn.style.display = selectedUnit && selectedUnit.type === "merchant" ? "" : "none";
+    }
+
     if (clearSelectionBtn) clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
     renderBuildMenu(isTurn, selectedCity);
     renderBuildingMenu(isTurn, selectedCity);
     renderBuildQueue(selectedCity);
+  }
+
+  // What trade route a merchant could open right now: the city it stands at or
+  // beside (the destination) plus the nearest OTHER own city (the anchor).
+  function tradeRoutePlan(merchant) {
+    let dest = null;
+    let dd = 2;
+    for (const c of Object.values(state.map.cities)) {
+      const d = engine.distance(merchant.position, c.position);
+      if (d <= 1 && d < dd) {
+        dd = d;
+        dest = c;
+      }
+    }
+    if (!dest) return null;
+    let home = null;
+    let best = Infinity;
+    for (const c of Object.values(state.map.cities)) {
+      if (c.ownerId !== HUMAN_ID || c.id === dest.id) continue;
+      const d = engine.distance(c.position, dest.position);
+      if (d < best) {
+        best = d;
+        home = c;
+      }
+    }
+    if (!home) return null;
+    const foreign = dest.ownerId !== HUMAN_ID;
+    const gold = engine.tradeRouteValue ? engine.tradeRouteValue(engine.distance(home.position, dest.position), foreign) : 2;
+    return { dest: dest, destName: cityDisplayName(dest), gold: gold, foreign: foreign };
   }
 
   function renderRanking() {
@@ -1707,6 +1752,17 @@
       cityId: createCityId()
     });
   });
+
+  if (tradeRouteBtn) {
+    tradeRouteBtn.addEventListener("click", function () {
+      const unit = selectedUnitId ? state.map.units[selectedUnitId] : null;
+      if (!unit || unit.type !== "merchant") return;
+      const plan = tradeRoutePlan(unit);
+      if (!plan) return;
+      logAction("🪙 Trade route opened to " + plan.destName + " (+" + plan.gold + "/turn)");
+      apply({ type: "ESTABLISH_TRADE_ROUTE", playerId: HUMAN_ID, merchantId: unit.id, cityId: plan.dest.id });
+    });
+  }
 
   // ===== Codex (browsable historical encyclopedia) =====
   function buildCodex() {

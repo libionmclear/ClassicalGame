@@ -14,7 +14,7 @@ import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction } from "./types";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -694,6 +694,81 @@ function applyRushProduction(state: GameState, action: RushProductionAction): vo
   processCityQueue(state, city);
 }
 
+// --- Trade routes -------------------------------------------------------------
+
+// A route still earns only while its home city is held by the owner and its
+// destination still stands; drop the rest.
+function tradeRouteIsLive(state: GameState, route: { ownerId: string; fromCityId: string; toCityId: string }): boolean {
+  const from = state.map.cities[route.fromCityId];
+  const to = state.map.cities[route.toCityId];
+  return !!from && from.ownerId === route.ownerId && !!to;
+}
+
+function pruneTradeRoutes(state: GameState): void {
+  state.tradeRoutes = (state.tradeRoutes ?? []).filter((r) => tradeRouteIsLive(state, r));
+}
+
+export function tradeRouteIncome(state: GameState, playerId: string): number {
+  let gold = 0;
+  for (const route of state.tradeRoutes ?? []) {
+    if (route.ownerId !== playerId) continue;
+    if (tradeRouteIsLive(state, route)) gold += route.gold;
+  }
+  return gold;
+}
+
+// Gold/turn a would-be route earns: base + half the distance between the two
+// cities, plus a premium for reaching a foreign market.
+export function tradeRouteValue(distanceBetween: number, foreign: boolean): number {
+  return Math.max(2, Math.min(15, 2 + Math.floor(distanceBetween / 2) + (foreign ? 3 : 0)));
+}
+
+function applyEstablishTradeRoute(state: GameState, action: EstablishTradeRouteAction): void {
+  assertPlayerTurn(state, action.playerId);
+  if (!state.tradeRoutes) state.tradeRoutes = [];
+  const merchant = unitAt(state, action.merchantId);
+  if (merchant.ownerId !== action.playerId) throw new Error("Cannot use an enemy merchant");
+  if (merchant.type !== "merchant") throw new Error("Only a merchant can open a trade route");
+
+  const dest = state.map.cities[action.cityId];
+  if (!dest) throw new Error(`Unknown destination city ${action.cityId}`);
+  if (distance(merchant.position, dest.position) > 1) {
+    throw new Error("The merchant must stand at or beside the destination city");
+  }
+
+  // Anchor the route at the owner's nearest other city.
+  const player = state.playersById[action.playerId];
+  let home: City | null = null;
+  let bestDist = Infinity;
+  for (const cityId of player.cityIds) {
+    if (cityId === dest.id) continue;
+    const city = state.map.cities[cityId];
+    if (!city) continue;
+    const d = distance(city.position, dest.position);
+    if (d < bestDist) {
+      bestDist = d;
+      home = city;
+    }
+  }
+  if (!home) throw new Error("You need another city to anchor the trade route");
+
+  const duplicate = state.tradeRoutes.some(
+    (r) =>
+      r.ownerId === action.playerId &&
+      ((r.fromCityId === home!.id && r.toCityId === dest.id) ||
+        (r.fromCityId === dest.id && r.toCityId === home!.id))
+  );
+  if (duplicate) throw new Error("That trade route already exists");
+
+  const foreign = dest.ownerId !== action.playerId;
+  const gold = tradeRouteValue(distance(home.position, dest.position), foreign);
+  state.tradeRoutes.push({ ownerId: action.playerId, fromCityId: home.id, toCityId: dest.id, gold });
+
+  // The caravan settles into the route — the merchant is spent.
+  delete state.map.units[merchant.id];
+  syncOwnershipIndexes(state);
+}
+
 function applyEndTurn(state: GameState, action: EndTurnAction): void {
   assertPlayerTurn(state, action.playerId);
   const endingPlayer = getCurrentPlayer(state);
@@ -726,6 +801,10 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
     return sum + (UNITS[unit.type].upkeep || 0);
   }, 0);
   endingPlayer.gold -= upkeep;
+
+  // Trade routes deliver their gold to the owner each turn (dead ones drop off).
+  pruneTradeRoutes(state);
+  endingPlayer.gold += tradeRouteIncome(state, endingPlayer.id);
 
   state.currentPlayerIndex += 1;
   if (state.currentPlayerIndex >= state.players.length) {
@@ -879,6 +958,7 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
     playersById: makePlayersById(players),
     map,
     weather: { current: {}, forecast: {} },
+    tradeRoutes: [],
     actionLog: []
   };
 
@@ -943,6 +1023,7 @@ export function computePlayerIncome(
   }
   const upkeep = player.unitIds.reduce((sum, id) => sum + (state.map.units[id] ? UNITS[state.map.units[id].type].upkeep || 0 : 0), 0);
   income.gold -= upkeep;
+  income.gold += tradeRouteIncome(state, playerId);
   return income;
 }
 
@@ -1037,6 +1118,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "RUSH_PRODUCTION":
       applyRushProduction(state, action);
+      break;
+    case "ESTABLISH_TRADE_ROUTE":
+      applyEstablishTradeRoute(state, action);
       break;
     default: {
       const unknownAction: never = action;

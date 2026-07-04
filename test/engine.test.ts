@@ -14,7 +14,8 @@ import {
   keyOf,
   movementCost,
   replayActions,
-  rushProductionCost
+  rushProductionCost,
+  tradeRouteIncome
 } from "../src/engine/index";
 
 import type { CreateGameConfig, GameAction } from "../src/engine/types";
@@ -284,6 +285,47 @@ test("ships cannot be built in a landlocked city", () => {
     () => applyAction(state, { type: "BUILD_UNIT", playerId: "a", cityId: "inland", unitType: "trireme", unitId: "t2" }),
     /coastal/
   );
+});
+
+test("a merchant opens a trade route that pays gold every turn", () => {
+  const state = seaState();
+  // Merchant sitting in the inland city; route anchors to the nearest other city.
+  state.map.units.m1 = {
+    id: "m1",
+    type: "merchant",
+    ownerId: "a",
+    position: { q: state.map.cities.inland.position.q, r: state.map.cities.inland.position.r },
+    hp: 12,
+    maxHp: 12,
+    movementRemaining: 0,
+    veterancy: "recruit"
+  };
+  // Relink ownership so the merchant is counted.
+  let s = applyAction(state, {
+    type: "ESTABLISH_TRADE_ROUTE",
+    playerId: "a",
+    merchantId: "m1",
+    cityId: "inland"
+  });
+  assert.equal(s.tradeRoutes.length, 1, "a route was created");
+  assert.ok(s.map.units.m1 === undefined, "the merchant was consumed");
+  const route = s.tradeRoutes[0];
+  assert.ok(route.gold >= 2, "the route pays gold");
+
+  // The route contributes exactly its gold to income (isolate it from city yields).
+  assert.equal(tradeRouteIncome(s, "a"), route.gold);
+  const withRoute = computePlayerIncome(s, "a").gold;
+  const withoutRoute = computePlayerIncome({ ...s, tradeRoutes: [] }, "a").gold;
+  assert.equal(withRoute - withoutRoute, route.gold, "income reflects the trade route");
+});
+
+test("a trade route dies when its home city is lost", () => {
+  const state = seaState();
+  state.tradeRoutes = [{ ownerId: "a", fromCityId: "coast1", toCityId: "inland", gold: 5 }];
+  assert.equal(tradeRouteIncome(state, "a"), 5);
+  // Home city changes hands -> the route stops paying.
+  state.map.cities.coast1.ownerId = "b";
+  assert.equal(tradeRouteIncome(state, "a"), 0);
 });
 
 test("territory claims coast and land but never open sea", () => {

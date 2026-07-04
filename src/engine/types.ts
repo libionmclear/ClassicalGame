@@ -121,6 +121,16 @@ export interface WeatherState {
   forecast: Record<string, WeatherType>;
 }
 
+export interface TradeRoute {
+  ownerId: string;
+  /** The owner's home city that anchors the route (must stay owned to earn). */
+  fromCityId: string;
+  /** The destination city the merchant reached (may be foreign). */
+  toCityId: string;
+  /** Gold delivered to the owner each turn while the route stands. */
+  gold: number;
+}
+
 export interface GameState {
   version: number;
   seed: string;
@@ -136,6 +146,8 @@ export interface GameState {
   playersById: Record<string, Player>;
   map: GameMap;
   weather: WeatherState;
+  /** Standing trade routes, each paying its owner gold every turn. */
+  tradeRoutes: TradeRoute[];
   actionLog: ActionLogEntry[];
 }
 
@@ -227,6 +239,14 @@ export interface RushProductionAction {
   cityId: string;
 }
 
+export interface EstablishTradeRouteAction {
+  type: "ESTABLISH_TRADE_ROUTE";
+  playerId: string;
+  merchantId: string;
+  /** The destination city the merchant has reached (on or adjacent to it). */
+  cityId: string;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -239,7 +259,8 @@ export type GameAction =
   | ResolveEventAction
   | BuildBuildingAction
   | UnqueueProductionAction
-  | RushProductionAction;
+  | RushProductionAction
+  | EstablishTradeRouteAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

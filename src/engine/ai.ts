@@ -201,6 +201,14 @@ function buildAction(state: GameState, player: Player): GameAction | null {
   const settlersInFlight = unitsOf(state, player).filter((u) => u.type === "settler").length;
   const wantSettler = cities.length < EXPANSION_TARGET && settlersInFlight === 0;
 
+  // Want a merchant once there's an army to guard the roads and untapped city
+  // pairs left to link by trade (defend first, then enrich).
+  const merchantsInFlight = unitsOf(state, player).filter((u) => u.type === "merchant").length;
+  const routesOwned = (state.tradeRoutes ?? []).filter((r) => r.ownerId === player.id).length;
+  const hasArmy = unitsOf(state, player).some(isMilitary);
+  const wantMerchant =
+    cities.length >= 2 && hasArmy && merchantsInFlight === 0 && routesOwned < cities.length - 1;
+
   const spearFirst = enemyCavalryNear(state, player);
   const militaryPref = spearFirst
     ? ["spearman", "swordsman", "horseman", "archer", "warrior"]
@@ -224,6 +232,7 @@ function buildAction(state: GameState, player: Player): GameAction | null {
     const coastal = isCoastalCity(state, city.id);
     let chosen: string | null = null;
     if (wantSettler && canBuild("settler") && !(city.queue ?? []).includes("settler")) chosen = "settler";
+    if (!chosen && wantMerchant && canBuild("merchant") && !(city.queue ?? []).includes("merchant")) chosen = "merchant";
     // A coastal city yards a warship when the fleet is short of its target size.
     if (
       !chosen &&
@@ -298,6 +307,38 @@ function maneuverAction(state: GameState, player: Player): GameAction | null {
     if (!dest) continue;
 
     return { type: "MOVE_UNIT", playerId: player.id, unitId: unit.id, destination: dest };
+  }
+  return null;
+}
+
+// A merchant standing in one of the player's cities opens an internal trade
+// route back to the nearest other city — instant gold every turn thereafter.
+function tradeAction(state: GameState, player: Player): GameAction | null {
+  const owned = ownCities(state, player.id);
+  if (owned.length < 2) return null;
+  for (const unit of unitsOf(state, player)) {
+    if (unit.type !== "merchant") continue;
+    const dest = cityAtCoord(state, unit.position);
+    if (!dest) continue;
+    let home: City | null = null;
+    let bestDist = Infinity;
+    for (const c of owned) {
+      if (c.id === dest.id) continue;
+      const d = distance(c.position, dest.position);
+      if (d < bestDist) {
+        bestDist = d;
+        home = c;
+      }
+    }
+    if (!home) continue;
+    const dup = (state.tradeRoutes ?? []).some(
+      (r) =>
+        r.ownerId === player.id &&
+        ((r.fromCityId === home!.id && r.toCityId === dest.id) ||
+          (r.fromCityId === dest.id && r.toCityId === home!.id))
+    );
+    if (dup) continue;
+    return { type: "ESTABLISH_TRADE_ROUTE", playerId: player.id, merchantId: unit.id, cityId: dest.id };
   }
   return null;
 }
@@ -400,6 +441,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => foundCityAction(state, player),
     () => buildAction(state, player),
     () => buildingAction(state, player),
+    () => tradeAction(state, player),
     () => maneuverAction(state, player),
     () => navalManeuverAction(state, player),
     () => settlerMoveAction(state, player),
