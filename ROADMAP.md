@@ -7,7 +7,13 @@ matters, unique per civilization.
 ## Done
 - 3D board (Three.js): nested pointy-top hex terrain with elevation, sun +
   shadows, tilt/orbit/zoom camera, fog of war, growing realm borders, sprites.
-- Sprites sit on the tile surface (anchored at the base).
+- Sprites planted on the ground: fit to art aspect, offset to the tile's
+  camera-facing edge, with a contact shadow (no more floating cut-outs).
+- Deeper research + civ-unique techs & signature units; new tech-gated
+  buildings/improvements.
+- In-play context menu: the command panel floats at the clicked tile and shows
+  only the relevant groups (unit / city / tile).
+- Unit upgrades: advance a base unit into its people's elite for gold.
 - Mountains: +2 vision (see further), move cost 3 (slow), impassable without
   Mountain Paths.
 - City borders grow with population: pop ≤2 → 1 hex ring, ≤5 → 2, else 3.
@@ -44,8 +50,8 @@ matters, unique per civilization.
 - Upgrade action on a selected unit (spend resources/gold to advance a type).
 
 ### UI: everything on the play screen
-- Select a city → contextual city menu; select a unit → actions incl. upgrade;
-  select a tile → improvements/info. Prefer on-board or docked contextual menus.
+- [done] Select a city → contextual city menu; unit → actions incl. upgrade;
+  tile → improvements/info, as an on-board floating popover.
 - Research: a glowing indicator when a tech is available; click to open the tree.
 - Standings: openable from the bottom-right.
 - Compact top-left resource readout (Populus, Labour, Denarii, Scientia).
