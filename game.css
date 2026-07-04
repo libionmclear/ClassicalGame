@@ -561,6 +561,33 @@ button:hover:not(:disabled) {
   filter: saturate(0.3) brightness(0.5);
 }
 
+/* Civ artwork sprites (units / cities). Bottom-anchored and allowed to overflow
+   the hex upward, the way isometric art reads best. */
+.tile .unit-sprite,
+.tile .city-sprite {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.55));
+  z-index: 2;
+}
+
+.tile .unit-sprite {
+  bottom: 14%;
+  width: 78%;
+}
+
+.tile .city-sprite {
+  bottom: 8%;
+  width: 100%;
+}
+
+.tile .city-sprite.capital {
+  width: 108%;
+}
+
 /* Territory border — the owning civ's banner colour traced around the hex */
 .tile.claimed {
   box-shadow:

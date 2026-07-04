@@ -312,6 +312,36 @@
 
   const BUILDING_GLYPH = { granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱", harbor: "⚓" };
 
+  // ----- Civ sprite sheets (optional art) -----
+  // Populated by scripts/slice-sprites.mjs -> web/sprites.js. When a civ has
+  // sprites, units and cities render the artwork; otherwise the emoji/cluster
+  // fallback is used, so a civ without art looks exactly as before.
+  const SPRITES = (typeof window !== "undefined" && window.HEGEMON_SPRITES) || {};
+  const CITY_TIER_NAMES = ["settlement", "town", "small-city", "major-city", "metropolis"];
+
+  function spriteImg(civId, kind, name, cls) {
+    const url = "assets/sprites/" + civId + "/" + kind + "-" + name + ".png";
+    return '<img class="' + cls + '" src="' + url + '" alt="" draggable="false" onerror="this.style.display=\'none\'">';
+  }
+  // Army-size tier (1..5) from the unit's remaining strength — a bloodied unit
+  // shows a smaller formation, matching the old cluster's thinning figures.
+  function unitSpriteName(civId, unit) {
+    const avail = SPRITES[civId] && SPRITES[civId].unit;
+    if (!avail || !avail.length) return null;
+    const frac = unit.maxHp > 0 ? unit.hp / unit.maxHp : 1;
+    const tier = Math.max(1, Math.min(5, Math.round(frac * 5)));
+    return avail.includes(String(tier)) ? String(tier) : avail[Math.min(avail.length - 1, tier - 1)];
+  }
+  // City-size tier (settlement..metropolis) from population.
+  function citySpriteName(civId, city) {
+    const avail = SPRITES[civId] && SPRITES[civId].city;
+    if (!avail || !avail.length) return null;
+    const pop = city.population || 1;
+    const idx = pop <= 2 ? 0 : pop <= 4 ? 1 : pop <= 6 ? 2 : pop <= 8 ? 3 : 4;
+    const name = CITY_TIER_NAMES[idx];
+    return avail.includes(name) ? name : avail[Math.min(avail.length - 1, idx)];
+  }
+
   function itemCost(id) {
     if (engine.UNITS && engine.UNITS[id]) return (engine.UNIT_BUILD_COSTS || {})[id] || 0;
     if (engine.BUILDINGS && engine.BUILDINGS[id]) return engine.BUILDINGS[id].cost;
@@ -1107,7 +1137,12 @@
       }
     } else if (city) {
       btn.classList.add("owner-" + city.ownerId);
-      inner += '<span class="glyph">' + (city.isCapital ? "🏛️" : "🏘️") + "</span>";
+      const citySprite = citySpriteName(city.ownerId, city);
+      if (citySprite) {
+        inner += spriteImg(city.ownerId, "city", citySprite, "city-sprite" + (city.isCapital ? " capital" : ""));
+      } else {
+        inner += '<span class="glyph">' + (city.isCapital ? "🏛️" : "🏘️") + "</span>";
+      }
       inner += hpBar(city.hp, city.maxHp);
       tip.push((city.isCapital ? "Capital " : "City ") + city.id + " — " + city.ownerId);
       tip.push("Pop " + city.population + " · HP " + city.hp + "/" + city.maxHp);
@@ -1115,8 +1150,13 @@
     } else if (units.length > 0) {
       const top = units[0];
       btn.classList.add("owner-" + top.ownerId);
-      inner += unitCluster(top);
-      inner += '<span class="utype">' + (UNIT_GLYPHS[top.type] || "•") + "</span>";
+      const unitSprite = unitSpriteName(top.ownerId, top);
+      if (unitSprite) {
+        inner += spriteImg(top.ownerId, "unit", unitSprite, "unit-sprite");
+      } else {
+        inner += unitCluster(top);
+        inner += '<span class="utype">' + (UNIT_GLYPHS[top.type] || "•") + "</span>";
+      }
       inner += hpBar(top.hp, top.maxHp);
       if (units.length > 1) inner += '<span class="stack">+' + (units.length - 1) + "</span>";
       for (const u of units) {
