@@ -1769,9 +1769,9 @@
 
   const RES_TITLES = {
     Populus: "Populus — your people. Cities grow as they bank food.",
-    Labor: "Labor — production. Builds units and city works.",
-    Denarii: "Denarii — coin from markets and trade; pays upkeep.",
-    Scientia: "Scientia — learning. Accrues each turn and buys techs.",
+    "Labor/turn": "Labor — production made across all your cities each turn. It is NOT a shared pool: every city banks its OWN labor and builds only from that, so select a city to see what it has and how long its work will take.",
+    Denarii: "Denarii — a shared treasury from markets and trade; pays upkeep and can rush-buy.",
+    Scientia: "Scientia — learning. A shared pool that accrues each turn and buys techs.",
     Doctrinae: "Doctrinae — technologies you have mastered."
   };
 
@@ -1779,11 +1779,12 @@
     const rome = human();
     const humanCities = Object.values(state.map.cities).filter((c) => c.ownerId === HUMAN_ID);
     const pop = humanCities.reduce((sum, c) => sum + c.population, 0);
-    const stockpile = humanCities.reduce((sum, c) => sum + Math.floor(c.production || 0), 0);
     const inc = engine.computePlayerIncome ? engine.computePlayerIncome(state, HUMAN_ID) : {};
     const resources = [
       { ico: "👥", val: pop, lbl: "Populus", delta: null },
-      { ico: "⚒️", val: stockpile, lbl: "Labor", delta: inc.production },
+      // Labor is per-city, not a shared pool — show the empire's output RATE, not
+      // a banked total (which read as spendable and confused players).
+      { ico: "⚒️", val: (inc.production || 0) + "/t", lbl: "Labor/turn", delta: null },
       { ico: "🪙", val: rome.gold, lbl: "Denarii", delta: inc.gold },
       { ico: "🔬", val: rome.science, lbl: "Scientia", delta: inc.science },
       { ico: "📜", val: rome.techs.length, lbl: "Doctrinae", delta: null }
