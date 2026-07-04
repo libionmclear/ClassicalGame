@@ -23,6 +23,8 @@
   const foundCityBtn = document.getElementById("found-city-btn");
   const tradeRouteBtn = document.getElementById("trade-route-btn");
   const buildMenuEl = document.getElementById("build-menu");
+  const improveGroupEl = document.getElementById("improve-group");
+  const improveMenuEl = document.getElementById("improve-menu");
   const buildingMenuEl = document.getElementById("building-menu");
   const buildQueueEl = document.getElementById("build-queue");
   const techTreeEl = document.getElementById("tech-tree");
@@ -61,6 +63,7 @@
   let state = null;
   let selectedUnitId = null;
   let selectedCityId = null;
+  let selectedTileKey = null;
   let actionLog = [];
   let hoveredPathKeys = new Set();
   let pendingRecenter = true;
@@ -312,6 +315,7 @@
   }
 
   const BUILDING_GLYPH = { granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱", harbor: "⚓" };
+  const IMPROVEMENT_GLYPH = { farm: "🌾", pasture: "🐄", mine: "⛏️", "lumber-camp": "🪵", "trade-post": "🐫" };
 
   // ----- Civ sprite sheets (optional art) -----
   // Populated by scripts/slice-sprites.mjs -> web/sprites.js. When a civ has
@@ -868,6 +872,7 @@
   function clearSelection() {
     selectedUnitId = null;
     selectedCityId = null;
+    selectedTileKey = null;
     hoveredPathKeys = new Set();
   }
 
@@ -904,6 +909,7 @@
         action.type === "BUILD_BUILDING" ||
         action.type === "UNQUEUE_PRODUCTION" ||
         action.type === "RUSH_PRODUCTION" ||
+        action.type === "IMPROVE_TILE" ||
         action.type === "RESEARCH_TECH" ||
         action.type === "RESOLVE_EVENT";
       state = engine.applyAction(state, action);
@@ -966,6 +972,7 @@
       if (ownUnit) {
         selectedUnitId = ownUnit.id;
         selectedCityId = null;
+        selectedTileKey = null;
         render();
         return;
       }
@@ -973,7 +980,21 @@
       if (clickedCity && clickedCity.ownerId === HUMAN_ID) {
         selectedCityId = clickedCity.id;
         selectedUnitId = null;
+        selectedTileKey = null;
         render();
+        return;
+      }
+
+      // Empty land you own: select the tile so you can improve it (farm, mine…).
+      if (!clickedCity && clickedUnits.length === 0) {
+        const territory = engine.computeTerritory ? engine.computeTerritory(state) : {};
+        if (territory[key] === HUMAN_ID) {
+          selectedTileKey = key;
+          selectedCityId = null;
+          selectedUnitId = null;
+          render();
+          return;
+        }
       }
       return;
     }
@@ -1172,6 +1193,14 @@
     }
     // (Empty land shows terrain by colour only — no glyph.)
 
+    // A worked improvement shows a small icon; a queued one shows it faintly.
+    if (isVisible && tile.improvement && !city && units.length === 0) {
+      inner += '<span class="improvement">' + (IMPROVEMENT_GLYPH[tile.improvement] || "▪") + "</span>";
+      tip.push("Improvement: " + tile.improvement);
+    }
+    // Selected land tile (for improvements) gets a highlight ring.
+    if (selectedTileKey === key) btn.classList.add("tile-selected");
+
     let hoverHint = "";
     if (isVisible && selectedUnit) {
       const enemyUnit = units.find((u) => u.ownerId !== selectedUnit.ownerId);
@@ -1359,6 +1388,14 @@
         '<span class="sel-sub"> Pop ' + selectedCity.population + " · HP " + selectedCity.hp + "/" + selectedCity.maxHp +
         " · Growth " + Math.floor(selectedCity.food || 0) + "/" + need +
         " · ⚒️ " + banked + building + "</span>";
+    } else if (selectedTileKey && state.map.tiles[selectedTileKey]) {
+      const tile = state.map.tiles[selectedTileKey];
+      const terr = (TERRAIN_LABELS && TERRAIN_LABELS[tile.terrain]) || tile.terrain;
+      const impName = tile.improvement
+        ? " · " + ((engine.IMPROVEMENTS && engine.IMPROVEMENTS[tile.improvement] && engine.IMPROVEMENTS[tile.improvement].name) || tile.improvement)
+        : "";
+      selectionLineEl.innerHTML =
+        "⛰️ " + terr + '<span class="sel-sub"> (' + selectedTileKey + ")" + impName + "</span>";
     } else {
       selectionLineEl.textContent = "Nothing selected";
     }
@@ -1380,6 +1417,68 @@
     renderBuildMenu(isTurn, selectedCity);
     renderBuildingMenu(isTurn, selectedCity);
     renderBuildQueue(selectedCity);
+    renderImproveMenu(isTurn);
+  }
+
+  // Improvements for the selected land tile: build a farm/mine/… funded by the
+  // city that works the tile. Hidden unless one of your own tiles is selected.
+  function renderImproveMenu(isTurn) {
+    if (!improveGroupEl || !improveMenuEl) return;
+    const tile = selectedTileKey ? state.map.tiles[selectedTileKey] : null;
+    if (!tile) {
+      improveGroupEl.style.display = "none";
+      return;
+    }
+    improveGroupEl.style.display = "";
+    improveMenuEl.innerHTML = "";
+
+    if (tile.improvement) {
+      const info = (engine.IMPROVEMENTS && engine.IMPROVEMENTS[tile.improvement]) || {};
+      const el = document.createElement("div");
+      el.className = "bm-empty";
+      el.textContent = "✓ " + (IMPROVEMENT_GLYPH[tile.improvement] || "") + " " + (info.name || tile.improvement) + " built here.";
+      improveMenuEl.appendChild(el);
+      return;
+    }
+
+    const coord = engine.parseKey(selectedTileKey);
+    const city = engine.claimingCity ? engine.claimingCity(state, coord) : null;
+    if (!city || city.ownerId !== HUMAN_ID) {
+      improveMenuEl.innerHTML = '<div class="bm-empty">This tile is not worked by one of your cities.</div>';
+      return;
+    }
+    const perTurn = cityLaborPerTurn(city);
+    const banked = Math.floor(city.production || 0);
+    const options = Object.keys(engine.IMPROVEMENTS || {}).filter(
+      (id) => engine.IMPROVEMENTS[id].terrains.indexOf(tile.terrain) !== -1
+    );
+    if (!options.length) {
+      improveMenuEl.innerHTML = '<div class="bm-empty">Nothing can be built on ' + tile.terrain + ".</div>";
+      return;
+    }
+    // Already queued for this tile?
+    const queuedHere = (city.queue || []).some((q) => q.indexOf("imp:") === 0 && q.lastIndexOf(":" + selectedTileKey) === q.length - (":" + selectedTileKey).length);
+
+    for (const id of options) {
+      const imp = engine.IMPROVEMENTS[id];
+      const eta = etaLabel(turnsToAccrue(imp.cost - banked, perTurn));
+      const btn = document.createElement("button");
+      btn.className = "build-item";
+      btn.disabled = !isTurn || queuedHere;
+      btn.title = imp.note + "\n\nWorked by " + cityDisplayName(city) + ". Costs " + imp.cost + " labor.";
+      const yld = [];
+      if (imp.yields.food) yld.push("+" + imp.yields.food + " 🌾");
+      if (imp.yields.production) yld.push("+" + imp.yields.production + " ⚒️");
+      if (imp.yields.gold) yld.push("+" + imp.yields.gold + " 🪙");
+      btn.innerHTML =
+        '<span class="bi-name">' + (IMPROVEMENT_GLYPH[id] || "▪") + " " + imp.name + " <small>" + yld.join(" ") + "</small></span>" +
+        '<span class="bi-cost">' + (queuedHere ? "in queue" : imp.cost + " ⚒️ " + eta) + "</span>";
+      btn.addEventListener("click", function () {
+        if (btn.disabled) return;
+        apply({ type: "IMPROVE_TILE", playerId: HUMAN_ID, cityId: city.id, tileKey: selectedTileKey, improvement: id });
+      });
+      improveMenuEl.appendChild(btn);
+    }
   }
 
   // What trade route a merchant could open right now: the city it stands at or

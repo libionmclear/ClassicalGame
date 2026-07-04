@@ -22,6 +22,8 @@ export interface Coord {
 export interface Tile {
   terrain: TerrainType;
   region: string;
+  /** A worked improvement (farm, mine, …) that boosts the owning city's yields. */
+  improvement?: string;
 }
 
 export interface TerrainRule {
@@ -247,6 +249,17 @@ export interface EstablishTradeRouteAction {
   cityId: string;
 }
 
+export interface ImproveTileAction {
+  type: "IMPROVE_TILE";
+  playerId: string;
+  /** The city that will fund the work from its labour queue. */
+  cityId: string;
+  /** Axial "q,r" key of the tile to improve (must be in the player's territory). */
+  tileKey: string;
+  /** Improvement id (farm, mine, …); must suit the tile's terrain. */
+  improvement: string;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -260,7 +273,8 @@ export type GameAction =
   | BuildBuildingAction
   | UnqueueProductionAction
   | RushProductionAction
-  | EstablishTradeRouteAction;
+  | EstablishTradeRouteAction
+  | ImproveTileAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

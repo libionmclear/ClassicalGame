@@ -190,6 +190,56 @@ export const BUILDINGS: Record<string, BuildingRule> = {
   }
 };
 
+// Tile improvements — a city works the improved tiles in its territory for the
+// listed bonus yields each turn. Built through the city's labour queue.
+export interface ImprovementRule {
+  name: string;
+  /** Terrains this improvement can be built on. */
+  terrains: string[];
+  /** Labour cost, paid from the owning city's production. */
+  cost: number;
+  yields: { food?: number; production?: number; gold?: number; science?: number };
+  note: string;
+}
+
+export const IMPROVEMENTS: Record<string, ImprovementRule> = {
+  farm: {
+    name: "Farm",
+    terrains: ["plains", "valley"],
+    cost: 10,
+    yields: { food: 2 },
+    note: "Ditched fields and irrigation — the centuriated farmland of Italy, the flood-fed plots of the Nile. Effect: +2 food."
+  },
+  pasture: {
+    name: "Pasture",
+    terrains: ["plains", "valley", "hills"],
+    cost: 10,
+    yields: { food: 1, production: 1 },
+    note: "Herds of cattle, sheep and horses on open range — hides, wool and remounts. Effect: +1 food, +1 labour."
+  },
+  mine: {
+    name: "Mine",
+    terrains: ["hills", "mountains"],
+    cost: 12,
+    yields: { production: 2 },
+    note: "Shafts and galleries after silver, iron and copper — Laurion, Rio Tinto, the Noric iron. Effect: +2 labour."
+  },
+  "lumber-camp": {
+    name: "Lumber Camp",
+    terrains: ["forest"],
+    cost: 10,
+    yields: { production: 1, gold: 1 },
+    note: "Timber for ships, siege engines and building — the forests of Gaul and Germania. Effect: +1 labour, +1 gold."
+  },
+  "trade-post": {
+    name: "Trade Post",
+    terrains: ["desert"],
+    cost: 10,
+    yields: { gold: 2 },
+    note: "A caravanserai on the desert road — incense, silk and salt passing hand to hand. Effect: +2 gold."
+  }
+};
+
 // Composition roles for combined-arms bonuses.
 export const MELEE_CATEGORIES = new Set(["infantry", "spear", "heavy"]);
 export const RANGED_CATEGORIES = new Set(["ranged", "siege"]);

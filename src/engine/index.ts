@@ -7,14 +7,15 @@ import {
   MELEE_CATEGORIES,
   RANGED_CATEGORIES,
   CATEGORY_LABELS,
-  BUILDINGS
+  BUILDINGS,
+  IMPROVEMENTS
 } from "./data";
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction } from "./types";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -545,7 +546,34 @@ export function computeCityYield(
       yields.gold += b.networkGold * Math.max(0, network - 1);
     }
   }
+
+  // Worked tile improvements in this city's slice of territory (each improved
+  // tile counts for whichever city claims it, so borders never double-count).
+  for (const key of tileKeysWithin(city.position, TERRITORY_RADIUS)) {
+    const tile = state.map.tiles[key];
+    if (!tile || !tile.improvement) continue;
+    const imp = IMPROVEMENTS[tile.improvement];
+    if (!imp) continue;
+    const claim = claimingCity(state, parseKey(key));
+    if (!claim || claim.id !== cityId) continue;
+    yields.food += imp.yields.food ?? 0;
+    yields.production += imp.yields.production ?? 0;
+    yields.gold += imp.yields.gold ?? 0;
+    yields.science += imp.yields.science ?? 0;
+  }
   return yields;
+}
+
+// Axial tile keys within `radius` hexes of a centre that actually exist.
+function tileKeysWithin(center: Coord, radius: number): string[] {
+  const keys: string[] = [];
+  for (let dq = -radius; dq <= radius; dq += 1) {
+    for (let dr = -radius; dr <= radius; dr += 1) {
+      if (distance({ q: 0, r: 0 }, { q: dq, r: dr }) > radius) continue;
+      keys.push(`${center.q + dq},${center.r + dr}`);
+    }
+  }
+  return keys;
 }
 
 // A city touches the sea if any neighbouring tile is coast or open water.
@@ -558,10 +586,15 @@ export function isCoastalCity(state: GameState, cityId: string): boolean {
   });
 }
 
-// A queue item is a unit type or a building id (they never collide).
+// A queue item is a unit type, a building id, or a tile improvement encoded as
+// "imp:<type>:<q,r>" (they never collide).
 export function productionItemCost(id: string): number {
   if (UNITS[id]) return UNIT_BUILD_COSTS[id] ?? Infinity;
   if (BUILDINGS[id]) return BUILDINGS[id].cost;
+  if (id.startsWith("imp:")) {
+    const type = id.split(":")[1];
+    return IMPROVEMENTS[type]?.cost ?? Infinity;
+  }
   return Infinity;
 }
 
@@ -608,6 +641,10 @@ function completeQueueItem(state: GameState, city: City, id: string): void {
       city.maxHp += cityHp;
       city.hp += cityHp;
     }
+  } else if (id.startsWith("imp:")) {
+    const [, type, coordKey] = id.split(":");
+    const tile = coordKey ? state.map.tiles[coordKey] : undefined;
+    if (tile && IMPROVEMENTS[type] && !tile.improvement) tile.improvement = type;
   }
 }
 
@@ -621,6 +658,14 @@ function processCityQueue(state: GameState, city: City): void {
     if (BUILDINGS[id] && (city.buildings ?? []).includes(id)) {
       city.queue.shift(); // already built elsewhere — discard
       continue;
+    }
+    if (id.startsWith("imp:")) {
+      const coordKey = id.split(":")[2];
+      const t = coordKey ? state.map.tiles[coordKey] : undefined;
+      if (!t || t.improvement) {
+        city.queue.shift(); // tile gone or already improved — discard
+        continue;
+      }
     }
     const cost = productionItemCost(id);
     if (!Number.isFinite(cost) || (city.production ?? 0) < cost) break;
@@ -767,6 +812,26 @@ function applyEstablishTradeRoute(state: GameState, action: EstablishTradeRouteA
   // The caravan settles into the route — the merchant is spent.
   delete state.map.units[merchant.id];
   syncOwnershipIndexes(state);
+}
+
+function applyImproveTile(state: GameState, action: ImproveTileAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const rule = IMPROVEMENTS[action.improvement];
+  if (!rule) throw new Error(`Unknown improvement ${action.improvement}`);
+  const tile = state.map.tiles[action.tileKey];
+  if (!tile) throw new Error(`Unknown tile ${action.tileKey}`);
+  if (tile.improvement) throw new Error("That tile is already improved");
+  if (!rule.terrains.includes(tile.terrain)) {
+    throw new Error(`${action.improvement} cannot be built on ${tile.terrain}`);
+  }
+  const claim = claimingCity(state, parseKey(action.tileKey));
+  if (!claim || claim.ownerId !== action.playerId) throw new Error("That tile is not in your territory");
+  if (claim.id !== action.cityId) throw new Error("That city does not work this tile");
+
+  const item = `imp:${action.improvement}:${action.tileKey}`;
+  const queued = (claim.queue ?? []).some((q) => q.startsWith("imp:") && q.endsWith(`:${action.tileKey}`));
+  if (queued) throw new Error("An improvement is already queued for that tile");
+  enqueueProduction(claim, item);
 }
 
 function applyEndTurn(state: GameState, action: EndTurnAction): void {
@@ -991,6 +1056,22 @@ export function computeTerritory(state: GameState): Record<string, string> {
   return result;
 }
 
+// The city that works a given tile: the nearest city within the territory
+// radius (ties to the first found), or null if the tile is unclaimed.
+export function claimingCity(state: GameState, coord: Coord): City | null {
+  let best: City | null = null;
+  let bestDist = Infinity;
+  for (const city of Object.values(state.map.cities)) {
+    const d = distance(city.position, coord);
+    if (d > TERRITORY_RADIUS) continue;
+    if (d < bestDist) {
+      bestDist = d;
+      best = city;
+    }
+  }
+  return best;
+}
+
 // Difficulty is a per-turn economic handicap on every non-human player. The
 // human (state.humanPlayerId) is always unaffected — "hard" means the AI grows
 // faster, "easy" means it grows slower. A pure multiplier keeps it deterministic.
@@ -1122,6 +1203,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
     case "ESTABLISH_TRADE_ROUTE":
       applyEstablishTradeRoute(state, action);
       break;
+    case "IMPROVE_TILE":
+      applyImproveTile(state, action);
+      break;
     default: {
       const unknownAction: never = action;
       throw new Error(`Unsupported action ${(unknownAction as { type: string }).type}`);
@@ -1162,6 +1246,7 @@ export {
   UNITS,
   UNIT_BUILD_COSTS,
   BUILDINGS,
+  IMPROVEMENTS,
   EVENTS,
   getEvent
 };

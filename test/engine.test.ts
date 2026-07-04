@@ -319,6 +319,31 @@ test("a merchant opens a trade route that pays gold every turn", () => {
   assert.equal(withRoute - withoutRoute, route.gold, "income reflects the trade route");
 });
 
+test("a tile improvement adds its yield to the claiming city", () => {
+  const state = seaState();
+  // (1,0) is plains, one tile from the inland city — inland claims it.
+  const before = computeCityYield(state, "inland").food;
+  state.map.tiles["1,0"].improvement = "farm";
+  const after = computeCityYield(state, "inland").food;
+  assert.equal(after, before + 2, "the farm's +2 food reaches the city");
+});
+
+test("improving a tile queues in the claiming city and completes with labour", () => {
+  let s = seaState();
+  s = applyAction(s, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "farm" });
+  assert.ok((s.map.cities.inland.queue || []).includes("imp:farm:1,0"), "the improvement is queued");
+  s.map.cities.inland.production = 999; // fund it
+  s = applyAction(s, { type: "END_TURN", playerId: "a" });
+  assert.equal(s.map.tiles["1,0"].improvement, "farm", "the farm is built at end of turn");
+});
+
+test("a farm cannot be built on the sea or outside your territory", () => {
+  assert.throws(
+    () => applyAction(seaState(), { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "4,0", improvement: "farm" }),
+    /sea|territory/
+  );
+});
+
 test("a trade route dies when its home city is lost", () => {
   const state = seaState();
   state.tradeRoutes = [{ ownerId: "a", fromCityId: "coast1", toCityId: "inland", gold: 5 }];

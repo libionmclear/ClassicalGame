@@ -5,6 +5,7 @@ import {
   createInitialGameState,
   getVictoryStatus,
   computeTerritory,
+  claimingCity,
   computeScores,
   computePlayerIncome,
   computeCityYield,
@@ -29,6 +30,7 @@ import {
   UNITS,
   UNIT_BUILD_COSTS,
   BUILDINGS,
+  IMPROVEMENTS,
   WEATHER_STATES
 } from "./index";
 import { chooseAiAction, runAiTurn } from "./ai";
@@ -45,6 +47,7 @@ export {
   computeCombatPreview,
   getVictoryStatus,
   computeTerritory,
+  claimingCity,
   computeScores,
   computePlayerIncome,
   computeCityYield,
@@ -69,6 +72,7 @@ export {
   UNITS,
   UNIT_BUILD_COSTS,
   BUILDINGS,
+  IMPROVEMENTS,
   WEATHER_STATES,
   chooseAiAction,
   runAiTurn,
