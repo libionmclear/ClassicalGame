@@ -466,10 +466,21 @@ function applyAttackCity(state: GameState, action: AttackCityAction): void {
   }
 }
 
+/** True if this player belongs to the given civ id (matches the lowercase id or
+ *  the display name), used to gate civ-unique techs and units. */
+export function playerControlsCiv(player: Player, civId: string): boolean {
+  if (!civId) return true;
+  const want = civId.toLowerCase();
+  return player.id.toLowerCase() === want || (player.civ || "").toLowerCase() === want;
+}
+
 export function canResearch(player: Player, techId: string): boolean {
   const tech = TECHS[techId];
   if (!tech) throw new Error(`Unknown tech ${techId}`);
   if (player.techs.includes(techId)) return false;
+
+  // Civ-unique techs are researchable only by the people they belong to.
+  if (tech.civ && !playerControlsCiv(player, tech.civ)) return false;
 
   for (const prereq of tech.prerequisites) {
     if (!player.techs.includes(prereq)) return false;
@@ -521,6 +532,7 @@ function growthCost(population: number): number {
 
 export function researchCost(techId: string): number {
   const tech = TECHS[techId];
+  if (tech && typeof tech.cost === "number") return tech.cost;
   const age = tech ? tech.age : 1;
   return age === 1 ? 18 : age === 2 ? 36 : 60;
 }
@@ -870,6 +882,10 @@ function applyImproveTile(state: GameState, action: ImproveTileAction): void {
   if (!rule.terrains.includes(tile.terrain)) {
     throw new Error(`${action.improvement} cannot be built on ${tile.terrain}`);
   }
+  const owner = state.playersById[action.playerId];
+  if (rule.requiresTech && !owner.techs.includes(rule.requiresTech)) {
+    throw new Error(`${action.improvement} requires tech ${rule.requiresTech}`);
+  }
   const item = `imp:${action.improvement}:${action.tileKey}`;
   const queued = (claim.queue ?? []).some((q) => q.startsWith("imp:") && q.endsWith(`:${action.tileKey}`));
   if (queued) throw new Error("An improvement is already queued for that tile");
@@ -1077,6 +1093,9 @@ function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   const unitRule = UNITS[action.unitType];
   if (unitRule.requiresTech && !player.techs.includes(unitRule.requiresTech)) {
     throw new Error(`Unit ${action.unitType} requires tech ${unitRule.requiresTech}`);
+  }
+  if (unitRule.civ && !playerControlsCiv(player, unitRule.civ)) {
+    throw new Error(`Unit ${action.unitType} is unique to ${unitRule.civ}`);
   }
   if (unitRule.domain === "naval" && !isCoastalCity(state, action.cityId)) {
     throw new Error(`Ships can only be built in a coastal city`);

@@ -101,7 +101,24 @@ export const TECHS: Record<string, TechRule> = {
     prerequisites: ["law-administration"],
     forkGroup: "imperial-method",
     forkBranch: "tribute"
-  }
+  },
+
+  // --- Additional shared historical techs (deeper research so science lasts) ---
+  pottery: { age: 1, prerequisites: [] },
+  mathematics: { age: 1, prerequisites: ["writing"] },
+  philosophy: { age: 2, prerequisites: ["writing"] },
+  metallurgy: { age: 2, prerequisites: ["iron-working"] },
+  aqueducts: { age: 2, prerequisites: ["engineering"] },
+  astronomy: { age: 2, prerequisites: ["mathematics"] },
+  rhetoric: { age: 3, prerequisites: ["writing"] },
+
+  // --- Civilization-unique techs (each fields that people's signature unit) ---
+  "hoplite-phalanx": { age: 1, prerequisites: ["bronze-working"], civ: "greece", cost: 24 },
+  chariotry: { age: 1, prerequisites: ["bronze-working"], civ: "egypt", cost: 24 },
+  "legionary-system": { age: 2, prerequisites: ["iron-working"], civ: "rome", cost: 44 },
+  "war-elephants": { age: 2, prerequisites: ["iron-working"], civ: "carthage", cost: 44 },
+  "iron-mastery": { age: 2, prerequisites: ["iron-working"], civ: "gaul", cost: 40 },
+  "horse-archery": { age: 2, prerequisites: ["horseback-riding"], civ: "parthia", cost: 44 }
 };
 
 // Classical rock-paper-scissors, both when attacking and defending:
@@ -129,7 +146,39 @@ export const UNITS: Record<string, UnitRule> = {
   },
   trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing", category: "ranged" },
   merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1, category: "infantry" },
-  settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1, category: "infantry" }
+  settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1, category: "infantry" },
+
+  // --- Civilization-unique units (each gated by that people's unique tech) ---
+  // Rome — the legion: drilled heavy foot, a clear step beyond the swordsman.
+  legionary: {
+    domain: "land", movement: 2, attack: 30, defense: 26, maxHp: 26, range: 1, upkeep: 2,
+    requiresTech: "legionary-system", civ: "rome", category: "heavy", counters: { ranged: 0.35, spear: 0.25 }
+  },
+  // Greece — the hoplite phalanx: an immovable shield-wall that shatters cavalry.
+  hoplite: {
+    domain: "land", movement: 2, attack: 22, defense: 30, maxHp: 24, range: 1, upkeep: 2,
+    requiresTech: "hoplite-phalanx", civ: "greece", category: "spear", counters: { mounted: 0.7 }
+  },
+  // Carthage — the war elephant: shock beast that tramples massed infantry.
+  "war-elephant": {
+    domain: "land", movement: 2, attack: 34, defense: 22, maxHp: 32, range: 1, upkeep: 3,
+    requiresTech: "war-elephants", civ: "carthage", category: "heavy", counters: { infantry: 0.4, ranged: 0.3 }
+  },
+  // Egypt — the war chariot: fast archer-platform that rides down light troops.
+  "war-chariot": {
+    domain: "land", movement: 4, attack: 24, defense: 16, maxHp: 22, range: 1, upkeep: 2, mounted: true,
+    requiresTech: "chariotry", civ: "egypt", category: "mounted", counters: { ranged: 0.5, infantry: 0.2 }
+  },
+  // Gaul — the gaesatae: ferocious naked charge, murderous but poorly guarded.
+  gaesatae: {
+    domain: "land", movement: 2, attack: 32, defense: 15, maxHp: 22, range: 1, upkeep: 2,
+    requiresTech: "iron-mastery", civ: "gaul", category: "heavy", counters: { ranged: 0.3 }
+  },
+  // Parthia — the horse archer: the Parthian shot, striking from range then fleeing.
+  "horse-archer": {
+    domain: "land", movement: 4, attack: 20, defense: 14, maxHp: 18, range: 2, upkeep: 2, mounted: true,
+    requiresTech: "horse-archery", civ: "parthia", category: "mounted", counters: { infantry: 0.25, spear: 0.3 }
+  }
 };
 
 export interface BuildingRule {
@@ -187,6 +236,49 @@ export const BUILDINGS: Record<string, BuildingRule> = {
     yields: { food: 1, gold: 2 },
     networkGold: 1,
     note: "Moles, quays and warehouses — Ostia, Carthage's circular cothon, Piraeus. Sea lanes carried grain, wine, tin and silver across the classical world. Effect: +1 food, +2 gold, and +1 more gold for every other Harbor you hold (a trade network)."
+  },
+  temple: {
+    name: "Temple",
+    cost: 18,
+    requiresTech: "pottery",
+    yields: { science: 1, gold: 1 },
+    note: "The house of the city's god — the Parthenon, the Capitoline temple, Karnak. Cult, festival and civic pride in stone. Effect: +1 science, +1 gold."
+  },
+  academy: {
+    name: "Academy",
+    cost: 24,
+    requiresTech: "mathematics",
+    yields: { science: 3 },
+    note: "Where number and proof were taught — Euclid's Alexandria, Pythagoras' school. Effect: +3 science."
+  },
+  lyceum: {
+    name: "Lyceum",
+    cost: 26,
+    requiresTech: "philosophy",
+    yields: { science: 2, gold: 1 },
+    note: "Aristotle's Lyceum and Plato's Academy — reasoned inquiry into nature, ethics and the state. Effect: +2 science, +1 gold."
+  },
+  aqueduct: {
+    name: "Aqueduct",
+    cost: 26,
+    requiresTech: "aqueducts",
+    yields: { food: 3 },
+    note: "Arched channels carrying clean water for miles — the Aqua Appia, the Pont du Gard. Bigger, healthier cities. Effect: +3 food."
+  },
+  barracks: {
+    name: "Barracks",
+    cost: 20,
+    requiresTech: "metallurgy",
+    cityHp: 10,
+    yields: { production: 1 },
+    note: "Drill yards, armouries and the forge — where raw levies were made into soldiers. Effect: +1 labour, +10 city HP."
+  },
+  amphitheater: {
+    name: "Amphitheater",
+    cost: 26,
+    requiresTech: "rhetoric",
+    yields: { gold: 2, science: 1 },
+    note: "Theatre and arena — the games and rhetoric that bound a populace to the state, from the Theatre of Dionysus to the Colosseum. Effect: +2 gold, +1 science."
   }
 };
 
@@ -199,6 +291,8 @@ export interface ImprovementRule {
   /** Labour cost, paid from the owning city's production. */
   cost: number;
   yields: { food?: number; production?: number; gold?: number; science?: number };
+  /** Tech that must be researched before this improvement can be built. */
+  requiresTech?: string;
   note: string;
 }
 
@@ -237,6 +331,22 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
     cost: 10,
     yields: { gold: 2 },
     note: "A caravanserai on the desert road — incense, silk and salt passing hand to hand. Effect: +2 gold."
+  },
+  quarry: {
+    name: "Quarry",
+    terrains: ["hills", "mountains"],
+    cost: 12,
+    yields: { production: 2, gold: 1 },
+    requiresTech: "metallurgy",
+    note: "Cut stone and marble for walls, roads and monuments — the travertine of Tibur, the marble of Paros. Effect: +2 labour, +1 gold. (Needs Metallurgy.)"
+  },
+  vineyard: {
+    name: "Vineyard",
+    terrains: ["plains", "hills"],
+    cost: 10,
+    yields: { food: 1, gold: 2 },
+    requiresTech: "pottery",
+    note: "Terraced vines and olive groves — the wine and oil that were the classical world's cash crops. Effect: +1 food, +2 gold. (Needs Pottery for the amphorae.)"
   }
 };
 
@@ -262,5 +372,12 @@ export const UNIT_BUILD_COSTS: Record<string, number> = {
   siege: 24,
   trireme: 22,
   merchant: 16,
-  settler: 18
+  settler: 18,
+  // Civ-unique units — costlier than their generic cousins, worth every labourer.
+  legionary: 26,
+  hoplite: 22,
+  "war-elephant": 32,
+  "war-chariot": 24,
+  gaesatae: 20,
+  "horse-archer": 24
 };

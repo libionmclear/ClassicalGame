@@ -55,6 +55,8 @@ export interface UnitRule {
   counters?: Record<string, number>;
   /** Extra attack multiplier when assaulting a city (siege engines). */
   siegeBonus?: number;
+  /** Civ id (lowercase, e.g. "rome") this unit is unique to — only that people may field it. */
+  civ?: string;
 }
 
 export interface TechRule {
@@ -62,6 +64,10 @@ export interface TechRule {
   prerequisites: string[];
   forkGroup?: string;
   forkBranch?: string;
+  /** Civ id (lowercase, e.g. "rome") this tech is unique to — only that people may research it. */
+  civ?: string;
+  /** Explicit science cost; when omitted the cost is derived from the age. */
+  cost?: number;
 }
 
 export interface Unit {

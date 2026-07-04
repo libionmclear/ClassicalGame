@@ -1,5 +1,5 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
-import { applyAction, computeCombatPreview, researchCost, isCoastalCity, claimingCity, isEmbarked } from "./index";
+import { applyAction, computeCombatPreview, researchCost, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv } from "./index";
 import { getEvent } from "./events";
 import { distance, DIRECTIONS, keyOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -11,18 +11,33 @@ const RESEARCH_PRIORITY = [
   "bronze-working",
   "archery",
   "iron-working",
+  // A people beelines its own signature tech once the prerequisite is in hand
+  // (civ gate skips the ones that aren't yours).
+  "hoplite-phalanx",
+  "chariotry",
+  "legionary-system",
+  "war-elephants",
+  "iron-mastery",
   "combined-arms",
   "horseback-riding",
+  "horse-archery",
   "writing",
+  "mathematics",
   "sailing",
   "masonry",
   "engineering",
+  "metallurgy",
   "siegecraft",
   "phalanx-doctrine",
   "coinage",
+  "philosophy",
+  "aqueducts",
   "republic",
   "open-sea-sailing",
   "roads-logistics",
+  "astronomy",
+  "rhetoric",
+  "pottery",
   "law-administration",
   "assimilation"
 ];
@@ -113,6 +128,7 @@ function firstBuildableTech(player: Player): string | null {
     if (player.techs.includes(techId)) continue;
     const tech = TECHS[techId];
     if (!tech) continue;
+    if (tech.civ && !playerControlsCiv(player, tech.civ)) continue;
     if (!tech.prerequisites.every((p) => player.techs.includes(p))) continue;
     if (tech.forkGroup) {
       const chosen = player.forkChoices[tech.forkGroup];
@@ -210,16 +226,25 @@ function buildAction(state: GameState, player: Player): GameAction | null {
   const wantMerchant =
     cities.length >= 2 && hasArmy && merchantsInFlight === 0 && routesOwned < cities.length - 1;
 
-  const spearFirst = enemyCavalryNear(state, player);
-  const militaryPref = spearFirst
-    ? ["spearman", "swordsman", "horseman", "archer", "warrior"]
-    : ["swordsman", "horseman", "spearman", "archer", "warrior"];
-
   const canBuild = (type: string): boolean => {
     const rule = UNITS[type];
     if (!rule) return false;
-    return !rule.requiresTech || player.techs.includes(rule.requiresTech);
+    if (rule.requiresTech && !player.techs.includes(rule.requiresTech)) return false;
+    if (rule.civ && !playerControlsCiv(player, rule.civ)) return false;
+    return true;
   };
+
+  // A people fields its signature unit ahead of the generic line when it can.
+  const civElite = Object.keys(UNITS).filter(
+    (t) => UNITS[t].civ && (UNITS[t].attack ?? 0) > 0 && canBuild(t)
+  );
+  const spearFirst = enemyCavalryNear(state, player);
+  const militaryPref = [
+    ...civElite,
+    ...(spearFirst
+      ? ["spearman", "swordsman", "horseman", "archer", "warrior"]
+      : ["swordsman", "horseman", "spearman", "archer", "warrior"])
+  ];
 
   // Naval ambition: want roughly one warship per enemy coastal city, so an
   // amphibious rival can actually be reached and fought across the water.
@@ -325,11 +350,13 @@ function maneuverAction(state: GameState, player: Player): GameAction | null {
 }
 
 // Best improvement for a terrain — favour labour, then food, then gold.
-const IMPROVE_PREFERENCE = ["mine", "lumber-camp", "farm", "pasture", "trade-post"];
-function pickImprovement(terrain: string): string | null {
+const IMPROVE_PREFERENCE = ["mine", "quarry", "lumber-camp", "farm", "pasture", "vineyard", "trade-post"];
+function pickImprovement(terrain: string, player: Player): string | null {
   for (const id of IMPROVE_PREFERENCE) {
     const rule = IMPROVEMENTS[id];
-    if (rule && rule.terrains.includes(terrain)) return id;
+    if (!rule || !rule.terrains.includes(terrain)) continue;
+    if (rule.requiresTech && !player.techs.includes(rule.requiresTech)) continue;
+    return id;
   }
   return null;
 }
@@ -350,7 +377,7 @@ function improveAction(state: GameState, player: Player): GameAction | null {
         const claim = claimingCity(state, parseKey(key));
         if (!claim || claim.id !== city.id) continue;
         if ((city.queue ?? []).some((q) => q.startsWith("imp:") && q.endsWith(`:${key}`))) continue;
-        const imp = pickImprovement(tile.terrain);
+        const imp = pickImprovement(tile.terrain, player);
         if (!imp) continue;
         return { type: "IMPROVE_TILE", playerId: player.id, cityId: city.id, tileKey: key, improvement: imp };
       }

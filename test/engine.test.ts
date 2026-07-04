@@ -103,6 +103,76 @@ test("forked tech branches are mutually exclusive", () => {
   assert.equal(canResearch(after.playersById.p1, "skirmish-doctrine"), false);
 });
 
+test("civ-unique tech and unit are gated to their people", () => {
+  const state = buildState();
+  const rome = state.playersById.p1; // civ "Rome"
+  const carthage = state.playersById.p2; // civ "Carthage"
+  rome.techs.push("iron-working");
+  carthage.techs.push("iron-working");
+
+  // Only Rome may research the Legionary System, even with the prerequisite met.
+  assert.equal(canResearch(rome, "legionary-system"), true);
+  assert.equal(canResearch(carthage, "legionary-system"), false);
+
+  // Rome researches it and can queue a Legionary in its city.
+  const after = applyAction(state, {
+    type: "RESEARCH_TECH",
+    playerId: "p1",
+    techId: "legionary-system"
+  });
+  const built = applyAction(after, {
+    type: "BUILD_UNIT",
+    playerId: "p1",
+    cityId: "c1",
+    unitType: "legionary",
+    unitId: "leg1"
+  });
+  assert.ok((built.map.cities.c1.queue ?? []).includes("legionary"));
+
+  // Another people cannot field it even if handed the tech directly.
+  const forged = buildState();
+  forged.currentPlayerIndex = 1; // p2's turn
+  forged.playersById.p2.techs.push("legionary-system");
+  assert.throws(() =>
+    applyAction(forged, {
+      type: "BUILD_UNIT",
+      playerId: "p2",
+      cityId: "c2",
+      unitType: "legionary",
+      unitId: "leg2"
+    })
+  );
+});
+
+test("improvements requiring a tech are gated until it is researched", () => {
+  const state = buildState();
+  // Make an adjacent tile hills so c1 (at 0,0) works it, then test the Quarry's
+  // Metallurgy gate directly.
+  state.map.tiles["1,0"].terrain = "hills";
+
+  assert.throws(
+    () =>
+      applyAction(state, {
+        type: "IMPROVE_TILE",
+        playerId: "p1",
+        cityId: "c1",
+        tileKey: "1,0",
+        improvement: "quarry"
+      }),
+    /requires tech metallurgy/
+  );
+
+  state.playersById.p1.techs.push("metallurgy");
+  const after = applyAction(state, {
+    type: "IMPROVE_TILE",
+    playerId: "p1",
+    cityId: "c1",
+    tileKey: "1,0",
+    improvement: "quarry"
+  });
+  assert.ok((after.map.cities.c1.queue ?? []).some((q) => q === "imp:quarry:1,0"));
+});
+
 test("replay from action log produces same final state", () => {
   const initial = buildState();
 

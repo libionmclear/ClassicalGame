@@ -87,7 +87,11 @@
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
-  const BUILDABLE = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "trireme", "merchant", "settler"];
+  const BUILDABLE = [
+    "warrior", "archer", "spearman", "swordsman", "horseman", "siege", "trireme", "merchant", "settler",
+    // Civ-unique units — the build menu shows only the one that matches your people.
+    "legionary", "hoplite", "war-elephant", "war-chariot", "gaesatae", "horse-archer"
+  ];
   const UNIT_META = {
     warrior: { name: "Warrior", role: "Basic melee infantry — cheap, no strong matchups" },
     archer: { name: "Archer", role: "Ranged (range 2): strikes with no reply at distance, but fragile in melee and easy prey for cavalry" },
@@ -97,7 +101,13 @@
     siege: { name: "Siege Ballista", role: "Range 2, devastating vs cities, fragile in the open field" },
     trireme: { name: "Trireme", role: "Warship — rules the sea lanes, carries war to the coast. Built only in coastal cities; launches into the water" },
     merchant: { name: "Merchant", role: "Caravan — send it to another of your cities (or a foreign one) and 'Establish Trade Route' for gold every turn" },
-    settler: { name: "Settler", role: "Founds a new city" }
+    settler: { name: "Settler", role: "Founds a new city" },
+    legionary: { name: "Legionary", role: "ROME — elite heavy infantry: stronger than the swordsman, grinds spears & skirmishers. Needs the Legionary System" },
+    hoplite: { name: "Hoplite", role: "GREECE — the phalanx: a wall of spears with huge defence, crushes cavalry (+70%). Needs the Hoplite Phalanx" },
+    "war-elephant": { name: "War Elephant", role: "CARTHAGE — shock beast: tramples massed infantry and archers, tough and terrifying. Needs War Elephants" },
+    "war-chariot": { name: "War Chariot", role: "EGYPT — fast (4 move) chariotry: rides down archers & light foot. Needs Chariotry" },
+    gaesatae: { name: "Gaesatae", role: "GAUL — ferocious charge: huge attack, little armour — win fast or die. Needs Iron Mastery" },
+    "horse-archer": { name: "Horse Archer", role: "PARTHIA — the Parthian shot: fast (4 move) ranged cavalry that strikes and flees. Needs Horse Archery" }
   };
   // One-line historical grounding for each unit (the educational layer).
   const UNIT_HISTORY = {
@@ -109,7 +119,13 @@
     siege: "The ballista and onager — torsion artillery that hurled bolts and stones over the highest walls.",
     trireme: "Three banks of oars and a bronze ram — the trireme decided Salamis (480 BC) and every contest for the Mediterranean thereafter.",
     merchant: "The caravans of the Silk and Incense roads and the grain fleets of the Mediterranean — commerce built the wealth that raised armies.",
-    settler: "Colonists sent to found a new colonia or polis, carrying the sacred fire from the mother city."
+    settler: "Colonists sent to found a new colonia or polis, carrying the sacred fire from the mother city.",
+    legionary: "The legionary with pilum, gladius and scutum — the drilled, articulated heavy infantry that conquered the Mediterranean world.",
+    hoplite: "The citizen-hoplite in the phalanx — the locked shield-wall of Marathon and Plataea that no charge could break head-on.",
+    "war-elephant": "Carthaginian and Numidian war elephants — Hannibal drove them over the Alps; their charge broke lines and panicked horses.",
+    "war-chariot": "The Egyptian two-horse chariot — a mobile archery platform, the shock arm at Kadesh and Megiddo.",
+    gaesatae: "The gaesatae — Gallic and Celtic warriors who charged naked but for a torc, terrifying but unarmoured (Telamon, 225 BC).",
+    "horse-archer": "The Parthian horse archer — feigned flight then the 'Parthian shot' over the crupper; it destroyed Crassus at Carrhae (53 BC)."
   };
 
   // ----- Presentation lookups -----
@@ -123,7 +139,13 @@
     siege: "🎯",
     trireme: "⛵",
     merchant: "🪙",
-    settler: "🛠️"
+    settler: "🛠️",
+    legionary: "🦅",
+    hoplite: "🛡️",
+    "war-elephant": "🐘",
+    "war-chariot": "🛞",
+    gaesatae: "🪓",
+    "horse-archer": "🏇"
   };
   const TERRAIN_LABELS = {
     plains: "Plains",
@@ -317,7 +339,20 @@
     "currency-reform": { name: "Currency Reform", note: "Standardized coinage steadies trade across provinces." },
     cartography: { name: "Cartography", note: "Sea charts and itineraries extend reach and vision." },
     assimilation: { name: "Assimilation", note: "FORK: extend citizenship — captured cities become your own." },
-    "tribute-empire": { name: "Tribute Empire", note: "FORK: satrapies pay heavy tribute but stay restless." }
+    "tribute-empire": { name: "Tribute Empire", note: "FORK: satrapies pay heavy tribute but stay restless." },
+    pottery: { name: "Pottery", note: "Fired clay for grain jars, amphorae and the wine trade. EFFECT: unlocks the Temple and the Vineyard improvement." },
+    mathematics: { name: "Mathematics", note: "Geometry and proof from Thales to Euclid. EFFECT: unlocks the Academy (+3 science) and leads to Astronomy." },
+    philosophy: { name: "Philosophy", note: "Reasoned inquiry — Plato's Academy, Aristotle's Lyceum. EFFECT: unlocks the Lyceum (+2 science, +1 gold)." },
+    metallurgy: { name: "Metallurgy", note: "Mastery of the forge — pattern-welding, tempering, mass-produced arms. EFFECT: unlocks the Barracks and the Quarry improvement." },
+    aqueducts: { name: "Aqueducts", note: "Arched channels carrying clean water for miles (Aqua Appia, 312 BC). EFFECT: unlocks the Aqueduct (+3 food) for bigger cities." },
+    astronomy: { name: "Astronomy", note: "The heavens charted for calendar and navigation — Hipparchus, the Antikythera mechanism. EFFECT: deepens the science tree." },
+    rhetoric: { name: "Rhetoric", note: "Persuasion and public games that bound a populace to the state. EFFECT: unlocks the Amphitheater (+2 gold, +1 science)." },
+    "hoplite-phalanx": { name: "Hoplite Phalanx", note: "GREECE ONLY. The citizen shield-wall. EFFECT: unlocks the Hoplite — an immovable anti-cavalry spear line." },
+    chariotry: { name: "Chariotry", note: "EGYPT ONLY. The two-horse war chariot. EFFECT: unlocks the War Chariot — fast mobile archery." },
+    "legionary-system": { name: "Legionary System", note: "ROME ONLY. Manipular drill, pilum and gladius. EFFECT: unlocks the Legionary — elite heavy infantry." },
+    "war-elephants": { name: "War Elephants", note: "CARTHAGE ONLY. Trained battle-elephants. EFFECT: unlocks the War Elephant — a line-breaking shock beast." },
+    "iron-mastery": { name: "Iron Mastery", note: "GAUL ONLY. La Tène ironwork — long swords and fine mail. EFFECT: unlocks the Gaesatae — a ferocious charging warband." },
+    "horse-archery": { name: "Horse Archery", note: "PARTHIA ONLY. Mounted bow and the feigned retreat. EFFECT: unlocks the Horse Archer — the deadly Parthian shot." }
   };
 
   function canResearchSafe(player, techId) {
@@ -328,8 +363,21 @@
     }
   }
 
-  const BUILDING_GLYPH = { granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱", harbor: "⚓" };
-  const IMPROVEMENT_GLYPH = { farm: "🌾", pasture: "🐄", mine: "⛏️", "lumber-camp": "🪵", "trade-post": "🐫" };
+  // Does this player belong to the given civ id? (matches lowercase id or name)
+  function civMatches(player, civId) {
+    if (!civId) return true;
+    const want = String(civId).toLowerCase();
+    return (
+      String((player && player.id) || "").toLowerCase() === want ||
+      String((player && player.civ) || "").toLowerCase() === want
+    );
+  }
+
+  const BUILDING_GLYPH = {
+    granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱", harbor: "⚓",
+    temple: "⛩️", academy: "📐", lyceum: "🏛️", aqueduct: "💧", barracks: "🛡️", amphitheater: "🎭"
+  };
+  const IMPROVEMENT_GLYPH = { farm: "🌾", pasture: "🐄", mine: "⛏️", "lumber-camp": "🪵", "trade-post": "🐫", quarry: "🪨", vineyard: "🍇" };
 
   // ----- Civ sprite sheets (optional art) -----
   // Populated by scripts/slice-sprites.mjs -> web/sprites.js. When a civ has
@@ -540,6 +588,8 @@
     for (const type of BUILDABLE) {
       const def = engine.UNITS[type];
       if (!def) continue;
+      // Civ-unique units only appear for the people they belong to.
+      if (def.civ && !civMatches(player, def.civ)) continue;
       const meta = UNIT_META[type] || { name: type, role: "" };
       const cost = costs[type];
       const reqTech = def.requiresTech;
@@ -1633,10 +1683,15 @@
       improveMenuEl.appendChild(el);
     };
 
-    // Terrain improvements (one per tile).
-    const options = Object.keys(engine.IMPROVEMENTS || {}).filter(
-      (id) => engine.IMPROVEMENTS[id].terrains.indexOf(tile.terrain) !== -1
-    );
+    // Terrain improvements (one per tile) — only those this tile suits and whose
+    // unlocking tech (if any) has been researched.
+    const me = human();
+    const options = Object.keys(engine.IMPROVEMENTS || {}).filter((id) => {
+      const imp = engine.IMPROVEMENTS[id];
+      if (imp.terrains.indexOf(tile.terrain) === -1) return false;
+      if (imp.requiresTech && me.techs.indexOf(imp.requiresTech) === -1) return false;
+      return true;
+    });
     const impQueued = queue.some((q) => q.indexOf("imp:") === 0 && q.slice(-suffix.length) === suffix);
     for (const id of options) {
       const imp = engine.IMPROVEMENTS[id];
@@ -1838,7 +1893,10 @@
     techTreeEl.innerHTML = "";
 
     for (const age of [1, 2, 3]) {
-      const ids = Object.keys(techs).filter((id) => techs[id].age === age);
+      // Show shared techs plus only this player's own civ-unique techs.
+      const ids = Object.keys(techs).filter(
+        (id) => techs[id].age === age && (!techs[id].civ || civMatches(player, techs[id].civ))
+      );
       if (!ids.length) continue;
 
       const title = document.createElement("div");
