@@ -153,16 +153,18 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   scene.background = new THREE.Color(0x0a1a2f);
   scene.fog = new THREE.Fog(0x0a1a2f, 55, 120);
 
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 800);
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 800);
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.09;
-  controls.maxPolarAngle = 1.32;
-  controls.minPolarAngle = 0.1;
+  // Frontal, fixed view: the camera looks at the board head-on and cannot be
+  // rotated or tilted — only panned and zoomed. (The polar angle is pinned in
+  // frameBoard once the scene is sized.)
+  controls.enableRotate = false;
   controls.minDistance = 5;
   controls.maxDistance = 200;
-  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 
   scene.add(new THREE.AmbientLight(0xbfd4ff, 0.62));
   scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x3a3326, 0.5));
@@ -254,13 +256,18 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     mesh.instanceMatrix.needsUpdate = true;
     scene.add(mesh);
     tileMesh = mesh;
-    // Frame the board once, on first build.
+    // Frame the board once, on first build — a near-top-down FRONTAL view (the
+    // camera looks almost straight down, square-on, not from an isometric angle).
     const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
     const span = Math.max(maxX - minX, maxZ - minZ) || 20;
     controls.target.set(cx, 0, cz);
-    camera.position.set(cx, span * 0.6, cz + span * 0.66);
+    camera.position.set(cx, span * 1.02, cz + span * 0.16);
     sun.target.position.set(cx, 0, cz);
     controls.update();
+    // Pin the pitch so pan/zoom can never reintroduce a tilt.
+    const pol = controls.getPolarAngle();
+    controls.minPolarAngle = pol;
+    controls.maxPolarAngle = pol;
   }
 
   function colorFor(tv: TileView, civColors: Record<string, string>): THREE.Color {

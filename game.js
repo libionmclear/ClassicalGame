@@ -2574,12 +2574,12 @@
   loadSavedColors();
   // Note: the actual first render happens via resumeOrNew() at the very end.
 
-  // The flat, frontal 2D board is the default. The tilted 3D board is opt-in
-  // (URL ?board=3d or the toggle button, which persists the choice).
+  // The 3D board is the default, shown frontally with a fixed (non-rotating)
+  // camera. The classic flat DOM board is opt-in (URL ?board=2d or the toggle).
   (function init3D() {
     try {
-      const force3d = /[?&]board=3d/.test(location.search) || window.localStorage.getItem("hegemon_board") === "3d";
-      if (!force3d) return;
+      const force2d = /[?&]board=2d/.test(location.search) || window.localStorage.getItem("hegemon_board") === "2d";
+      if (force2d) return;
       const canvas = document.getElementById("board3d-canvas");
       if (!canvas || !window.Board3D || !window.Board3D.createBoard) return;
       board3d = window.Board3D.createBoard(canvas);
