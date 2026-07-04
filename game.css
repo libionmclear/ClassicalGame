@@ -810,6 +810,20 @@ button:hover:not(:disabled) {
   display: none;
 }
 
+/* When a unit is selected, the panel is click-through except its own controls,
+   so the board tiles behind it stay clickable for moving/attacking. */
+.control-panel.cp-clickthrough {
+  pointer-events: none;
+}
+
+.control-panel.cp-clickthrough button,
+.control-panel.cp-clickthrough .cp-close,
+.control-panel.cp-clickthrough a,
+.control-panel.cp-clickthrough input,
+.control-panel.cp-clickthrough summary {
+  pointer-events: auto;
+}
+
 .cp-head {
   display: flex;
   align-items: flex-start;
@@ -851,6 +865,36 @@ button:hover:not(:disabled) {
   font-size: 0.78rem;
   color: var(--muted);
   margin: 0 0 6px;
+}
+
+/* City output ledger (yields + worked deposits/improvements) */
+.co-yields {
+  display: flex;
+  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.co-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.82rem;
+  margin-top: 3px;
+}
+
+.co-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 4px;
+}
+
+.co-chip {
+  cursor: default;
 }
 
 /* ===== Floating HUD overlays over the board ===== */

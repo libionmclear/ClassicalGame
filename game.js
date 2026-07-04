@@ -26,6 +26,8 @@
   const controlPanelEl = document.getElementById("control-panel");
   const cpCloseBtn = document.getElementById("cp-close");
   const unitActionsGroupEl = document.getElementById("unit-actions-group");
+  const cityOutputGroupEl = document.getElementById("city-output-group");
+  const cityOutputEl = document.getElementById("city-output");
   const queueGroupEl = document.getElementById("queue-group");
   const recruitGroupEl = document.getElementById("recruit-group");
   const buildingsGroupEl = document.getElementById("buildings-group");
@@ -491,6 +493,54 @@
     if (eta === 0) return "ready";
     if (!Number.isFinite(eta)) return "no labor";
     return "~" + eta + "t";
+  }
+
+  // Ledger for the selected city: its total per-turn output plus the strategic
+  // deposits and worked improvements in its territory.
+  function renderCityOutput(city) {
+    if (!cityOutputEl) return;
+    if (!city) { cityOutputEl.innerHTML = ""; return; }
+    let y = null;
+    try { y = engine.computeCityYield(state, city.id); } catch (e) {}
+
+    const deposits = [];
+    const worked = [];
+    const R = 3;
+    for (let dq = -R; dq <= R; dq += 1) {
+      for (let dr = -R; dr <= R; dr += 1) {
+        if (engine.distance({ q: 0, r: 0 }, { q: dq, r: dr }) > R) continue;
+        const coord = { q: city.position.q + dq, r: city.position.r + dr };
+        const key = coord.q + "," + coord.r;
+        const tile = state.map.tiles[key];
+        if (!tile) continue;
+        const claim = engine.claimingCity ? engine.claimingCity(state, coord) : null;
+        if (!claim || claim.id !== city.id) continue;
+        if (tile.resource && engine.RESOURCES && engine.RESOURCES[tile.resource]) deposits.push(engine.RESOURCES[tile.resource]);
+        if (tile.improvement && engine.IMPROVEMENTS && engine.IMPROVEMENTS[tile.improvement]) worked.push(engine.IMPROVEMENTS[tile.improvement]);
+      }
+    }
+
+    const yieldRow = y
+      ? '<div class="co-yields">' +
+        '<span title="Food per turn (before your army\'s food upkeep)">🌾 ' + y.food + "</span>" +
+        '<span title="Labour per turn">⚒️ ' + y.production + "</span>" +
+        '<span title="Gold per turn">🪙 ' + y.gold + "</span>" +
+        '<span title="Science per turn">🔬 ' + y.science + "</span></div>"
+      : "";
+    const depRow = deposits.length
+      ? '<div class="co-row"><span class="co-label">Deposits</span>' +
+        deposits.map(function (r) { return '<span class="co-chip" title="' + r.name + " — " + resYieldStr(r) + '">' + r.glyph + "</span>"; }).join("") +
+        "</div>"
+      : "";
+    const impRow = worked.length
+      ? '<div class="co-row"><span class="co-label">Worked</span>' +
+        worked.map(function (im) {
+          const id = Object.keys(engine.IMPROVEMENTS).find(function (k) { return engine.IMPROVEMENTS[k] === im; });
+          return '<span class="co-chip" title="' + im.name + " — " + resYieldStr(im) + '">' + (IMPROVEMENT_GLYPH[id] || "▪") + "</span>";
+        }).join("") +
+        "</div>"
+      : "";
+    cityOutputEl.innerHTML = yieldRow + depRow + impRow || '<div class="cp-hint">No output yet.</div>';
   }
 
   function renderBuildQueue(selectedCity) {
@@ -1711,6 +1761,7 @@
     if (clearSelectionBtn) clearSelectionBtn.disabled = !(selectedUnit || selectedCity);
     renderBuildMenu(isTurn, selectedCity);
     renderBuildingMenu(isTurn, selectedCity);
+    renderCityOutput(selectedCity);
     renderBuildQueue(selectedCity);
     renderImproveMenu(isTurn);
 
@@ -1734,7 +1785,11 @@
     const show = function (el, on) { if (el) el.style.display = on ? "" : "none"; };
     show(unitActionsGroupEl, !!selectedUnit);
     show(improveGroupEl, !!tileSel);
+    show(cityOutputGroupEl, !!selectedCity);
     show(queueGroupEl, !!selectedCity);
+    // A selected unit needs the board behind the panel clickable (to move/attack);
+    // cities/tiles keep the solid, scrollable panel.
+    controlPanelEl.classList.toggle("cp-clickthrough", !!selectedUnit);
     show(recruitGroupEl, !!selectedCity);
     show(buildingsGroupEl, !!selectedCity);
     // Research is a city concern; open it by default when a city is picked.
