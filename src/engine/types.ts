@@ -26,6 +26,8 @@ export interface Tile {
   improvement?: string;
   /** A road speeds movement across the tile and bridges rivers. */
   road?: boolean;
+  /** A strategic resource deposit (grain, iron, timber, …) — bonus yields when worked. */
+  resource?: string;
 }
 
 export interface TerrainRule {

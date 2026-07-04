@@ -356,6 +356,54 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
   }
 };
 
+// Strategic resource deposits scattered on the map. A city works the deposits in
+// its territory for the listed bonus yields each turn (on top of the terrain and
+// any improvement). The classical trade goods — grain, timber, iron, stone, the
+// silver of Laurion, the wine and horses that made and moved empires.
+export interface ResourceRule {
+  name: string;
+  glyph: string;
+  /** Terrains this deposit can appear on. */
+  terrains: string[];
+  yields: { food?: number; production?: number; gold?: number; science?: number };
+  note: string;
+}
+
+export const RESOURCES: Record<string, ResourceRule> = {
+  grain: {
+    name: "Grain", glyph: "🌾", terrains: ["plains", "valley"], yields: { food: 2 },
+    note: "The wheat of Egypt, Sicily and the Black Sea that fed whole cities. Effect: +2 food."
+  },
+  fish: {
+    name: "Fish", glyph: "🐟", terrains: ["coast"], yields: { food: 1, gold: 1 },
+    note: "Tunny runs and salt-fish (garum) traded the length of the Mediterranean. Effect: +1 food, +1 gold."
+  },
+  timber: {
+    name: "Timber", glyph: "🪵", terrains: ["forest"], yields: { production: 2 },
+    note: "Ship-timber and building wood from the forests of Gaul, Macedon and Latium. Effect: +2 labour."
+  },
+  iron: {
+    name: "Iron", glyph: "⛏️", terrains: ["hills", "mountains"], yields: { production: 2 },
+    note: "The Noric iron and Spanish mines that armed the legions. Effect: +2 labour."
+  },
+  stone: {
+    name: "Stone", glyph: "🪨", terrains: ["hills", "mountains"], yields: { production: 1, gold: 1 },
+    note: "Marble and travertine for temples, walls and roads. Effect: +1 labour, +1 gold."
+  },
+  horses: {
+    name: "Horses", glyph: "🐎", terrains: ["plains", "valley"], yields: { production: 1, gold: 1 },
+    note: "The horse-runs of Thessaly, Numidia and the steppe — remounts for cavalry. Effect: +1 labour, +1 gold."
+  },
+  wine: {
+    name: "Wine", glyph: "🍇", terrains: ["hills", "plains"], yields: { gold: 2 },
+    note: "Vines and olive groves — the amphorae of Chios, Falernum and Baetica. Effect: +2 gold."
+  },
+  silver: {
+    name: "Silver", glyph: "🪙", terrains: ["hills", "mountains", "desert"], yields: { gold: 2 },
+    note: "The silver of Laurion and the Spanish sierras that struck the coin of empires. Effect: +2 gold."
+  }
+};
+
 // Composition roles for combined-arms bonuses.
 export const MELEE_CATEGORIES = new Set(["infantry", "spear", "heavy"]);
 export const RANGED_CATEGORIES = new Set(["ranged", "siege"]);

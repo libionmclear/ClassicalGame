@@ -448,6 +448,18 @@ button:hover:not(:disabled) {
   z-index: 2;
 }
 
+/* Strategic resource deposit — small badge in the tile's top-left corner. */
+.tile .tile-resource {
+  position: absolute;
+  top: 14%;
+  left: 16%;
+  font-size: 0.62rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
+  pointer-events: none;
+  z-index: 3;
+}
+
 /* A land tile selected for improvement (distinct from unit/city selection). */
 .tile.tile-selected {
   box-shadow: inset 0 0 0 3px rgba(124, 214, 130, 0.9);

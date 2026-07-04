@@ -397,6 +397,18 @@
   };
   const IMPROVEMENT_GLYPH = { farm: "🌾", pasture: "🐄", mine: "⛏️", "lumber-camp": "🪵", "trade-post": "🐫", quarry: "🪨", vineyard: "🍇" };
 
+  // Short "+2 🌾, +1 🪙" summary of a resource/improvement yield block.
+  function resYieldStr(rr) {
+    if (!rr || !rr.yields) return "";
+    const y = rr.yields;
+    const parts = [];
+    if (y.food) parts.push("+" + y.food + " 🌾");
+    if (y.production) parts.push("+" + y.production + " ⚒️");
+    if (y.gold) parts.push("+" + y.gold + " 🪙");
+    if (y.science) parts.push("+" + y.science + " 🔬");
+    return parts.join(", ");
+  }
+
   // ----- Civ sprite sheets (optional art) -----
   // Populated by scripts/slice-sprites.mjs -> web/sprites.js. When a civ has
   // sprites, units and cities render the artwork; otherwise the emoji/cluster
@@ -1281,6 +1293,14 @@
       tip.push("Improvement: " + tile.improvement);
     }
 
+    // Strategic resource deposit — a corner badge on the land (shows under a
+    // city or unit too, since it's a property of the tile).
+    if (isVisible && tile.resource) {
+      const rr = engine.RESOURCES && engine.RESOURCES[tile.resource];
+      inner += '<span class="tile-resource">' + (rr ? rr.glyph : "◆") + "</span>";
+      tip.push("Resource: " + (rr ? rr.name + " — " + resYieldStr(rr) : tile.resource));
+    }
+
     let hoverHint = "";
     if (isVisible && selectedUnit) {
       const enemyUnit = units.find((u) => u.ownerId !== selectedUnit.ownerId);
@@ -1624,8 +1644,10 @@
       const impName = tile.improvement
         ? " · " + ((engine.IMPROVEMENTS && engine.IMPROVEMENTS[tile.improvement] && engine.IMPROVEMENTS[tile.improvement].name) || tile.improvement)
         : "";
+      const rr = tile.resource && engine.RESOURCES ? engine.RESOURCES[tile.resource] : null;
+      const resName = rr ? " · " + rr.glyph + " " + rr.name + " (" + resYieldStr(rr) + ")" : "";
       selectionLineEl.innerHTML =
-        "⛰️ " + terr + '<span class="sel-sub"> (' + selectedTileKey + ")" + impName + "</span>";
+        "⛰️ " + terr + '<span class="sel-sub"> (' + selectedTileKey + ")" + impName + resName + "</span>";
     } else {
       selectionLineEl.textContent = "Nothing selected";
     }

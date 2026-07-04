@@ -1,4 +1,5 @@
 import type { CreateGameConfig } from "./types";
+import { sprinkleResources } from "./mapgen";
 import { italiaScenario } from "./scenarios/italia";
 import { hellasScenario } from "./scenarios/hellas";
 import { oldWorldScenario } from "./scenarios/oldworld";
@@ -113,5 +114,7 @@ export function loadScenario(id: ScenarioId): ScenarioDefinition {
   if (!scenario) {
     throw new Error(`Unknown scenario ${id}`);
   }
-  return JSON.parse(JSON.stringify(scenario)) as ScenarioDefinition;
+  const clone = JSON.parse(JSON.stringify(scenario)) as ScenarioDefinition;
+  if (clone.config.map?.tiles) sprinkleResources(clone.config.map.tiles, "scenario:" + id);
+  return clone;
 }

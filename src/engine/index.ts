@@ -8,7 +8,8 @@ import {
   RANGED_CATEGORIES,
   CATEGORY_LABELS,
   BUILDINGS,
-  IMPROVEMENTS
+  IMPROVEMENTS,
+  RESOURCES
 } from "./data";
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -78,6 +79,9 @@ function normalizeMap(configMap: NonNullable<CreateGameConfig["map"]> | undefine
         terrain: (tile.terrain ?? "plains") as Tile["terrain"],
         region: tile.region ?? "core"
       };
+      if (tile.improvement) tiles[key].improvement = tile.improvement;
+      if (tile.road) tiles[key].road = tile.road;
+      if (tile.resource) tiles[key].resource = tile.resource;
     }
   } else {
     for (let q = 0; q < width; q += 1) {
@@ -581,15 +585,24 @@ export function computeCityYield(
   // tile counts for whichever city claims it, so borders never double-count).
   for (const key of tileKeysWithin(city.position, cityTerritoryRadius(city))) {
     const tile = state.map.tiles[key];
-    if (!tile || !tile.improvement) continue;
-    const imp = IMPROVEMENTS[tile.improvement];
-    if (!imp) continue;
+    if (!tile || (!tile.improvement && !tile.resource)) continue;
     const claim = claimingCity(state, parseKey(key));
     if (!claim || claim.id !== cityId) continue;
-    yields.food += imp.yields.food ?? 0;
-    yields.production += imp.yields.production ?? 0;
-    yields.gold += imp.yields.gold ?? 0;
-    yields.science += imp.yields.science ?? 0;
+    const imp = tile.improvement ? IMPROVEMENTS[tile.improvement] : null;
+    if (imp) {
+      yields.food += imp.yields.food ?? 0;
+      yields.production += imp.yields.production ?? 0;
+      yields.gold += imp.yields.gold ?? 0;
+      yields.science += imp.yields.science ?? 0;
+    }
+    // A strategic deposit worked by this city adds its bonus yields.
+    const res = tile.resource ? RESOURCES[tile.resource] : null;
+    if (res) {
+      yields.food += res.yields.food ?? 0;
+      yields.production += res.yields.production ?? 0;
+      yields.gold += res.yields.gold ?? 0;
+      yields.science += res.yields.science ?? 0;
+    }
   }
   return yields;
 }
@@ -1402,6 +1415,7 @@ export {
   UNIT_BUILD_COSTS,
   BUILDINGS,
   IMPROVEMENTS,
+  RESOURCES,
   EVENTS,
   getEvent
 };

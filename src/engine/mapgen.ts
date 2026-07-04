@@ -1,6 +1,39 @@
 import { seededRandom } from "./rng";
 import { keyOf, neighborsOf, parseKey, distance, edgeKey } from "./hex";
+import { RESOURCES } from "./data";
 import type { Coord, CreateGameConfig, TerrainType } from "./types";
+
+// Deterministic 0..1 hash of a string (FNV-1a), so resource placement is stable
+// for a given seed without threading an RNG object through the terrain builder.
+function hash01(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967296;
+}
+
+// Scatter strategic resource deposits across suitable tiles (~13% density).
+// Accepts full or partial tiles (scenarios use partials), keyed by axial "q,r".
+export function sprinkleResources(
+  tiles: Record<string, { terrain?: string; resource?: string }>,
+  seed: string
+): void {
+  const byTerrain: Record<string, string[]> = {};
+  for (const [id, rule] of Object.entries(RESOURCES)) {
+    for (const t of rule.terrains) (byTerrain[t] ||= []).push(id);
+  }
+  for (const key of Object.keys(tiles)) {
+    const tile = tiles[key];
+    if (tile.resource || !tile.terrain) continue;
+    const opts = byTerrain[tile.terrain];
+    if (!opts || !opts.length) continue;
+    if (hash01(seed + ":res:" + key) > 0.13) continue;
+    const pick = hash01(seed + ":pick:" + key);
+    tile.resource = opts[Math.min(opts.length - 1, Math.floor(pick * opts.length))];
+  }
+}
 
 export type MapSize = "small" | "medium" | "large" | "xl";
 
@@ -364,6 +397,7 @@ function tryGenerate(
   }
 
   const rivers = carveRivers(tiles, elevation, spec, spec.rivers);
+  sprinkleResources(tiles, seed);
 
   return {
     seed,

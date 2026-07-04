@@ -37,6 +37,7 @@ import {
   UNIT_BUILD_COSTS,
   BUILDINGS,
   IMPROVEMENTS,
+  RESOURCES,
   WEATHER_STATES
 } from "./index";
 import { chooseAiAction, runAiTurn } from "./ai";
@@ -85,6 +86,7 @@ export {
   UNIT_BUILD_COSTS,
   BUILDINGS,
   IMPROVEMENTS,
+  RESOURCES,
   WEATHER_STATES,
   chooseAiAction,
   runAiTurn,

@@ -17,6 +17,8 @@ matters, unique per civilization.
 - Flat, frontal, fixed-rectangular board by default (tilt removed); 3D is opt-in.
 - HUD: compact top-left readout (Populus/Labour/Denarii/Scientia), standings
   openable bottom-right, a Research button that glows when a tech is ready.
+- Strategic resources on the map (v1): deposits with bonus yields + on-board
+  badges; deeper mechanics (food upkeep, resource-gated builds) are phase 2.
 - Mountains: +2 vision (see further), move cost 3 (slow), impassable without
   Mountain Paths.
 - City borders grow with population: pop ≤2 → 1 hex ring, ≤5 → 2, else 3.
@@ -27,12 +29,15 @@ matters, unique per civilization.
 ## Next (big systems, roughly in priority order)
 
 ### Economy: strategic resources on the map
-- Place basic resources on tiles: **wood, ore, stone, food**.
-- Food drives population growth AND feeds troops (upkeep in food).
-- Wood/ore/stone gate/lower the cost of buildings and units (e.g. ore for
-  metal units, wood for ships/siege, stone for walls/monuments).
-- Improving a tile (farm/mine/lumber/quarry) increases the resource it yields.
-- Labour = people + workshops + tools, but capped by available resources.
+- [done, v1] Deposits scattered on tiles (grain, fish, timber, iron, stone,
+  horses, wine, silver), placed deterministically on generated maps + scenarios,
+  shown as on-board badges with tooltips. A city works the deposits in its
+  territory for bonus yields (food / labour / gold).
+- [phase 2] Food feeds troops (upkeep in food) as well as growth.
+- [phase 2] Wood/ore/stone gate or cheapen buildings and units (ore for metal
+  units, timber for ships/siege, stone for walls/monuments).
+- [phase 2] Improving a resource tile increases what it yields; labour capped by
+  available resources.
 
 ### Research: deeper, historical, civ-unique
 - Many more techs so science isn't exhausted mid-game; costs scale by age.

@@ -202,6 +202,15 @@ test("improvements requiring a tech are gated until it is researched", () => {
   assert.ok((after.map.cities.c1.queue ?? []).some((q) => q === "imp:quarry:1,0"));
 });
 
+test("a worked resource deposit adds its yield to the city", () => {
+  const state = buildState();
+  const base = computeCityYield(state, "c1");
+  // Grain (+2 food) on a plains tile c1 works (1,0 is within its territory).
+  state.map.tiles["1,0"].resource = "grain";
+  const withRes = computeCityYield(state, "c1");
+  assert.equal(withRes.food, base.food + 2);
+});
+
 test("replay from action log produces same final state", () => {
   const initial = buildState();
 
