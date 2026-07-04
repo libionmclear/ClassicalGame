@@ -605,6 +605,8 @@ export function isCoastalCity(state: GameState, cityId: string): boolean {
 
 // A queue item is a unit type, a building id, or a tile improvement encoded as
 // "imp:<type>:<q,r>" (they never collide).
+export const ROAD_COST = 8;
+
 export function productionItemCost(id: string): number {
   if (UNITS[id]) return UNIT_BUILD_COSTS[id] ?? Infinity;
   if (BUILDINGS[id]) return BUILDINGS[id].cost;
@@ -612,6 +614,7 @@ export function productionItemCost(id: string): number {
     const type = id.split(":")[1];
     return IMPROVEMENTS[type]?.cost ?? Infinity;
   }
+  if (id.startsWith("road:")) return ROAD_COST;
   return Infinity;
 }
 
@@ -662,6 +665,10 @@ function completeQueueItem(state: GameState, city: City, id: string): void {
     const [, type, coordKey] = id.split(":");
     const tile = coordKey ? state.map.tiles[coordKey] : undefined;
     if (tile && IMPROVEMENTS[type] && !tile.improvement) tile.improvement = type;
+  } else if (id.startsWith("road:")) {
+    const coordKey = id.slice("road:".length);
+    const tile = state.map.tiles[coordKey];
+    if (tile) tile.road = true;
   }
 }
 
@@ -681,6 +688,13 @@ function processCityQueue(state: GameState, city: City): void {
       const t = coordKey ? state.map.tiles[coordKey] : undefined;
       if (!t || t.improvement) {
         city.queue.shift(); // tile gone or already improved — discard
+        continue;
+      }
+    }
+    if (id.startsWith("road:")) {
+      const t = state.map.tiles[id.slice("road:".length)];
+      if (!t || t.road) {
+        city.queue.shift(); // tile gone or already roaded — discard
         continue;
       }
     }
@@ -833,18 +847,28 @@ function applyEstablishTradeRoute(state: GameState, action: EstablishTradeRouteA
 
 function applyImproveTile(state: GameState, action: ImproveTileAction): void {
   assertPlayerTurn(state, action.playerId);
-  const rule = IMPROVEMENTS[action.improvement];
-  if (!rule) throw new Error(`Unknown improvement ${action.improvement}`);
   const tile = state.map.tiles[action.tileKey];
   if (!tile) throw new Error(`Unknown tile ${action.tileKey}`);
-  if (tile.improvement) throw new Error("That tile is already improved");
-  if (!rule.terrains.includes(tile.terrain)) {
-    throw new Error(`${action.improvement} cannot be built on ${tile.terrain}`);
-  }
+  if (tile.terrain === "sea" || tile.terrain === "coast") throw new Error("Cannot build on open water");
   const claim = claimingCity(state, parseKey(action.tileKey));
   if (!claim || claim.ownerId !== action.playerId) throw new Error("That tile is not in your territory");
   if (claim.id !== action.cityId) throw new Error("That city does not work this tile");
 
+  // Roads live alongside a worked improvement (a farm can have a road too).
+  if (action.improvement === "road") {
+    if (tile.road) throw new Error("That tile already has a road");
+    const item = `road:${action.tileKey}`;
+    if ((claim.queue ?? []).includes(item)) throw new Error("A road is already queued for that tile");
+    enqueueProduction(claim, item);
+    return;
+  }
+
+  const rule = IMPROVEMENTS[action.improvement];
+  if (!rule) throw new Error(`Unknown improvement ${action.improvement}`);
+  if (tile.improvement) throw new Error("That tile is already improved");
+  if (!rule.terrains.includes(tile.terrain)) {
+    throw new Error(`${action.improvement} cannot be built on ${tile.terrain}`);
+  }
   const item = `imp:${action.improvement}:${action.tileKey}`;
   const queued = (claim.queue ?? []).some((q) => q.startsWith("imp:") && q.endsWith(`:${action.tileKey}`));
   if (queued) throw new Error("An improvement is already queued for that tile");

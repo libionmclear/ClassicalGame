@@ -31,6 +31,9 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
     return Number.POSITIVE_INFINITY;
   }
 
+  // A road makes any land tile quick to cross and bridges rivers.
+  if (toTile.road) return 1;
+
   let cost = terrain.moveCost;
   if (unit.mounted && state.weather.current[toTile.region] === "rain") {
     cost += 1;

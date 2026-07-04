@@ -24,6 +24,8 @@ export interface Tile {
   region: string;
   /** A worked improvement (farm, mine, …) that boosts the owning city's yields. */
   improvement?: string;
+  /** A road speeds movement across the tile and bridges rivers. */
+  road?: boolean;
 }
 
 export interface TerrainRule {

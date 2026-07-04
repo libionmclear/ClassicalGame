@@ -337,10 +337,26 @@ test("improving a tile queues in the claiming city and completes with labour", (
   assert.equal(s.map.tiles["1,0"].improvement, "farm", "the farm is built at end of turn");
 });
 
+test("a road is built through the labour queue and speeds movement", () => {
+  let s = seaState();
+  s.map.tiles["1,0"].terrain = "hills"; // normally slow to cross
+  s = applyAction(s, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "road" });
+  assert.ok((s.map.cities.inland.queue || []).includes("road:1,0"));
+  s.map.cities.inland.production = 999;
+  s = applyAction(s, { type: "END_TURN", playerId: "a" });
+  assert.equal(s.map.tiles["1,0"].road, true, "the road is laid");
+
+  const ctx = { ownerId: "a", domain: "land" as const };
+  const hillsNoRoad = movementCost(seaState(), ctx, { q: 0, r: 0 }, { q: 1, r: 0 });
+  const onRoad = movementCost(s, ctx, { q: 0, r: 0 }, { q: 1, r: 0 });
+  assert.equal(onRoad, 1, "moving onto a road costs 1");
+  assert.ok(onRoad <= hillsNoRoad, "the road is no slower than open ground");
+});
+
 test("a farm cannot be built on the sea or outside your territory", () => {
   assert.throws(
     () => applyAction(seaState(), { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "4,0", improvement: "farm" }),
-    /sea|territory/
+    /water|sea|territory/
   );
 });
 

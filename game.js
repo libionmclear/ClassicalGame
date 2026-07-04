@@ -1313,6 +1313,52 @@
     }
   }
 
+  // Roads: a tan line from each road tile toward each road neighbour, meeting at
+  // the shared midpoint to form a continuous network (a lone road shows a dot).
+  function renderRoads(geom, visibility, pos) {
+    for (const key of Object.keys(state.map.tiles)) {
+      const tile = state.map.tiles[key];
+      if (!tile.road || !visibility.discovered.has(key)) continue;
+      const p = pos[key];
+      if (!p) continue;
+      const c = key.split(",");
+      const q = +c[0];
+      const r = +c[1];
+      const cx = p.x + geom.hexW / 2;
+      const cy = p.y + geom.hexH / 2;
+      let connected = 0;
+      for (const d of AXIAL_DIRS) {
+        const nkey = q + d[0] + "," + (r + d[1]);
+        const nt = state.map.tiles[nkey];
+        if (!nt || !nt.road || !visibility.discovered.has(nkey)) continue;
+        const np = pos[nkey];
+        if (!np) continue;
+        connected += 1;
+        const mx = (cx + np.x + geom.hexW / 2) / 2;
+        const my = (cy + np.y + geom.hexH / 2) / 2;
+        const dx = mx - cx;
+        const dy = my - cy;
+        const len = Math.sqrt(dx * dx + dy * dy) + 1;
+        const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+        const seg = document.createElement("div");
+        seg.className = "road-seg";
+        seg.style.left = (cx + mx) / 2 + "px";
+        seg.style.top = (cy + my) / 2 + "px";
+        seg.style.width = len + "px";
+        seg.style.transform = "translate(-50%,-50%) rotate(" + ang + "deg)";
+        boardEl.appendChild(seg);
+      }
+      if (connected === 0) {
+        const dot = document.createElement("div");
+        dot.className = "road-dot";
+        dot.style.left = cx + "px";
+        dot.style.top = cy + "px";
+        dot.style.transform = "translate(-50%,-50%)";
+        boardEl.appendChild(dot);
+      }
+    }
+  }
+
   // Render a unit as a small cluster of figures — count thins with damage,
   // and veteran/elite units gain a highlighted standard-bearer.
   function unitCluster(unit) {
@@ -1443,12 +1489,8 @@
     improveGroupEl.style.display = "";
     improveMenuEl.innerHTML = "";
 
-    if (tile.improvement) {
-      const info = (engine.IMPROVEMENTS && engine.IMPROVEMENTS[tile.improvement]) || {};
-      const el = document.createElement("div");
-      el.className = "bm-empty";
-      el.textContent = "✓ " + (IMPROVEMENT_GLYPH[tile.improvement] || "") + " " + (info.name || tile.improvement) + " built here.";
-      improveMenuEl.appendChild(el);
+    if (tile.terrain === "sea" || tile.terrain === "coast") {
+      improveMenuEl.innerHTML = '<div class="bm-empty">Open water can\'t be improved.</div>';
       return;
     }
 
@@ -1460,36 +1502,53 @@
     }
     const perTurn = cityLaborPerTurn(city);
     const banked = Math.floor(city.production || 0);
+    const queue = city.queue || [];
+    const suffix = ":" + selectedTileKey;
+
+    // Add a build button for one option (an improvement id or "road").
+    const addOption = function (id, name, glyph, cost, yieldStr, note, alreadyBuilt, alreadyQueued) {
+      const el = document.createElement("button");
+      el.className = "build-item";
+      if (alreadyBuilt) {
+        el.classList.add("done");
+        el.disabled = true;
+        el.innerHTML = '<span class="bi-name">' + glyph + " " + name + '</span><span class="bi-cost">✓ built</span>';
+      } else {
+        el.disabled = !isTurn || alreadyQueued;
+        el.title = note + "\n\nWorked by " + cityDisplayName(city) + ". Costs " + cost + " labor.";
+        const eta = etaLabel(turnsToAccrue(cost - banked, perTurn));
+        el.innerHTML =
+          '<span class="bi-name">' + glyph + " " + name + (yieldStr ? " <small>" + yieldStr + "</small>" : "") + "</span>" +
+          '<span class="bi-cost">' + (alreadyQueued ? "in queue" : cost + " ⚒️ " + eta) + "</span>";
+        el.addEventListener("click", function () {
+          if (el.disabled) return;
+          apply({ type: "IMPROVE_TILE", playerId: HUMAN_ID, cityId: city.id, tileKey: selectedTileKey, improvement: id });
+        });
+      }
+      improveMenuEl.appendChild(el);
+    };
+
+    // Terrain improvements (one per tile).
     const options = Object.keys(engine.IMPROVEMENTS || {}).filter(
       (id) => engine.IMPROVEMENTS[id].terrains.indexOf(tile.terrain) !== -1
     );
-    if (!options.length) {
-      improveMenuEl.innerHTML = '<div class="bm-empty">Nothing can be built on ' + tile.terrain + ".</div>";
-      return;
-    }
-    // Already queued for this tile?
-    const queuedHere = (city.queue || []).some((q) => q.indexOf("imp:") === 0 && q.lastIndexOf(":" + selectedTileKey) === q.length - (":" + selectedTileKey).length);
-
+    const impQueued = queue.some((q) => q.indexOf("imp:") === 0 && q.slice(-suffix.length) === suffix);
     for (const id of options) {
       const imp = engine.IMPROVEMENTS[id];
-      const eta = etaLabel(turnsToAccrue(imp.cost - banked, perTurn));
-      const btn = document.createElement("button");
-      btn.className = "build-item";
-      btn.disabled = !isTurn || queuedHere;
-      btn.title = imp.note + "\n\nWorked by " + cityDisplayName(city) + ". Costs " + imp.cost + " labor.";
       const yld = [];
       if (imp.yields.food) yld.push("+" + imp.yields.food + " 🌾");
       if (imp.yields.production) yld.push("+" + imp.yields.production + " ⚒️");
       if (imp.yields.gold) yld.push("+" + imp.yields.gold + " 🪙");
-      btn.innerHTML =
-        '<span class="bi-name">' + (IMPROVEMENT_GLYPH[id] || "▪") + " " + imp.name + " <small>" + yld.join(" ") + "</small></span>" +
-        '<span class="bi-cost">' + (queuedHere ? "in queue" : imp.cost + " ⚒️ " + eta) + "</span>";
-      btn.addEventListener("click", function () {
-        if (btn.disabled) return;
-        apply({ type: "IMPROVE_TILE", playerId: HUMAN_ID, cityId: city.id, tileKey: selectedTileKey, improvement: id });
-      });
-      improveMenuEl.appendChild(btn);
+      addOption(id, imp.name, IMPROVEMENT_GLYPH[id] || "▪", imp.cost, yld.join(" "), imp.note,
+        tile.improvement === id, tile.improvement ? tile.improvement === id : impQueued);
     }
+
+    // A road (independent of the worked improvement — a farm can have a road too).
+    const roadCost = engine.ROAD_COST || 8;
+    const roadQueued = queue.indexOf("road:" + selectedTileKey) !== -1;
+    addOption("road", "Road", "🛤️", roadCost, "faster movement",
+      "Roads speed every unit across the tile and bridge rivers — the backbone of an empire (viae, the King's Road).",
+      !!tile.road, roadQueued);
   }
 
   // What trade route a merchant could open right now: the city it stands at or
@@ -1598,6 +1657,7 @@
         boardEl.appendChild(renderTile(+c[0], +c[1], visibility, hints, geom, pos[key], territory));
       }
       renderRivers(geom, visibility, pos);
+      renderRoads(geom, visibility, pos);
       renderBorders(geom, visibility, pos, territory);
 
       // On a new game, scroll the view to the human's capital so the player

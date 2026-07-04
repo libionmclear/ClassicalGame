@@ -502,6 +502,29 @@ button:hover:not(:disabled) {
   z-index: 3;
 }
 
+/* Roads — a tan track linking road tiles into a network */
+.road-seg {
+  position: absolute;
+  height: 4px;
+  background: #cbb487;
+  border-radius: 3px;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform-origin: 50% 50%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.road-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cbb487;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 2;
+}
+
 /* ===== Weather overlays (drawn over the tile via ::after) ===== */
 .tile.wx-rain::after,
 .tile.wx-storm::after,
