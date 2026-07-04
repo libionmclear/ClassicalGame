@@ -327,6 +327,11 @@ button:hover:not(:disabled) {
   max-height: 82vh;
   perspective: 1500px;
   perspective-origin: 50% 42%;
+  cursor: grab;
+}
+
+.board-wrap.grabbing {
+  cursor: grabbing;
 }
 
 /* Tilted 3D-inclined plane. IMPORTANT: no `transform-style: preserve-3d`
@@ -402,12 +407,16 @@ button:hover:not(:disabled) {
 /* small unit-type badge in the corner */
 .tile .utype {
   position: absolute;
-  top: 12%;
-  right: 12%;
-  font-size: 0.62rem;
+  top: 4%;
+  right: 6%;
+  font-size: 0.6rem;
   line-height: 1;
+  padding: 1px 2px;
+  border-radius: 4px;
+  background: rgba(10, 14, 22, 0.62);
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
   pointer-events: none;
+  z-index: 4;
 }
 
 /* "little soldiers" — a cluster of tiny people that thins as HP drops */
@@ -627,29 +636,9 @@ button:hover:not(:disabled) {
   50% { box-shadow: inset 0 0 0 3px rgba(242, 204, 105, 0.5); }
 }
 
-.tile.owner-rome {
-  box-shadow: inset 0 0 0 2.5px var(--civ-rome, #c0392b), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
-}
-
-.tile.owner-carthage {
-  box-shadow: inset 0 0 0 2.5px var(--civ-carthage, #8e44ad), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
-}
-
-.tile.owner-greece {
-  box-shadow: inset 0 0 0 2.5px var(--civ-greece, #2e86de), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
-}
-
-.tile.owner-egypt {
-  box-shadow: inset 0 0 0 2.5px var(--civ-egypt, #d4ac0d), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
-}
-
-.tile.owner-gaul {
-  box-shadow: inset 0 0 0 2.5px var(--civ-gaul, #27ae60), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
-}
-
-.tile.owner-parthia {
-  box-shadow: inset 0 0 0 2.5px var(--civ-parthia, #e67e22), inset 0 0 0 3.5px rgba(0, 0, 0, 0.25);
-}
+/* Ownership is shown by the civ borders and the sprite/figure colour — no ring
+   is drawn around each town or unit tile (the .owner-* classes carry no
+   outline; they remain only as hooks for scripting/tests). */
 
 /* ===== Command panel ===== */
 .control-panel {

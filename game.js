@@ -66,6 +66,7 @@
   let pendingRecenter = true;
   let combatFlashKeys = new Set();
   let zoomLevel = 1;
+  let panMoved = false; // set true while dragging the map, so the drag doesn't select a tile
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
@@ -1155,8 +1156,10 @@
         inner += spriteImg(top.ownerId, "unit", unitSprite, "unit-sprite");
       } else {
         inner += unitCluster(top);
-        inner += '<span class="utype">' + (UNIT_GLYPHS[top.type] || "•") + "</span>";
       }
+      // Always badge the unit type — all soldiers share the civ art, so the
+      // little symbol (🏹 archer, 🔱 spearman, …) is what tells them apart.
+      inner += '<span class="utype">' + (UNIT_GLYPHS[top.type] || "•") + "</span>";
       inner += hpBar(top.hp, top.maxHp);
       if (units.length > 1) inner += '<span class="stack">+' + (units.length - 1) + "</span>";
       for (const u of units) {
@@ -1195,6 +1198,7 @@
     btn.innerHTML = inner;
     btn.title = tip.join("\n");
     btn.addEventListener("click", function () {
+      if (panMoved) { panMoved = false; return; } // this "click" was a map drag
       onTileClick(q, r);
     });
     btn.addEventListener("mouseenter", function () {
@@ -2006,6 +2010,40 @@
     }, { passive: false });
     boardWrap.addEventListener("touchend", function (e) {
       if (e.touches.length < 2) pinchDist = 0;
+    });
+
+    // Press-and-drag to pan the map (and, on touch, native scroll already pans).
+    // A drag past a few pixels suppresses the click so it won't select a tile.
+    let panning = false;
+    let startX = 0;
+    let startY = 0;
+    let startScrollX = 0;
+    let startScrollY = 0;
+    boardWrap.addEventListener("mousedown", function (e) {
+      if (e.button !== 0) return;
+      panning = true;
+      panMoved = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      startScrollX = boardWrap.scrollLeft;
+      startScrollY = boardWrap.scrollTop;
+    });
+    window.addEventListener("mousemove", function (e) {
+      if (!panning) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!panMoved && Math.abs(dx) + Math.abs(dy) > 5) {
+        panMoved = true;
+        boardWrap.classList.add("grabbing");
+      }
+      if (panMoved) {
+        boardWrap.scrollLeft = startScrollX - dx;
+        boardWrap.scrollTop = startScrollY - dy;
+      }
+    });
+    window.addEventListener("mouseup", function () {
+      panning = false;
+      boardWrap.classList.remove("grabbing");
     });
   }
 
