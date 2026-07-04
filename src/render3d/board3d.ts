@@ -161,8 +161,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   seaMesh.receiveShadow = true;
   scene.add(seaMesh);
 
-  const hexGeo = new THREE.CylinderGeometry(SIZE * 0.99, SIZE * 0.93, 1, 6);
-  hexGeo.rotateY(Math.PI / 6);
+  // A pointy-top hex prism. CylinderGeometry(...,6) is already pointy-top (a
+  // vertex faces +Z), which matches axialToWorld — so do NOT rotate it, or the
+  // tiles turn flat-top and no longer interlock. Circumradius ~= SIZE so hexes
+  // nest edge-to-edge (a hair under, plus a slight base taper, for clean seams).
+  const hexGeo = new THREE.CylinderGeometry(SIZE * 0.998, SIZE * 0.95, 1, 6);
   const hexMat = new THREE.MeshStandardMaterial({ roughness: 0.94, metalness: 0.02, flatShading: true });
 
   let tileMesh: THREE.InstancedMesh | null = null;
@@ -307,9 +310,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const c = axialToWorld(b.nq, b.nr);
       const mx = (a.x + c.x) / 2, mz = (a.z + c.z) / 2;
       const dx = c.x - a.x, dz = c.z - a.z;
-      const ang = Math.atan2(dz, dx); // border runs perpendicular to the centre line
-      qt.setFromAxisAngle(up, -ang);
-      p.set(mx, topOf("hills") + 0.04, mz);
+      const ang = Math.atan2(dz, dx);
+      // The border runs ALONG the shared edge — perpendicular to the centre line.
+      qt.setFromAxisAngle(up, -ang - Math.PI / 2);
+      p.set(mx, 0.16, mz);
       m.compose(p, qt, s);
       mesh.setMatrixAt(i, m);
       mesh.setColorAt(i, new THREE.Color(b.color));
