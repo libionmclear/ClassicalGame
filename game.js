@@ -816,8 +816,9 @@
         }
       }
 
+      // Only combat units get attack markers, and only on enemies in range now.
       const dist = engine.distance(unit.position, destination);
-      if (dist <= unitDef.range) {
+      if (unitDef.attack > 0 && dist <= unitDef.range) {
         const hasEnemyUnit = getUnitsAt(q, r).some((u) => u.ownerId !== unit.ownerId);
         const city = getCityAt(q, r);
         const enemyCity = city && city.ownerId !== unit.ownerId;
@@ -1374,10 +1375,17 @@
 
     if (selectedUnit) {
       const vet = selectedUnit.veterancy && selectedUnit.veterancy !== "recruit" ? " · " + selectedUnit.veterancy : "";
+      // Show the recovery on offer if the unit is hurt (heals by resting in place).
+      let healNote = "";
+      if (selectedUnit.hp < selectedUnit.maxHp && engine.restHealAmount) {
+        const full = { ...selectedUnit, movementRemaining: 99 }; // as if it rests
+        const amt = engine.restHealAmount(state, full);
+        if (amt > 0) healNote = ' · <span class="heal-note">rest to heal +' + amt + " ❤️</span>";
+      }
       selectionLineEl.innerHTML =
         (UNIT_GLYPHS[selectedUnit.type] || "•") + " " + unitDisplayName(selectedUnit) +
         '<span class="sel-sub"> HP ' + selectedUnit.hp + "/" + selectedUnit.maxHp +
-        " · Move " + selectedUnit.movementRemaining + vet + "</span>";
+        " · Move " + selectedUnit.movementRemaining + vet + healNote + "</span>";
     } else if (selectedCity) {
       const need = 8 + selectedCity.population * 6;
       const q = selectedCity.queue || [];

@@ -834,6 +834,23 @@ function applyImproveTile(state: GameState, action: ImproveTileAction): void {
   enqueueProduction(claim, item);
 }
 
+export const HEAL_IN_CITY = 8;
+export const HEAL_IN_TERRITORY = 4;
+export const HEAL_IN_FIELD = 1;
+
+// How much a unit would heal if left to rest this turn (0 if it is at full HP
+// or has already moved/fought). Location decides the rate.
+export function restHealAmount(state: GameState, unit: Unit): number {
+  if (unit.hp >= unit.maxHp) return 0;
+  if (unit.movementRemaining < movementBudgetFor(unit)) return 0; // it moved or fought
+  const cityHere = Object.values(state.map.cities).find(
+    (c) => c.position.q === unit.position.q && c.position.r === unit.position.r
+  );
+  if (cityHere && cityHere.ownerId === unit.ownerId) return HEAL_IN_CITY;
+  const claim = claimingCity(state, unit.position);
+  return claim && claim.ownerId === unit.ownerId ? HEAL_IN_TERRITORY : HEAL_IN_FIELD;
+}
+
 function applyEndTurn(state: GameState, action: EndTurnAction): void {
   assertPlayerTurn(state, action.playerId);
   const endingPlayer = getCurrentPlayer(state);
@@ -870,6 +887,16 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   // Trade routes deliver their gold to the owner each turn (dead ones drop off).
   pruneTradeRoutes(state);
   endingPlayer.gold += tradeRouteIncome(state, endingPlayer.id);
+
+  // Rest & recover: a unit that held its ground (didn't move or fight) heals —
+  // fastest garrisoned in a friendly city, slower in home territory, a trickle
+  // in the open field.
+  for (const unitId of endingPlayer.unitIds) {
+    const unit = state.map.units[unitId];
+    if (!unit) continue;
+    const amount = restHealAmount(state, unit);
+    if (amount > 0) unit.hp = Math.min(unit.maxHp, unit.hp + amount);
+  }
 
   state.currentPlayerIndex += 1;
   if (state.currentPlayerIndex >= state.players.length) {

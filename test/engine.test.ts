@@ -353,6 +353,20 @@ test("a trade route dies when its home city is lost", () => {
   assert.equal(tradeRouteIncome(state, "a"), 0);
 });
 
+test("a resting unit heals, and one that moved does not", () => {
+  let rested = buildState();
+  rested.map.units.u1.hp = 5;
+  rested.map.units.u1.movementRemaining = 99; // held its ground
+  rested = applyAction(rested, { type: "END_TURN", playerId: "p1" });
+  assert.ok(rested.map.units.u1.hp > 5, "the resting unit recovered");
+
+  let moved = buildState();
+  moved.map.units.u1.hp = 5;
+  moved.map.units.u1.movementRemaining = 0; // spent its move / fought
+  moved = applyAction(moved, { type: "END_TURN", playerId: "p1" });
+  assert.equal(moved.map.units.u1.hp, 5, "a unit that acted does not heal");
+});
+
 test("territory claims coast and land but never open sea", () => {
   const state = createInitialGameState({
     seed: "terr",
