@@ -121,6 +121,27 @@ function glyphTexture(glyph: string): THREE.Texture {
   return tex;
 }
 
+// A soft round contact shadow — laid flat on the tile under a sprite so the
+// figure reads as standing ON the ground instead of floating above it.
+let shadowTex: THREE.Texture | null = null;
+function shadowTexture(): THREE.Texture {
+  if (shadowTex) return shadowTex;
+  const cv = document.createElement("canvas");
+  cv.width = 64;
+  cv.height = 64;
+  const ctx = cv.getContext("2d")!;
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, "rgba(0,0,0,0.5)");
+  g.addColorStop(0.55, "rgba(0,0,0,0.26)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  shadowTex = new THREE.CanvasTexture(cv);
+  shadowTex.colorSpace = THREE.SRGBColorSpace;
+  return shadowTex;
+}
+const shadowGeo = new THREE.PlaneGeometry(1, 1);
+
 export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -265,25 +286,37 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true;
   }
 
+  const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
   function placeSprites(view: BoardView): void {
     spriteGroup.clear();
     for (const sv of view.sprites) {
       const w = axialToWorld(sv.q, sv.r);
       const top = topOf(sv.t || "plains"); // the tile's real surface height
-      const scale = sv.kind === "city" ? 1.9 : 1.3;
+      // Smaller than before so a figure sits on ITS tile instead of spilling
+      // across its neighbours.
+      const scale = sv.kind === "city" ? 1.5 : 1.0;
+
+      // A contact shadow flat on the tile grounds the billboard.
+      const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.set(w.x, top + 0.02, w.z);
+      const shScale = sv.kind === "city" ? 1.5 : 1.05;
+      shadow.scale.set(shScale, shScale, 1);
+      spriteGroup.add(shadow);
+
       const map = sv.name
         ? tex("assets/sprites/" + sv.civ + "/" + sv.kind + "-" + sv.name + ".png")
         : markerTexture(sv.color || "#cccccc", sv.kind); // civ without art -> coloured marker
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false }));
       sp.center.set(0.5, 0); // anchor at the figure's feet so it stands ON the tile
       sp.scale.set(scale, scale, scale);
-      sp.position.set(w.x, top - 0.04, w.z);
+      sp.position.set(w.x, top - 0.02, w.z); // feet just into the surface
       spriteGroup.add(sp);
       if (sv.badge) {
         const b = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(sv.badge), transparent: true, depthWrite: false, depthTest: false }));
         b.center.set(0.5, 0);
-        b.scale.set(0.5, 0.5, 0.5);
-        b.position.set(w.x, top + scale * 0.86, w.z);
+        b.scale.set(0.44, 0.44, 0.44);
+        b.position.set(w.x, top + scale * 0.82, w.z); // just above the figure's head
         b.renderOrder = 999;
         spriteGroup.add(b);
       }
