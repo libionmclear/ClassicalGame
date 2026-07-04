@@ -1395,19 +1395,23 @@
       }
     }
     for (const city of Object.values(state.map.cities)) {
-      if (!visibility.visible.has(city.position.q + "," + city.position.r)) continue;
+      const ck = city.position.q + "," + city.position.r;
+      if (!visibility.visible.has(ck)) continue;
       sprites.push({
         civ: city.ownerId, kind: "city", name: citySpriteName(city.ownerId, city) || "",
-        color: CIV_COLORS[city.ownerId] || "#888", q: city.position.q, r: city.position.r
+        color: CIV_COLORS[city.ownerId] || "#888", q: city.position.q, r: city.position.r,
+        t: state.map.tiles[ck] ? state.map.tiles[ck].terrain : "plains"
       });
     }
     for (const unit of Object.values(state.map.units)) {
-      if (!visibility.visible.has(unit.position.q + "," + unit.position.r)) continue;
+      const uk = unit.position.q + "," + unit.position.r;
+      if (!visibility.visible.has(uk)) continue;
       if (getCityAt(unit.position.q, unit.position.r)) continue; // shown as the city
       const embarked = engine.isEmbarked && engine.isEmbarked(state, unit);
       sprites.push({
         civ: unit.ownerId, kind: "unit", name: unitSpriteName(unit.ownerId, unit) || "",
         color: CIV_COLORS[unit.ownerId] || "#888", q: unit.position.q, r: unit.position.r,
+        t: state.map.tiles[uk] ? state.map.tiles[uk].terrain : "plains",
         badge: embarked ? "⛵" : (UNIT_GLYPHS[unit.type] || "•")
       });
     }

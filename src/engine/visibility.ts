@@ -1,4 +1,4 @@
-import { UNITS } from "./data";
+import { TERRAIN, UNITS } from "./data";
 import { distance, parseKey } from "./hex";
 import type { Coord, GameState, VisibilityResult } from "./types";
 
@@ -12,9 +12,8 @@ function tileVisionBonus(state: GameState, coord: Coord): number {
   const key = `${coord.q},${coord.r}`;
   const tile = state.map.tiles[key];
   if (!tile) return 0;
-
-  if (tile.terrain === "hills") return 1;
-  return 0;
+  // High ground sees further — hills +1, mountains +2 (from the terrain table).
+  return TERRAIN[tile.terrain]?.vision ?? 0;
 }
 
 function weatherVisionPenalty(state: GameState, coord: Coord): number {

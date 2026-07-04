@@ -33,7 +33,7 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; }
-export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; }
+export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 export interface BoardView {
   tiles: TileView[];
@@ -269,19 +269,21 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     spriteGroup.clear();
     for (const sv of view.sprites) {
       const w = axialToWorld(sv.q, sv.r);
-      const top = topOf("plains"); // sprites float just over the land plane
-      const scale = sv.kind === "city" ? 1.85 : 1.2;
+      const top = topOf(sv.t || "plains"); // the tile's real surface height
+      const scale = sv.kind === "city" ? 1.9 : 1.3;
       const map = sv.name
         ? tex("assets/sprites/" + sv.civ + "/" + sv.kind + "-" + sv.name + ".png")
         : markerTexture(sv.color || "#cccccc", sv.kind); // civ without art -> coloured marker
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false }));
+      sp.center.set(0.5, 0); // anchor at the figure's feet so it stands ON the tile
       sp.scale.set(scale, scale, scale);
-      sp.position.set(w.x, top + scale * 0.45, w.z);
+      sp.position.set(w.x, top - 0.04, w.z);
       spriteGroup.add(sp);
       if (sv.badge) {
         const b = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(sv.badge), transparent: true, depthWrite: false, depthTest: false }));
+        b.center.set(0.5, 0);
         b.scale.set(0.5, 0.5, 0.5);
-        b.position.set(w.x, top + scale * 0.9 + 0.35, w.z);
+        b.position.set(w.x, top + scale * 0.86, w.z);
         b.renderOrder = 999;
         spriteGroup.add(b);
       }

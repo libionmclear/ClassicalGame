@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node test/browser-smoke.mjs)"
+      "Bash(node test/browser-smoke.mjs)",
+      "Bash(git rm *)",
+      "Bash(rm -f docs/screenshots/15-rome-sprites.png)",
+      "Bash(cp '__TRACKED_VAR__/Sprites Rome.png' assets/sprites/sources/rome.png)",
+      "Bash(cp '__TRACKED_VAR__/Sprites Greek.png' assets/sprites/sources/greece.png)",
+      "Bash(cp '__TRACKED_VAR__/Sprites Celts.png' assets/sprites/sources/gaul.png)",
+      "Bash(cp '__TRACKED_VAR__/Sprites Egypt.png' assets/sprites/sources/egypt.png)"
     ]
   }
 }

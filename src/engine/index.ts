@@ -567,7 +567,7 @@ export function computeCityYield(
 
   // Worked tile improvements in this city's slice of territory (each improved
   // tile counts for whichever city claims it, so borders never double-count).
-  for (const key of tileKeysWithin(city.position, TERRITORY_RADIUS)) {
+  for (const key of tileKeysWithin(city.position, cityTerritoryRadius(city))) {
     const tile = state.map.tiles[key];
     if (!tile || !tile.improvement) continue;
     const imp = IMPROVEMENTS[tile.improvement];
@@ -1111,7 +1111,17 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
   return state;
 }
 
-const TERRITORY_RADIUS = 2;
+const TERRITORY_RADIUS = 3; // the largest a city's borders can ever reach
+
+// Borders grow with the city: a young settlement holds only the ring of hexes
+// around it; a town reaches two out; a great city three. (Contested tiles still
+// go to the nearest city, so growth only fills unclaimed room.)
+export function cityTerritoryRadius(city: City): number {
+  const pop = city.population || 1;
+  if (pop <= 2) return 1;
+  if (pop <= 5) return 2;
+  return 3;
+}
 
 // Each city claims nearby tiles; contested tiles go to the closest city. Returns
 // tileKey -> owning playerId. A pure function of city positions (not stored).
@@ -1120,10 +1130,11 @@ export function computeTerritory(state: GameState): Record<string, string> {
   // Only scan each city's own neighbourhood (not every tile on the map), so cost
   // is O(cities x radius^2) rather than O(cities x tiles) — huge maps stay fast.
   for (const city of Object.values(state.map.cities)) {
-    for (let dq = -TERRITORY_RADIUS; dq <= TERRITORY_RADIUS; dq += 1) {
-      for (let dr = -TERRITORY_RADIUS; dr <= TERRITORY_RADIUS; dr += 1) {
+    const rad = cityTerritoryRadius(city);
+    for (let dq = -rad; dq <= rad; dq += 1) {
+      for (let dr = -rad; dr <= rad; dr += 1) {
         const d = distance({ q: 0, r: 0 }, { q: dq, r: dr });
-        if (d > TERRITORY_RADIUS) continue;
+        if (d > rad) continue;
         const key = `${city.position.q + dq},${city.position.r + dr}`;
         const tile = state.map.tiles[key];
         // Open sea is nobody's land — only coastline and dry ground get claimed.
@@ -1145,7 +1156,7 @@ export function claimingCity(state: GameState, coord: Coord): City | null {
   let bestDist = Infinity;
   for (const city of Object.values(state.map.cities)) {
     const d = distance(city.position, coord);
-    if (d > TERRITORY_RADIUS) continue;
+    if (d > cityTerritoryRadius(city)) continue;
     if (d < bestDist) {
       bestDist = d;
       best = city;
