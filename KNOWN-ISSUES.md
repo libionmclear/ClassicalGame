@@ -48,5 +48,7 @@ live in [ROADMAP.md](ROADMAP.md); this file is for what's imperfect *today*.
   does not yet increase its yield.
 
 ## Deploy
-- **App packaging not set up.** Goal is online + app; only the web/Vercel build
-  exists. Mobile (Capacitor/PWA) and desktop (Tauri/Electron) wrappers are TODO.
+- **PWA done; native wrappers TODO.** The web build is now an installable PWA
+  (manifest + service worker + icons; offline-capable, network-first). That covers
+  "install to home screen" on mobile/desktop. A store-grade native shell
+  (Capacitor for iOS/Android, Tauri/Electron for desktop) is still TODO if wanted.

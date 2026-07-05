@@ -1,0 +1,15 @@
+{
+  "name": "HEGEMON — Classical Age Strategy",
+  "short_name": "HEGEMON",
+  "description": "A historically grounded classical-age hex strategy game — build a hegemony across the ancient world.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0a1a2f",
+  "theme_color": "#0a1a2f",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
