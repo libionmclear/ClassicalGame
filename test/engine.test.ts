@@ -244,6 +244,27 @@ test("troops levy a food upkeep that reduces net food (soft deficit)", () => {
   assert.ok(computePlayerIncome(heavy, "p1").food < leanFood);
 });
 
+test("equipped-general perks add a small flat per-turn bonus", () => {
+  const base = buildState();
+  const incBase = computePlayerIncome(base, "p1");
+  const withPerk = buildState();
+  withPerk.playersById.p1.perks = { gold: 3, science: 2, food: 1, production: 1 };
+  const incPerk = computePlayerIncome(withPerk, "p1");
+  assert.equal(incPerk.gold, incBase.gold + 3);
+  assert.equal(incPerk.science, incBase.science + 2);
+  assert.equal(incPerk.food, incBase.food + 1);
+  assert.equal(incPerk.production, incBase.production + 1);
+
+  // Ending a turn applies the pooled perks (gold/science) on top of everything else.
+  const a = buildState();
+  const b = buildState();
+  b.playersById.p1.perks = { gold: 5, science: 4 };
+  const ea = applyAction(a, { type: "END_TURN", playerId: "p1" });
+  const eb = applyAction(b, { type: "END_TURN", playerId: "p1" });
+  assert.equal(eb.playersById.p1.gold - ea.playersById.p1.gold, 5);
+  assert.equal(eb.playersById.p1.science - ea.playersById.p1.science, 4);
+});
+
 test("replay from action log produces same final state", () => {
   const initial = buildState();
 

@@ -120,6 +120,9 @@ export interface Player {
   pendingEvent?: string;
   /** Turn the player's last event fired, to space them out. */
   lastEventTurn?: number;
+  /** Small flat per-turn bonuses from equipped General cards (the meta-game).
+   *  gold/science are added to the player pool; food/production to the capital. */
+  perks?: { food?: number; production?: number; gold?: number; science?: number };
 }
 
 export interface GameMap {

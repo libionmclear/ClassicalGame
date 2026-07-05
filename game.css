@@ -1229,6 +1229,45 @@ button:hover:not(:disabled) {
   letter-spacing: 0.05em;
 }
 
+.cd-loadout {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0 10px;
+  padding: 8px 12px;
+  background: rgba(242, 204, 105, 0.08);
+  border: 1px solid #4a5f34;
+  border-radius: 8px;
+}
+
+.cd-lo-label {
+  font-size: 0.86rem;
+}
+
+.cd-lo-slots {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cd-lo-ico {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.cd-lo-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.cd-lo-perk {
+  margin-left: auto;
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
 .standings-panel {
   background: rgba(10, 20, 36, 0.95);
   border: 1px solid #2a4a70;

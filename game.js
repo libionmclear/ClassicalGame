@@ -2301,6 +2301,13 @@
     const myCivName = (config.players.find((p) => p.id === HUMAN_ID) || {}).civ || HUMAN_ID;
     label = "Playing " + myCivName + " — " + label;
 
+    // Bring your equipped Generals' perks into the campaign (the human only).
+    const startPerks = loadoutPerks();
+    if (Object.keys(startPerks).length && config.players) {
+      const hp = config.players.find((pl) => pl.id === HUMAN_ID);
+      if (hp) hp.perks = startPerks;
+    }
+
     state = engine.createInitialGameState(config);
     resultRecorded = false; // a fresh game's result hasn't been counted yet
     clearSelection();
@@ -2574,6 +2581,15 @@
     { id: "civ-greece", type: "civ", civ: "greece", rarity: "epic", name: "Athenians", icon: "🏛️" },
     { id: "civ-egypt", type: "civ", civ: "egypt", rarity: "epic", name: "Egypt", icon: "🔺" },
     { id: "civ-carthage", type: "civ", civ: "carthage", rarity: "epic", name: "Carthage", icon: "🐘" },
+    // Generals: equip up to 3 for a small flat per-turn bonus (earnable, not P2W).
+    { id: "gen-augustus", type: "general", rarity: "epic", name: "Augustus", icon: "🪙", perk: { gold: 3 }, blurb: "The first emperor — the prosperity of the Pax Romana. +3 gold/turn." },
+    { id: "gen-caesar", type: "general", rarity: "epic", name: "Caesar", icon: "🗡️", perk: { production: 2 }, blurb: "Julius Caesar — logistics and command. +2 labour/turn." },
+    { id: "gen-socrates", type: "general", rarity: "rare", name: "Socrates", icon: "💭", perk: { science: 2 }, blurb: "The philosopher — inquiry and reason. +2 science/turn." },
+    { id: "gen-pericles", type: "general", rarity: "rare", name: "Pericles", icon: "🏺", perk: { gold: 1, science: 1 }, blurb: "The golden age of Athens. +1 gold, +1 science/turn." },
+    { id: "gen-xerxes", type: "general", rarity: "epic", name: "Xerxes", icon: "🦁", perk: { food: 1, production: 1 }, blurb: "The Great King — the abundance of an empire. +1 food, +1 labour/turn." },
+    { id: "gen-cleopatra", type: "general", rarity: "epic", name: "Cleopatra", icon: "🐍", perk: { gold: 2, science: 1 }, blurb: "Egypt's last pharaoh — wealth and guile. +2 gold, +1 science/turn." },
+    { id: "gen-hannibal", type: "general", rarity: "epic", name: "Hannibal", icon: "🗻", perk: { production: 2 }, blurb: "Carthage's scourge of Rome. +2 labour/turn." },
+    { id: "gen-alexander", type: "general", rarity: "legendary", name: "Alexander", icon: "🌏", perk: { production: 1, science: 1, gold: 1 }, blurb: "Conqueror to the Indus. +1 labour, +1 science, +1 gold/turn." },
     { id: "crown-laurel", type: "cosmetic", slot: "crown", rarity: "common", name: "Laurel Wreath", icon: "🌿" },
     { id: "crown-gold", type: "cosmetic", slot: "crown", rarity: "rare", name: "Gold Diadem", icon: "👑" },
     { id: "crown-iron", type: "cosmetic", slot: "crown", rarity: "epic", name: "Iron Crown", icon: "⚜️" },
@@ -2632,6 +2648,29 @@
     else p.equipped[card.slot] = cardId;
     saveProfile(p);
   }
+  // Toggle a General in/out of your match loadout (max 3, must own it).
+  function equipGeneral(id) {
+    const card = CARDS_BY_ID[id];
+    if (!card || card.type !== "general") return;
+    const p = loadProfile();
+    if (!p.cards[id]) return;
+    const i = p.loadout.indexOf(id);
+    if (i !== -1) p.loadout.splice(i, 1);
+    else if (p.loadout.length < 3) p.loadout.push(id);
+    saveProfile(p);
+  }
+  // Sum the equipped generals' perks into a { food, production, gold, science }.
+  function loadoutPerks() {
+    const p = loadProfile();
+    const perks = {};
+    for (const id of p.loadout || []) {
+      const g = CARDS_BY_ID[id];
+      if (g && g.type === "general" && p.cards[id] && g.perk) {
+        for (const k of Object.keys(g.perk)) perks[k] = (perks[k] || 0) + g.perk[k];
+      }
+    }
+    return perks;
+  }
 
   function loadProfile() {
     let p = null;
@@ -2652,7 +2691,8 @@
       packs: typeof p.packs === "number" ? p.packs : 0,
       // Starters are always free; card-unlocked civs accumulate on top.
       unlockedCivs: Array.from(new Set(STARTER_CIVS.concat(Array.isArray(p.unlockedCivs) ? p.unlockedCivs : []))),
-      equipped: p.equipped || {}
+      equipped: p.equipped || {},
+      loadout: Array.isArray(p.loadout) ? p.loadout.slice(0, 3) : [] // up to 3 generals
     };
   }
   function saveProfile(p) {
@@ -2730,7 +2770,7 @@
       );
     }
     parts.push("</div>");
-    parts.push('<div class="pf-note">Stats are saved on this device. Accounts, sync & the card collection come later.</div>');
+    parts.push('<div class="pf-note">Stats are saved on this device. Open 🃏 Cards to collect and equip generals & cosmetics. Accounts, sync & purchases come later.</div>');
 
     profileBodyEl.innerHTML = parts.join("");
     const nameInput = document.getElementById("pf-name");
@@ -2767,20 +2807,43 @@
       '<div class="cd-count">' + owned + " / " + CARDS.length + " cards</div></div>"
     );
     parts.push('<div id="cd-reveal" class="cd-reveal"></div>');
-    parts.push('<div class="cd-note">Packs are earned by playing (win = 2, loss = 1). Cards are cosmetic or a small, always-earnable edge — never pay-to-win. Click an owned cosmetic to equip it.</div>');
+    parts.push('<div class="cd-note">Packs are earned by playing (win = 2, loss = 1). Cards are cosmetic or a small, always-earnable edge — never pay-to-win. Click an owned cosmetic to wear it, or a General to bring it to battle.</div>');
+
+    // Loadout: the generals you'll take into your next campaign (max 3).
+    const perks = loadoutPerks();
+    const perkStr = [];
+    if (perks.food) perkStr.push("+" + perks.food + " 🌾");
+    if (perks.production) perkStr.push("+" + perks.production + " ⚒️");
+    if (perks.gold) perkStr.push("+" + perks.gold + " 🪙");
+    if (perks.science) perkStr.push("+" + perks.science + " 🔬");
+    const loSlots = (p.loadout || []).map(function (id) {
+      const g = CARDS_BY_ID[id];
+      return g ? '<span class="cd-lo-ico" title="' + g.name + '">' + g.icon + " " + g.name + "</span>" : "";
+    }).join("");
+    parts.push(
+      '<div class="cd-loadout"><span class="cd-lo-label">⚔ Generals for your next campaign <b>' + (p.loadout || []).length + "/3</b></span>" +
+      '<span class="cd-lo-slots">' + (loSlots || '<span class="cd-lo-empty">none — click a General below</span>') + "</span>" +
+      (perkStr.length ? '<span class="cd-lo-perk">' + perkStr.join(" · ") + " each turn</span>" : "") +
+      "</div>"
+    );
+
     parts.push('<div class="cd-grid">');
     for (const card of CARDS) {
       const count = p.cards[card.id] || 0;
       const has = count > 0;
       const r = RARITY[card.rarity];
-      const equipped = card.type === "cosmetic" && p.equipped && p.equipped[card.slot] === card.id;
+      const inLoadout = card.type === "general" && (p.loadout || []).indexOf(card.id) !== -1;
+      const equipped = (card.type === "cosmetic" && p.equipped && p.equipped[card.slot] === card.id) || inLoadout;
+      const tip =
+        card.name + " — " + r.name +
+        (card.type === "civ" ? " · unlocks " + card.name : "") +
+        (card.type === "general" && card.blurb ? " · " + card.blurb : "");
       parts.push(
-        '<div class="cd-card ' + card.rarity + (has ? "" : " locked") + (equipped ? " equipped" : "") + '" data-id="' + card.id + '" ' +
-        'title="' + card.name + " — " + r.name + (card.type === "civ" ? " · unlocks " + card.name : "") + '">' +
+        '<div class="cd-card ' + card.rarity + (has ? "" : " locked") + (equipped ? " equipped" : "") + '" data-id="' + card.id + '" title="' + tip + '">' +
         '<span class="cd-ico">' + (has ? card.icon : "🔒") + "</span>" +
         '<span class="cd-name">' + card.name + "</span>" +
         '<span class="cd-r" style="color:' + r.color + '">' + r.name + (count > 1 ? " ×" + count : "") + "</span>" +
-        (equipped ? '<span class="cd-eq">equipped</span>' : "") +
+        (inLoadout ? '<span class="cd-eq">in loadout</span>' : equipped ? '<span class="cd-eq">equipped</span>' : "") +
         "</div>"
       );
     }
@@ -2813,9 +2876,13 @@
     cardsBodyEl.querySelectorAll(".cd-card").forEach(function (el) {
       const id = el.getAttribute("data-id");
       const card = CARDS_BY_ID[id];
-      if (card && card.type === "cosmetic" && (loadProfile().cards[id] || 0) > 0) {
+      if (!card || (loadProfile().cards[id] || 0) <= 0) return;
+      if (card.type === "cosmetic") {
         el.classList.add("clickable");
         el.addEventListener("click", function () { equipCard(id); renderCards(); });
+      } else if (card.type === "general") {
+        el.classList.add("clickable");
+        el.addEventListener("click", function () { equipGeneral(id); renderCards(); });
       }
     });
   }

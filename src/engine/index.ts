@@ -66,7 +66,8 @@ function normalizePlayers(configPlayers?: Partial<Player>[]): Player[] {
     techs: player.techs ?? [],
     forkChoices: player.forkChoices ?? {},
     cityIds: player.cityIds ?? [],
-    unitIds: player.unitIds ?? []
+    unitIds: player.unitIds ?? [],
+    ...(player.perks ? { perks: player.perks } : {})
   }));
 }
 
@@ -1026,6 +1027,23 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
     }
   }
 
+  // Equipped-General perks: a small flat per-turn bonus (gold/science to the pool,
+  // food/production banked in the capital for next turn).
+  const perks = endingPlayer.perks;
+  if (perks) {
+    endingPlayer.gold += perks.gold ?? 0;
+    endingPlayer.science += perks.science ?? 0;
+    if (perks.food || perks.production) {
+      const cap =
+        endingPlayer.cityIds.map((id) => state.map.cities[id]).find((c) => c && c.isCapital) ||
+        state.map.cities[endingPlayer.cityIds[0]];
+      if (cap) {
+        cap.food = (cap.food ?? 0) + (perks.food ?? 0);
+        cap.production = (cap.production ?? 0) + (perks.production ?? 0);
+      }
+    }
+  }
+
   const upkeep = endingPlayer.unitIds.reduce((sum, unitId) => {
     const unit = state.map.units[unitId];
     if (!unit) return sum;
@@ -1362,6 +1380,14 @@ export function computePlayerIncome(
   income.gold += tradeRouteIncome(state, playerId);
   // Net food after the army's food-tax (can go negative — a deficit stalls growth).
   income.food -= playerFoodUpkeep(state, playerId);
+  // Equipped-General perks show up in the per-turn readout.
+  const perks = player.perks;
+  if (perks) {
+    income.food += perks.food ?? 0;
+    income.production += perks.production ?? 0;
+    income.gold += perks.gold ?? 0;
+    income.science += perks.science ?? 0;
+  }
   return income;
 }
 

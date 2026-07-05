@@ -75,9 +75,11 @@ by play; money only skips the grind, never buys power. Phases:
 - [done] Card inventory + pack-opening loop; packs earned by playing; unlock civs
   by finding their card (locked in the picker until then); cosmetic cards
   (crowns/emblems/titles) equippable on the profile.
-- Generals & historical figures (Caesar, Xerxes, Socrates…) — equip up to ~3 at
-  match start for small bonuses; event cards (Vesuvius, Nile flood) used once
-  in-match; custom-picture cards.
+- [done] Generals (Caesar, Augustus, Socrates, Xerxes, Cleopatra, Hannibal,
+  Pericles, Alexander) — equip up to 3 for a small flat per-turn perk (engine
+  `player.perks`, applied each turn, shown in the HUD income).
+- Event cards (Vesuvius eruption, Nile flood) used once in-match; custom-picture
+  cards; a rare Spartans people (now that Greece = Athenians).
 - Backend: accounts/login, cross-device sync, anti-cheat inventory, real
   purchases. (Ties to the online + app goal.)
 
