@@ -5,7 +5,7 @@
 // Run: node --import tsx scripts/balance-sim.ts [games] [size]
 import { createInitialGameState, getVictoryStatus, computeScores } from "../src/engine/index";
 import { runAiTurn } from "../src/engine/ai";
-import { generateMap } from "../src/engine/mapgen";
+import { generateMap, CIV_ROSTER } from "../src/engine/mapgen";
 import type { GameState } from "../src/engine/types";
 
 interface GameResult {
@@ -18,10 +18,11 @@ interface GameResult {
   cities: number[];
   units: number[];
   improvements: number;
+  seatCivs: string[];
 }
 
-function playGame(seed: string, size: "small" | "medium" | "large", players: number): GameResult {
-  const config = generateMap({ size, seed, playerCount: players });
+function playGame(seed: string, size: "small" | "medium" | "large", players: number, humanCiv?: string): GameResult {
+  const config = generateMap({ size, seed, playerCount: players, humanCiv });
   let state: GameState = createInitialGameState(config);
   const seatIds = state.players.map((p) => p.id);
   let attacks = 0;
@@ -49,7 +50,8 @@ function playGame(seed: string, size: "small" | "medium" | "large", players: num
     scores: seatIds.map((id) => scores[id] ?? 0),
     cities: seatIds.map((id) => state.playersById[id].cityIds.length),
     units: seatIds.map((id) => state.playersById[id].unitIds.length),
-    improvements
+    improvements,
+    seatCivs: seatIds
   };
 }
 
@@ -59,7 +61,10 @@ const players = Number(process.argv[4]) || 3;
 
 const results: GameResult[] = [];
 for (let i = 0; i < games; i += 1) {
-  results.push(playGame(`bal-${size}-${i}`, size, players));
+  // Rotate which civ is seated first so per-seat stats become civ-neutral (pure
+  // turn-order/position effect) and we can also read a clean per-civ signal.
+  const humanCiv = CIV_ROSTER[i % CIV_ROSTER.length].id;
+  results.push(playGame(`bal-${size}-${i}`, size, players, humanCiv));
 }
 
 const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
@@ -98,8 +103,30 @@ console.log(`cities/civ: avg ${avg(allCities).toFixed(1)}  max ${Math.max(...all
 console.log(`units/civ:  avg ${avg(allUnits).toFixed(1)}  max ${Math.max(...allUnits)}`);
 console.log(`worked tiles/game (improvements+roads): avg ${avg(results.map((r) => r.improvements)).toFixed(1)}`);
 
-// Per-seat systematic advantage: average final score / cities by seat.
+// Per-seat systematic advantage: average final score / cities by seat. With civs
+// rotated across seats, this isolates the turn-order / position effect.
 const seatScore = new Array(players).fill(0).map((_, s) => avg(results.map((r) => r.scores[s])));
 const seatCities = new Array(players).fill(0).map((_, s) => avg(results.map((r) => r.cities[s])));
-console.log(`seat avg score:  ${seatScore.map((x) => x.toFixed(0)).join(" / ")}`);
+console.log(`seat avg score:  ${seatScore.map((x) => x.toFixed(0)).join(" / ")}  (civ-neutral: turn-order effect)`);
 console.log(`seat avg cities: ${seatCities.map((x) => x.toFixed(1)).join(" / ")}`);
+
+// Per-CIV signal: average score / cities / wins per civ, across whatever seat it
+// drew. Isolates civ strength from seat.
+const civScore: Record<string, number[]> = {};
+const civCities: Record<string, number[]> = {};
+const civWins: Record<string, number> = {};
+for (const r of results) {
+  r.seatCivs.forEach((civ, s) => {
+    (civScore[civ] ??= []).push(r.scores[s]);
+    (civCities[civ] ??= []).push(r.cities[s]);
+  });
+  if (r.winnerCiv) civWins[r.winnerCiv] = (civWins[r.winnerCiv] ?? 0) + 1;
+}
+console.log(`\nper-civ (across all seats):`);
+for (const c of CIV_ROSTER) {
+  if (!civScore[c.id]) continue;
+  console.log(
+    `  ${c.civ.padEnd(9)} games ${civScore[c.id].length}  wins ${civWins[c.id] ?? 0}` +
+    `  avg score ${avg(civScore[c.id]).toFixed(0)}  avg cities ${avg(civCities[c.id]).toFixed(1)}`
+  );
+}

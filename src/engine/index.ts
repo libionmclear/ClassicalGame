@@ -1047,10 +1047,30 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
     if (amount > 0) unit.hp = Math.min(unit.maxHp, unit.hp + amount);
   }
 
-  state.currentPlayerIndex += 1;
-  if (state.currentPlayerIndex >= state.players.length) {
-    state.currentPlayerIndex = 0;
-    state.turn += 1;
+  // Advance to the next player. With 3+ players we ROTATE initiative each round
+  // (round r starts at seat r mod n) so no seat is permanently last — the last
+  // seat was systematically squeezed (it acted after two established rivals).
+  // Two-player games keep the simple linear order (seat 0 always first), which
+  // also preserves the deterministic turn sequences the tests rely on. The
+  // rotation is a pure function of turn + player count, so replay stays exact.
+  const n = state.players.length;
+  const prevTurn = state.turn;
+  if (n >= 3) {
+    const roundStart = (state.turn - 1) % n;
+    if ((state.currentPlayerIndex + 1) % n === roundStart) {
+      state.turn += 1;
+      state.currentPlayerIndex = (state.turn - 1) % n; // next round's first seat
+    } else {
+      state.currentPlayerIndex = (state.currentPlayerIndex + 1) % n;
+    }
+  } else {
+    state.currentPlayerIndex += 1;
+    if (state.currentPlayerIndex >= n) {
+      state.currentPlayerIndex = 0;
+      state.turn += 1;
+    }
+  }
+  if (state.turn !== prevTurn) {
     state.weather.current = generateWeatherByRegion(state, state.turn);
     state.weather.forecast = generateWeatherByRegion(state, state.turn + 1);
   }
