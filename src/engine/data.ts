@@ -116,7 +116,7 @@ export const TECHS: Record<string, TechRule> = {
   "hoplite-phalanx": { age: 1, prerequisites: ["bronze-working"], civ: "greece", cost: 24 },
   chariotry: { age: 1, prerequisites: ["bronze-working"], civ: "egypt", cost: 24 },
   "legionary-system": { age: 2, prerequisites: ["iron-working"], civ: "rome", cost: 44 },
-  "war-elephants": { age: 2, prerequisites: ["iron-working"], civ: "carthage", cost: 44 },
+  "war-elephants": { age: 2, prerequisites: ["iron-working"], civ: "carthage", cost: 36 },
   "iron-mastery": { age: 2, prerequisites: ["iron-working"], civ: "gaul", cost: 40 },
   "horse-archery": { age: 2, prerequisites: ["horseback-riding"], civ: "parthia", cost: 44 }
 };
@@ -163,7 +163,7 @@ export const UNITS: Record<string, UnitRule> = {
   },
   // Carthage — the war elephant: shock beast that tramples massed infantry.
   "war-elephant": {
-    domain: "land", movement: 2, attack: 34, defense: 22, maxHp: 32, range: 1, upkeep: 3,
+    domain: "land", movement: 2, attack: 34, defense: 22, maxHp: 32, range: 1, upkeep: 2,
     requiresTech: "war-elephants", civ: "carthage", category: "heavy", counters: { infantry: 0.4, ranged: 0.3 },
     upgradesFrom: "swordsman"
   },
@@ -420,6 +420,9 @@ export const BUILD_RESOURCE: Record<string, string> = {
   horseman: "horses",
   "war-chariot": "horses",
   "horse-archer": "horses",
+  // War elephants ate enormous fodder — a grain surplus sustains the beasts, and
+  // it gives Carthage's signature unit the same discount parity as other elites.
+  "war-elephant": "grain",
   walls: "stone"
 };
 
@@ -449,7 +452,7 @@ export const UNIT_BUILD_COSTS: Record<string, number> = {
   // Civ-unique units — costlier than their generic cousins, worth every labourer.
   legionary: 26,
   hoplite: 22,
-  "war-elephant": 32,
+  "war-elephant": 24,
   "war-chariot": 24,
   gaesatae: 20,
   "horse-archer": 24

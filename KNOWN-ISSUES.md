@@ -10,12 +10,16 @@ live in [ROADMAP.md](ROADMAP.md); this file is for what's imperfect *today*.
   "pincered middle" starting position. A room-based capital-placement fix was
   tried and did **not** help (reverted). Fully closing it likely needs smarter,
   more symmetric capital placement (avoid the squeezed middle) — not just room.
-- **Civ imbalance, untuned.** Across seats, Carthage under-performs (~2.3 cities /
-  ~340 score) while Rome/Egypt/Parthia sit higher. Needs a civ-balance pass.
-- **Sim per-civ sample is skewed.** `orderRoster` seats the chosen civ first then
-  the rest in historic order, so for playerCount < 6 the early-historic civs
-  (Rome, Carthage) are over-sampled. For a clean per-civ read, fully shuffle the
-  seat→civ mapping in the sim.
+- **Civ balance — mostly fixed; one residual.** With a clean full-seat-shuffle
+  read (36 large 6-civ games), five civs cluster tightly and win distribution is
+  ~uniform (5/6/6/6/6/7). Carthage was the outlier (2 wins); cutting the War
+  Elephant's cost (tech 44→36, unit 32→24, upkeep 3→2, + a grain build discount)
+  brought it to a fair win share (6). **Residual:** Carthage's avg score/cities
+  still trail ~15–20% — a "fewer cities, fiercer army" identity, not clearly
+  underpowered. Closing that gap needs a non-military lever (a Carthage economy
+  bonus) and risks over-buffing its win rate, so it's left as flavour for now.
+- ~~Sim per-civ sample skewed~~ — FIXED: the sim now fully shuffles seat→civ each
+  game (`civOrder`), so per-civ and per-seat signals are both clean.
 - **Bigger armies since resources phase 2.** Build discounts pushed units/civ from
   ~6.6 to ~12 (max seen 100+ in a runaway game). Watch that food upkeep is a
   strong enough brake; may need tuning.
