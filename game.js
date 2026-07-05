@@ -2571,7 +2571,7 @@
   // (crown before the name, an emblem, a title after). No card grants power.
   const CARDS = [
     { id: "civ-rome", type: "civ", civ: "rome", rarity: "legendary", name: "Rome", icon: "🦅" },
-    { id: "civ-greece", type: "civ", civ: "greece", rarity: "epic", name: "Greece", icon: "🏛️" },
+    { id: "civ-greece", type: "civ", civ: "greece", rarity: "epic", name: "Athenians", icon: "🏛️" },
     { id: "civ-egypt", type: "civ", civ: "egypt", rarity: "epic", name: "Egypt", icon: "🔺" },
     { id: "civ-carthage", type: "civ", civ: "carthage", rarity: "epic", name: "Carthage", icon: "🐘" },
     { id: "crown-laurel", type: "cosmetic", slot: "crown", rarity: "common", name: "Laurel Wreath", icon: "🌿" },
