@@ -60,6 +60,10 @@
   const profileModalEl = document.getElementById("profile-modal");
   const profileCloseBtn = document.getElementById("profile-close-btn");
   const profileBodyEl = document.getElementById("profile-body");
+  const cardsBtn = document.getElementById("cards-btn");
+  const cardsModalEl = document.getElementById("cards-modal");
+  const cardsCloseBtn = document.getElementById("cards-close-btn");
+  const cardsBodyEl = document.getElementById("cards-body");
   const codexBtn = document.getElementById("codex-btn");
   const codexModalEl = document.getElementById("codex-modal");
   const codexBodyEl = document.getElementById("codex-body");
@@ -234,18 +238,33 @@
     parthia: "Mounted lords of Iran and Mesopotamia, the Parthians met Rome's legions with horse-archers and cataphracts, and at Carrhae in 53 BC handed Rome one of her worst defeats."
   };
 
-  // Populate the "Play as" picker from the engine roster.
-  (function populateCivPicker() {
+  // Populate the "Play as" picker from the engine roster, locking peoples the
+  // player hasn't unlocked (via a card). Reads localStorage directly so it is
+  // safe to run this early, before the collection constants are defined.
+  function refreshCivPicker() {
     const sel = document.getElementById("civ-select");
     if (!sel) return;
-    (engine.CIV_ROSTER || []).forEach(function (c, i) {
+    const prev = sel.value;
+    let unlocked = ["rome", "greece", "egypt"];
+    try {
+      const pp = JSON.parse(window.localStorage.getItem("hegemon_profile") || "null");
+      if (pp && Array.isArray(pp.unlockedCivs) && pp.unlockedCivs.length) unlocked = pp.unlockedCivs;
+    } catch (e) {}
+    sel.innerHTML = "";
+    let firstEnabled = null;
+    (engine.CIV_ROSTER || []).forEach(function (c) {
       const opt = document.createElement("option");
       opt.value = c.id;
-      opt.textContent = c.civ + " (" + c.capital + ")";
-      if (i === 0) opt.selected = true;
+      const locked = unlocked.indexOf(c.id) === -1;
+      opt.textContent = (locked ? "🔒 " : "") + c.civ + " (" + c.capital + ")";
+      if (locked) opt.disabled = true;
+      else if (firstEnabled === null) firstEnabled = c.id;
       sel.appendChild(opt);
     });
-  })();
+    if (prev && unlocked.indexOf(prev) !== -1) sel.value = prev;
+    else if (firstEnabled) sel.value = firstEnabled;
+  }
+  refreshCivPicker();
 
   // Authored scenarios (real-geography maps), keyed by id, populated into the
   // map picker's "Scenarios" group. isScenario(id) tells scenarios from sizes.
@@ -2539,6 +2558,79 @@
     { id: "polymath", icon: "🌍", name: "Polymath", desc: "Play a campaign as all six peoples.", test: (p) => Object.values(p.byCiv || {}).filter((c) => c.played > 0).length >= 6 }
   ];
 
+  // The free peoples; the rest are unlocked by finding (or earning) their card.
+  const STARTER_CIVS = ["rome", "greece", "egypt"];
+  const RARITY = {
+    common: { name: "Common", color: "#9aa7b4", weight: 62 },
+    rare: { name: "Rare", color: "#4a90d9", weight: 26 },
+    epic: { name: "Epic", color: "#a25ddc", weight: 9 },
+    legendary: { name: "Legendary", color: "#f2a03d", weight: 3 }
+  };
+  // The card catalogue. Civ cards unlock a people; cosmetics equip on the profile
+  // (crown before the name, an emblem, a title after). No card grants power.
+  const CARDS = [
+    { id: "civ-carthage", type: "civ", civ: "carthage", rarity: "epic", name: "Carthage", icon: "🐘" },
+    { id: "civ-gaul", type: "civ", civ: "gaul", rarity: "epic", name: "Gaul", icon: "🪓" },
+    { id: "civ-parthia", type: "civ", civ: "parthia", rarity: "epic", name: "Parthia", icon: "🏹" },
+    { id: "crown-laurel", type: "cosmetic", slot: "crown", rarity: "common", name: "Laurel Wreath", icon: "🌿" },
+    { id: "crown-gold", type: "cosmetic", slot: "crown", rarity: "rare", name: "Gold Diadem", icon: "👑" },
+    { id: "crown-iron", type: "cosmetic", slot: "crown", rarity: "epic", name: "Iron Crown", icon: "⚜️" },
+    { id: "emblem-eagle", type: "cosmetic", slot: "emblem", rarity: "common", name: "Eagle", icon: "🦅" },
+    { id: "emblem-wolf", type: "cosmetic", slot: "emblem", rarity: "common", name: "Wolf", icon: "🐺" },
+    { id: "emblem-owl", type: "cosmetic", slot: "emblem", rarity: "common", name: "Owl of Athena", icon: "🦉" },
+    { id: "emblem-trireme", type: "cosmetic", slot: "emblem", rarity: "rare", name: "Trireme", icon: "⛵" },
+    { id: "emblem-elephant", type: "cosmetic", slot: "emblem", rarity: "rare", name: "War Elephant", icon: "🐘" },
+    { id: "emblem-sun", type: "cosmetic", slot: "emblem", rarity: "epic", name: "Sun of Egypt", icon: "☀️" },
+    { id: "title-bold", type: "cosmetic", slot: "title", rarity: "common", name: "the Bold", icon: "🛡️" },
+    { id: "title-conqueror", type: "cosmetic", slot: "title", rarity: "rare", name: "the Conqueror", icon: "⚔️" },
+    { id: "title-wise", type: "cosmetic", slot: "title", rarity: "rare", name: "the Wise", icon: "📜" },
+    { id: "title-great", type: "cosmetic", slot: "title", rarity: "legendary", name: "the Great", icon: "🌟" }
+  ];
+  const CARDS_BY_ID = {};
+  const CARDS_BY_RARITY = {};
+  for (const c of CARDS) {
+    CARDS_BY_ID[c.id] = c;
+    (CARDS_BY_RARITY[c.rarity] = CARDS_BY_RARITY[c.rarity] || []).push(c);
+  }
+
+  function rollRarity() {
+    const total = Object.keys(RARITY).reduce((s, k) => s + RARITY[k].weight, 0);
+    let roll = Math.random() * total;
+    for (const k of Object.keys(RARITY)) {
+      roll -= RARITY[k].weight;
+      if (roll <= 0) return k;
+    }
+    return "common";
+  }
+  function openPack() {
+    const p = loadProfile();
+    if (p.packs <= 0) return null;
+    p.packs -= 1;
+    const gained = [];
+    for (let i = 0; i < 3; i += 1) {
+      let rarity = rollRarity();
+      let pool = CARDS_BY_RARITY[rarity];
+      if (!pool || !pool.length) { rarity = "common"; pool = CARDS_BY_RARITY.common || CARDS; }
+      const card = pool[Math.floor(Math.random() * pool.length)];
+      const isNew = !p.cards[card.id];
+      p.cards[card.id] = (p.cards[card.id] || 0) + 1;
+      if (card.type === "civ" && p.unlockedCivs.indexOf(card.civ) === -1) p.unlockedCivs.push(card.civ);
+      gained.push({ card: card, isNew: isNew });
+    }
+    saveProfile(p);
+    return gained;
+  }
+  function equipCard(cardId) {
+    const card = CARDS_BY_ID[cardId];
+    if (!card || card.type !== "cosmetic") return;
+    const p = loadProfile();
+    if (!p.cards[cardId]) return;
+    p.equipped = p.equipped || {};
+    if (p.equipped[card.slot] === cardId) delete p.equipped[card.slot];
+    else p.equipped[card.slot] = cardId;
+    saveProfile(p);
+  }
+
   function loadProfile() {
     let p = null;
     try { p = JSON.parse(window.localStorage.getItem(PROFILE_KEY) || "null"); } catch (e) { p = null; }
@@ -2551,7 +2643,13 @@
       dominationWins: p.dominationWins || 0,
       scoreWins: p.scoreWins || 0,
       byCiv: p.byCiv || {},
-      badges: Array.isArray(p.badges) ? p.badges : []
+      badges: Array.isArray(p.badges) ? p.badges : [],
+      // Collection: owned cards {id: count}, unopened packs, civs unlocked, and
+      // the cosmetics currently equipped on the profile.
+      cards: p.cards || {},
+      packs: typeof p.packs === "number" ? p.packs : 0,
+      unlockedCivs: Array.isArray(p.unlockedCivs) ? p.unlockedCivs : STARTER_CIVS.slice(),
+      equipped: p.equipped || {}
     };
   }
   function saveProfile(p) {
@@ -2572,6 +2670,8 @@
       p.byCiv[civId].played += 1;
       if (won) p.byCiv[civId].wins += 1;
     }
+    // Packs are earned by playing (a win is worth more) — the free path to cards.
+    p.packs = (p.packs || 0) + (won ? 2 : 1);
     for (const b of BADGES) if (!p.badges.includes(b.id) && b.test(p)) p.badges.push(b.id);
     saveProfile(p);
     return p;
@@ -2581,25 +2681,36 @@
     if (!profileBodyEl) return;
     const p = loadProfile();
     const pct = (w, g) => (g > 0 ? Math.round((w / g) * 100) + "%" : "—");
+    const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const eq = p.equipped || {};
+    const cardIco = (id) => (id && CARDS_BY_ID[id] ? CARDS_BY_ID[id].icon : "");
+    const crown = eq.crown ? cardIco(eq.crown) + " " : "";
+    const emblem = eq.emblem ? cardIco(eq.emblem) + " " : "";
+    const title = eq.title && CARDS_BY_ID[eq.title] ? " " + CARDS_BY_ID[eq.title].name : "";
     const parts = [];
     parts.push(
       '<div class="pf-head">' +
+      '<div class="pf-idcol">' +
+      '<div class="pf-flair">' + crown + emblem + '<span class="pf-flairname">' + esc(p.name) + "</span>" + esc(title) + "</div>" +
       '<input id="pf-name" class="pf-name" value="' + String(p.name).replace(/"/g, "&quot;") + '" maxlength="20" title="Your name" />' +
+      "</div>" +
       '<div class="pf-summary">' +
       '<span><b>' + p.games + "</b> games</span>" +
       '<span><b>' + p.wins + "</b> wins <small>(" + pct(p.wins, p.games) + ")</small></span>" +
       '<span><b>' + p.losses + "</b> losses</span>" +
+      '<span>🎁 <b>' + p.packs + "</b> packs</span>" +
       "</div></div>"
     );
 
-    parts.push('<h3 class="pf-h">Peoples played</h3><div class="pf-civs">');
+    parts.push('<h3 class="pf-h">Peoples</h3><div class="pf-civs">');
     for (const c of engine.CIV_ROSTER || []) {
       const s = p.byCiv[c.id] || { played: 0, wins: 0 };
+      const locked = p.unlockedCivs.indexOf(c.id) === -1;
       parts.push(
         '<div class="pf-civ' + (s.played ? "" : " dim") + '">' +
         '<span class="pf-dot" style="background:' + (CIV_COLORS[c.id] || c.color) + '"></span>' +
-        '<span class="pf-civname">' + c.civ + "</span>" +
-        '<span class="pf-civstat">' + s.played + " played · " + s.wins + " won <small>(" + pct(s.wins, s.played) + ")</small></span>" +
+        '<span class="pf-civname">' + c.civ + (locked ? " 🔒" : "") + "</span>" +
+        '<span class="pf-civstat">' + (locked ? "locked — find its card" : s.played + " played · " + s.wins + " won <small>(" + pct(s.wins, s.played) + ")</small>") + "</span>" +
         "</div>"
       );
     }
@@ -2637,6 +2748,83 @@
     if (profileCloseBtn) profileCloseBtn.addEventListener("click", function () { profileModalEl.classList.add("hidden"); });
     profileModalEl.addEventListener("click", function (e) {
       if (e.target === profileModalEl) profileModalEl.classList.add("hidden");
+    });
+  }
+
+  // ===== Card collection & packs =====
+  function renderCards() {
+    if (!cardsBodyEl) return;
+    const p = loadProfile();
+    const owned = Object.keys(p.cards).length;
+    const parts = [];
+    parts.push(
+      '<div class="cd-top">' +
+      '<div class="cd-packs">🎁 <b>' + p.packs + "</b> pack" + (p.packs === 1 ? "" : "s") + "</div>" +
+      '<button id="cd-open" class="cd-openbtn"' + (p.packs > 0 ? "" : " disabled") + ">Open a pack</button>" +
+      '<div class="cd-count">' + owned + " / " + CARDS.length + " cards</div></div>"
+    );
+    parts.push('<div id="cd-reveal" class="cd-reveal"></div>');
+    parts.push('<div class="cd-note">Packs are earned by playing (win = 2, loss = 1). Cards are cosmetic or a small, always-earnable edge — never pay-to-win. Click an owned cosmetic to equip it.</div>');
+    parts.push('<div class="cd-grid">');
+    for (const card of CARDS) {
+      const count = p.cards[card.id] || 0;
+      const has = count > 0;
+      const r = RARITY[card.rarity];
+      const equipped = card.type === "cosmetic" && p.equipped && p.equipped[card.slot] === card.id;
+      parts.push(
+        '<div class="cd-card ' + card.rarity + (has ? "" : " locked") + (equipped ? " equipped" : "") + '" data-id="' + card.id + '" ' +
+        'title="' + card.name + " — " + r.name + (card.type === "civ" ? " · unlocks " + card.name : "") + '">' +
+        '<span class="cd-ico">' + (has ? card.icon : "🔒") + "</span>" +
+        '<span class="cd-name">' + card.name + "</span>" +
+        '<span class="cd-r" style="color:' + r.color + '">' + r.name + (count > 1 ? " ×" + count : "") + "</span>" +
+        (equipped ? '<span class="cd-eq">equipped</span>' : "") +
+        "</div>"
+      );
+    }
+    parts.push("</div>");
+    cardsBodyEl.innerHTML = parts.join("");
+
+    const openBtn = document.getElementById("cd-open");
+    if (openBtn) {
+      openBtn.addEventListener("click", function () {
+        const gained = openPack();
+        if (!gained) return;
+        renderCards();
+        refreshCivPicker(); // a newly-unlocked people appears in the picker at once
+        const reveal = document.getElementById("cd-reveal");
+        if (reveal) {
+          reveal.innerHTML =
+            '<div class="cd-reveal-in">' +
+            gained.map(function (g) {
+              const r = RARITY[g.card.rarity];
+              return (
+                '<div class="cd-rc ' + g.card.rarity + '"><span class="cd-ico">' + g.card.icon + "</span>" +
+                '<span class="cd-name">' + g.card.name + "</span>" +
+                '<span class="cd-r" style="color:' + r.color + '">' + r.name + (g.isNew ? " · NEW" : "") + "</span></div>"
+              );
+            }).join("") +
+            "</div>";
+        }
+      });
+    }
+    cardsBodyEl.querySelectorAll(".cd-card").forEach(function (el) {
+      const id = el.getAttribute("data-id");
+      const card = CARDS_BY_ID[id];
+      if (card && card.type === "cosmetic" && (loadProfile().cards[id] || 0) > 0) {
+        el.classList.add("clickable");
+        el.addEventListener("click", function () { equipCard(id); renderCards(); });
+      }
+    });
+  }
+
+  if (cardsBtn && cardsModalEl) {
+    cardsBtn.addEventListener("click", function () {
+      renderCards();
+      cardsModalEl.classList.remove("hidden");
+    });
+    if (cardsCloseBtn) cardsCloseBtn.addEventListener("click", function () { cardsModalEl.classList.add("hidden"); });
+    cardsModalEl.addEventListener("click", function (e) {
+      if (e.target === cardsModalEl) cardsModalEl.classList.add("hidden");
     });
   }
 

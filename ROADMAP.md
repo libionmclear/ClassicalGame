@@ -72,8 +72,9 @@ matters, unique per civilization.
 Core rule: cards give at most a *small* advantage and everything is also earnable
 by play; money only skips the grind, never buys power. Phases:
 - [done] Profile + stats + badges (local / localStorage).
-- Card inventory + pack-opening loop; unlock civs by finding their card; cosmetic
-  cards (crowns/logos/banners) for the profile.
+- [done] Card inventory + pack-opening loop; packs earned by playing; unlock civs
+  by finding their card (locked in the picker until then); cosmetic cards
+  (crowns/emblems/titles) equippable on the profile.
 - Generals & historical figures (Caesar, Xerxes, Socrates…) — equip up to ~3 at
   match start for small bonuses; event cards (Vesuvius, Nile flood) used once
   in-match; custom-picture cards.
