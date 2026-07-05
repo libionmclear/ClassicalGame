@@ -72,9 +72,13 @@ matters, unique per civilization.
 Core rule: cards give at most a *small* advantage and everything is also earnable
 by play; money only skips the grind, never buys power. Phases:
 - [done] Profile + stats + badges (local / localStorage).
-- [done] Card inventory + pack-opening loop; packs earned by playing; unlock civs
-  by finding their card (locked in the picker until then); cosmetic cards
-  (crowns/emblems/titles) equippable on the profile.
+- [done] Card inventory + pack economy: a free daily **Standard** pack plus
+  **Bronze/Silver/Gold** packs bought with coins (coins earned by playing; real
+  money later). Every pack = 3 cards; higher tier tilts the odds toward good
+  pulls. Card categories: civ-unlock, generals/governors, event (one-use),
+  enhancers, and cosmetics. Unlock civs by finding their card (locked in the
+  picker until then); cosmetics (crowns/emblems/titles) equip on the profile.
+  Event & enhancer effects are placeholders for now.
 - [done] Generals (Caesar, Augustus, Socrates, Xerxes, Cleopatra, Hannibal,
   Pericles, Alexander) — equip up to 3 for a small flat per-turn perk (engine
   `player.perks`, applied each turn, shown in the HUD income).

@@ -2574,6 +2574,17 @@
     epic: { name: "Epic", color: "#a25ddc", weight: 9 },
     legendary: { name: "Legendary", color: "#f2a03d", weight: 3 }
   };
+  // Pack tiers — Standard is a free daily; Bronze/Silver/Gold are bought with
+  // coins (the free grind path) now, real money later. Every pack gives 3 cards;
+  // the higher the tier, the better the odds of a good pull.
+  const PACK_TIERS = {
+    standard: { name: "Standard", icon: "📦", cost: 0, weights: { common: 72, rare: 22, epic: 5, legendary: 1 } },
+    bronze: { name: "Bronze", icon: "🥉", cost: 60, weights: { common: 54, rare: 33, epic: 10, legendary: 3 } },
+    silver: { name: "Silver", icon: "🥈", cost: 160, weights: { common: 36, rare: 40, epic: 19, legendary: 5 } },
+    gold: { name: "Gold", icon: "🥇", cost: 420, weights: { common: 18, rare: 40, epic: 32, legendary: 10 } }
+  };
+  const COINS_WIN = 40;
+  const COINS_LOSS = 18;
   // The card catalogue. Civ cards unlock a people; cosmetics equip on the profile
   // (crown before the name, an emblem, a title after). No card grants power.
   const CARDS = [
@@ -2590,6 +2601,16 @@
     { id: "gen-cleopatra", type: "general", rarity: "epic", name: "Cleopatra", icon: "🐍", perk: { gold: 2, science: 1 }, blurb: "Egypt's last pharaoh — wealth and guile. +2 gold, +1 science/turn." },
     { id: "gen-hannibal", type: "general", rarity: "epic", name: "Hannibal", icon: "🗻", perk: { production: 2 }, blurb: "Carthage's scourge of Rome. +2 labour/turn." },
     { id: "gen-alexander", type: "general", rarity: "legendary", name: "Alexander", icon: "🌏", perk: { production: 1, science: 1, gold: 1 }, blurb: "Conqueror to the Indus. +1 labour, +1 science, +1 gold/turn." },
+    // Event cards — played once per match (effects come later).
+    { id: "ev-vesuvius", type: "event", rarity: "epic", name: "Vesuvius Eruption", icon: "🌋", blurb: "Once per match: devastate the land around a volcano — but leave it rich in ore. (effect coming soon)" },
+    { id: "ev-nile", type: "event", rarity: "rare", name: "Nile Flood", icon: "🌊", blurb: "Once: the Nile floods — ruin, then fertility. (coming soon)" },
+    { id: "ev-plague", type: "event", rarity: "rare", name: "Plague", icon: "☠️", blurb: "Once: a pestilence strikes an enemy city. (coming soon)" },
+    { id: "ev-goldenage", type: "event", rarity: "epic", name: "Golden Age", icon: "✨", blurb: "Once: a burst of prosperity across your realm. (coming soon)" },
+    // Enhancer cards — small heads-up edges (effects come later).
+    { id: "en-scouts", type: "enhance", rarity: "common", name: "Scouts", icon: "🔭", blurb: "A small heads-up edge. (effect coming soon)" },
+    { id: "en-omen", type: "enhance", rarity: "common", name: "Favourable Omen", icon: "🔮", blurb: "(coming soon)" },
+    { id: "en-veterans", type: "enhance", rarity: "rare", name: "Veteran Levy", icon: "🎖️", blurb: "(coming soon)" },
+    { id: "en-masons", type: "enhance", rarity: "rare", name: "Master Masons", icon: "🧱", blurb: "(coming soon)" },
     { id: "crown-laurel", type: "cosmetic", slot: "crown", rarity: "common", name: "Laurel Wreath", icon: "🌿" },
     { id: "crown-gold", type: "cosmetic", slot: "crown", rarity: "rare", name: "Gold Diadem", icon: "👑" },
     { id: "crown-iron", type: "cosmetic", slot: "crown", rarity: "epic", name: "Iron Crown", icon: "⚜️" },
@@ -2611,22 +2632,26 @@
     (CARDS_BY_RARITY[c.rarity] = CARDS_BY_RARITY[c.rarity] || []).push(c);
   }
 
-  function rollRarity() {
-    const total = Object.keys(RARITY).reduce((s, k) => s + RARITY[k].weight, 0);
+  function rollRarity(weights) {
+    const w = weights || { common: RARITY.common.weight, rare: RARITY.rare.weight, epic: RARITY.epic.weight, legendary: RARITY.legendary.weight };
+    const total = Object.keys(w).reduce((s, k) => s + w[k], 0);
     let roll = Math.random() * total;
-    for (const k of Object.keys(RARITY)) {
-      roll -= RARITY[k].weight;
+    for (const k of Object.keys(w)) {
+      roll -= w[k];
       if (roll <= 0) return k;
     }
     return "common";
   }
-  function openPack() {
+  // Open one pack of the given tier (must own it). Rolls 3 cards on that tier's
+  // odds — a better tier tilts toward the good pulls.
+  function openPack(tier) {
+    const t = PACK_TIERS[tier] ? tier : "standard";
     const p = loadProfile();
-    if (p.packs <= 0) return null;
-    p.packs -= 1;
+    if ((p.packs[t] || 0) <= 0) return null;
+    p.packs[t] -= 1;
     const gained = [];
     for (let i = 0; i < 3; i += 1) {
-      let rarity = rollRarity();
+      let rarity = rollRarity(PACK_TIERS[t].weights);
       let pool = CARDS_BY_RARITY[rarity];
       if (!pool || !pool.length) { rarity = "common"; pool = CARDS_BY_RARITY.common || CARDS; }
       const card = pool[Math.floor(Math.random() * pool.length)];
@@ -2637,6 +2662,30 @@
     }
     saveProfile(p);
     return gained;
+  }
+  // The free Standard pack is claimable once per calendar day.
+  function canClaimDaily() {
+    const p = loadProfile();
+    if (!p.lastDaily) return true;
+    return new Date(p.lastDaily).toDateString() !== new Date().toDateString();
+  }
+  function claimDaily() {
+    if (!canClaimDaily()) return false;
+    const p = loadProfile();
+    p.packs.standard = (p.packs.standard || 0) + 1;
+    p.lastDaily = Date.now();
+    saveProfile(p);
+    return true;
+  }
+  function buyPack(tier) {
+    const t = PACK_TIERS[tier];
+    if (!t || t.cost <= 0) return false;
+    const p = loadProfile();
+    if (p.coins < t.cost) return false;
+    p.coins -= t.cost;
+    p.packs[tier] = (p.packs[tier] || 0) + 1;
+    saveProfile(p);
+    return true;
   }
   function equipCard(cardId) {
     const card = CARDS_BY_ID[cardId];
@@ -2688,7 +2737,18 @@
       // Collection: owned cards {id: count}, unopened packs, civs unlocked, and
       // the cosmetics currently equipped on the profile.
       cards: p.cards || {},
-      packs: typeof p.packs === "number" ? p.packs : 0,
+      coins: typeof p.coins === "number" ? p.coins : 0,
+      // Packs owned per tier. An old numeric `packs` migrates into standard.
+      packs:
+        typeof p.packs === "number"
+          ? { standard: p.packs, bronze: 0, silver: 0, gold: 0 }
+          : {
+              standard: (p.packs && p.packs.standard) || 0,
+              bronze: (p.packs && p.packs.bronze) || 0,
+              silver: (p.packs && p.packs.silver) || 0,
+              gold: (p.packs && p.packs.gold) || 0
+            },
+      lastDaily: p.lastDaily || 0,
       // Starters are always free; card-unlocked civs accumulate on top.
       unlockedCivs: Array.from(new Set(STARTER_CIVS.concat(Array.isArray(p.unlockedCivs) ? p.unlockedCivs : []))),
       equipped: p.equipped || {},
@@ -2713,8 +2773,9 @@
       p.byCiv[civId].played += 1;
       if (won) p.byCiv[civId].wins += 1;
     }
-    // Packs are earned by playing (a win is worth more) — the free path to cards.
-    p.packs = (p.packs || 0) + (won ? 2 : 1);
+    // Coins are earned by playing (a win is worth more) — the free path: grind
+    // coins, buy packs. The daily Standard pack is free on top.
+    p.coins = (p.coins || 0) + (won ? COINS_WIN : COINS_LOSS);
     for (const b of BADGES) if (!p.badges.includes(b.id) && b.test(p)) p.badges.push(b.id);
     saveProfile(p);
     return p;
@@ -2741,7 +2802,7 @@
       '<span><b>' + p.games + "</b> games</span>" +
       '<span><b>' + p.wins + "</b> wins <small>(" + pct(p.wins, p.games) + ")</small></span>" +
       '<span><b>' + p.losses + "</b> losses</span>" +
-      '<span>🎁 <b>' + p.packs + "</b> packs</span>" +
+      '<span>💰 <b>' + p.coins + "</b> coins</span>" +
       "</div></div>"
     );
 
@@ -2800,14 +2861,33 @@
     const p = loadProfile();
     const owned = Object.keys(p.cards).length;
     const parts = [];
+    const daily = canClaimDaily();
     parts.push(
       '<div class="cd-top">' +
-      '<div class="cd-packs">🎁 <b>' + p.packs + "</b> pack" + (p.packs === 1 ? "" : "s") + "</div>" +
-      '<button id="cd-open" class="cd-openbtn"' + (p.packs > 0 ? "" : " disabled") + ">Open a pack</button>" +
+      '<div class="cd-coins">💰 <b>' + p.coins + "</b> coins</div>" +
+      '<button id="cd-daily" class="cd-daily"' + (daily ? "" : " disabled") + ">" + (daily ? "📦 Claim daily pack" : "📦 Daily claimed") + "</button>" +
       '<div class="cd-count">' + owned + " / " + CARDS.length + " cards</div></div>"
     );
+    parts.push(
+      '<div class="cd-buy"><span class="cd-lo-label">Buy packs</span>' +
+      ["bronze", "silver", "gold"].map(function (tier) {
+        const t = PACK_TIERS[tier];
+        return '<button class="cd-buybtn" data-buy="' + tier + '"' + (p.coins >= t.cost ? "" : " disabled") + ">" + t.icon + " " + t.name + " — " + t.cost + " 💰</button>";
+      }).join("") + "</div>"
+    );
+    const ownedPacks = ["standard", "bronze", "silver", "gold"].filter(function (tier) { return p.packs[tier] > 0; });
+    parts.push(
+      '<div class="cd-open-row">' +
+      (ownedPacks.length
+        ? ownedPacks.map(function (tier) {
+            const t = PACK_TIERS[tier];
+            return '<button class="cd-openbtn" data-open="' + tier + '">Open ' + t.icon + " " + t.name + " (" + p.packs[tier] + ")</button>";
+          }).join("")
+        : '<span class="cd-lo-empty">No packs yet — claim your daily or buy one above.</span>') +
+      "</div>"
+    );
     parts.push('<div id="cd-reveal" class="cd-reveal"></div>');
-    parts.push('<div class="cd-note">Packs are earned by playing (win = 2, loss = 1). Cards are cosmetic or a small, always-earnable edge — never pay-to-win. Click an owned cosmetic to wear it, or a General to bring it to battle.</div>');
+    parts.push('<div class="cd-note">Coins are earned by playing (win = ' + COINS_WIN + ', loss = ' + COINS_LOSS + '); spend them on Bronze/Silver/Gold packs, or claim the free daily Standard. A better tier tilts the odds toward good cards. Everything is cosmetic or a small, always-earnable edge — never pay-to-win. Click an owned cosmetic to wear it, or a General to bring it to battle.</div>');
 
     // Loadout: the generals you'll take into your next campaign (max 3).
     const perks = loadoutPerks();
@@ -2850,29 +2930,35 @@
     parts.push("</div>");
     cardsBodyEl.innerHTML = parts.join("");
 
-    const openBtn = document.getElementById("cd-open");
-    if (openBtn) {
-      openBtn.addEventListener("click", function () {
-        const gained = openPack();
-        if (!gained) return;
-        renderCards();
-        refreshCivPicker(); // a newly-unlocked people appears in the picker at once
-        const reveal = document.getElementById("cd-reveal");
-        if (reveal) {
-          reveal.innerHTML =
-            '<div class="cd-reveal-in">' +
-            gained.map(function (g) {
-              const r = RARITY[g.card.rarity];
-              return (
-                '<div class="cd-rc ' + g.card.rarity + '"><span class="cd-ico">' + g.card.icon + "</span>" +
-                '<span class="cd-name">' + g.card.name + "</span>" +
-                '<span class="cd-r" style="color:' + r.color + '">' + r.name + (g.isNew ? " · NEW" : "") + "</span></div>"
-              );
-            }).join("") +
-            "</div>";
-        }
-      });
+    function showReveal(gained) {
+      renderCards();
+      refreshCivPicker(); // a newly-unlocked people appears in the picker at once
+      const reveal = document.getElementById("cd-reveal");
+      if (reveal) {
+        reveal.innerHTML =
+          '<div class="cd-reveal-in">' +
+          gained.map(function (g) {
+            const r = RARITY[g.card.rarity];
+            return (
+              '<div class="cd-rc ' + g.card.rarity + '"><span class="cd-ico">' + g.card.icon + "</span>" +
+              '<span class="cd-name">' + g.card.name + "</span>" +
+              '<span class="cd-r" style="color:' + r.color + '">' + r.name + (g.isNew ? " · NEW" : "") + "</span></div>"
+            );
+          }).join("") +
+          "</div>";
+      }
     }
+    const dailyBtn = document.getElementById("cd-daily");
+    if (dailyBtn) dailyBtn.addEventListener("click", function () { if (claimDaily()) renderCards(); });
+    cardsBodyEl.querySelectorAll("[data-buy]").forEach(function (el) {
+      el.addEventListener("click", function () { if (buyPack(el.getAttribute("data-buy"))) renderCards(); });
+    });
+    cardsBodyEl.querySelectorAll("[data-open]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        const gained = openPack(el.getAttribute("data-open"));
+        if (gained) showReveal(gained);
+      });
+    });
     cardsBodyEl.querySelectorAll(".cd-card").forEach(function (el) {
       const id = el.getAttribute("data-id");
       const card = CARDS_BY_ID[id];

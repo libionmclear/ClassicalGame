@@ -1129,6 +1129,54 @@ button:hover:not(:disabled) {
   font-size: 0.85rem;
 }
 
+.cd-coins {
+  font-size: 1.05rem;
+}
+
+.cd-daily {
+  background: linear-gradient(180deg, #4a8f57, #37703f);
+  color: #eafff0;
+  font-weight: 700;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.cd-daily:disabled {
+  background: #34445a;
+  color: #7c8ba0;
+  cursor: default;
+}
+
+.cd-buy,
+.cd-open-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.cd-buybtn {
+  background: #21395a;
+  color: #cfe0f5;
+  border: 1px solid #33608f;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.84rem;
+}
+
+.cd-buybtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cd-buybtn:not(:disabled):hover {
+  background: #2c4a72;
+}
+
 .cd-reveal:not(:empty) {
   margin: 12px 0;
 }
