@@ -245,10 +245,10 @@
     const sel = document.getElementById("civ-select");
     if (!sel) return;
     const prev = sel.value;
-    let unlocked = ["rome", "greece", "egypt"];
+    let unlocked = ["gaul", "parthia"];
     try {
       const pp = JSON.parse(window.localStorage.getItem("hegemon_profile") || "null");
-      if (pp && Array.isArray(pp.unlockedCivs) && pp.unlockedCivs.length) unlocked = pp.unlockedCivs;
+      if (pp && Array.isArray(pp.unlockedCivs)) unlocked = Array.from(new Set(unlocked.concat(pp.unlockedCivs)));
     } catch (e) {}
     sel.innerHTML = "";
     let firstEnabled = null;
@@ -2558,8 +2558,9 @@
     { id: "polymath", icon: "🌍", name: "Polymath", desc: "Play a campaign as all six peoples.", test: (p) => Object.values(p.byCiv || {}).filter((c) => c.played > 0).length >= 6 }
   ];
 
-  // The free peoples; the rest are unlocked by finding (or earning) their card.
-  const STARTER_CIVS = ["rome", "greece", "egypt"];
+  // The free starter peoples (the lesser powers); the marquee civs must be
+  // unlocked by finding (or earning) their card — so the good ones count.
+  const STARTER_CIVS = ["gaul", "parthia"];
   const RARITY = {
     common: { name: "Common", color: "#9aa7b4", weight: 62 },
     rare: { name: "Rare", color: "#4a90d9", weight: 26 },
@@ -2569,9 +2570,10 @@
   // The card catalogue. Civ cards unlock a people; cosmetics equip on the profile
   // (crown before the name, an emblem, a title after). No card grants power.
   const CARDS = [
+    { id: "civ-rome", type: "civ", civ: "rome", rarity: "legendary", name: "Rome", icon: "🦅" },
+    { id: "civ-greece", type: "civ", civ: "greece", rarity: "epic", name: "Greece", icon: "🏛️" },
+    { id: "civ-egypt", type: "civ", civ: "egypt", rarity: "epic", name: "Egypt", icon: "🔺" },
     { id: "civ-carthage", type: "civ", civ: "carthage", rarity: "epic", name: "Carthage", icon: "🐘" },
-    { id: "civ-gaul", type: "civ", civ: "gaul", rarity: "epic", name: "Gaul", icon: "🪓" },
-    { id: "civ-parthia", type: "civ", civ: "parthia", rarity: "epic", name: "Parthia", icon: "🏹" },
     { id: "crown-laurel", type: "cosmetic", slot: "crown", rarity: "common", name: "Laurel Wreath", icon: "🌿" },
     { id: "crown-gold", type: "cosmetic", slot: "crown", rarity: "rare", name: "Gold Diadem", icon: "👑" },
     { id: "crown-iron", type: "cosmetic", slot: "crown", rarity: "epic", name: "Iron Crown", icon: "⚜️" },
@@ -2648,7 +2650,8 @@
       // the cosmetics currently equipped on the profile.
       cards: p.cards || {},
       packs: typeof p.packs === "number" ? p.packs : 0,
-      unlockedCivs: Array.isArray(p.unlockedCivs) ? p.unlockedCivs : STARTER_CIVS.slice(),
+      // Starters are always free; card-unlocked civs accumulate on top.
+      unlockedCivs: Array.from(new Set(STARTER_CIVS.concat(Array.isArray(p.unlockedCivs) ? p.unlockedCivs : []))),
       equipped: p.equipped || {}
     };
   }
