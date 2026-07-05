@@ -4,6 +4,10 @@
 // through a small view object, so all game logic stays in the DOM app.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { createInitialGameState } from "../engine/index";
 import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
@@ -148,6 +152,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // Filmic tone mapping for richer, less-flat colour (applied by the OutputPass
+  // at the end of the post-processing chain).
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a1a2f);
@@ -405,10 +413,19 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     pickFn(id >= 0 ? keyByIndex[id] : null);
   });
 
+  // Post-processing chain: render -> subtle bloom (only the brightest pixels
+  // bleed) -> tone-mapped output. Adds sheen and depth without new assets.
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.32, 0.6, 0.85);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+
   function resize(): void {
     const w = canvas.clientWidth || 800;
     const h = canvas.clientHeight || 600;
     renderer.setSize(w, h, false);
+    composer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
@@ -418,7 +435,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const loop = () => {
     if (!running) return;
     controls.update();
-    renderer.render(scene, camera);
+    composer.render();
     requestAnimationFrame(loop);
   };
   loop();
