@@ -1557,6 +1557,20 @@
   // Build the plain view object the 3D board renders from — a light per-tile
   // classification (visibility, owner, highlight), the visible sprites, and the
   // realm border edges. All game logic (sprite tiers, hints) stays in game.js.
+  // Coarse visual "form" for a unit, so the 3D board can build the right shape.
+  function unitForm(type) {
+    const d = engine.UNITS && engine.UNITS[type];
+    if (!d) return "infantry";
+    if (d.domain === "naval") return "naval";
+    if (d.domain === "civilian") return "civilian";
+    if (type === "war-elephant") return "elephant";
+    if (d.category === "siege") return "siege";
+    if (d.mounted || d.category === "mounted") return "mounted";
+    if (d.category === "ranged") return "ranged";
+    if (d.category === "spear") return "spear";
+    return "infantry";
+  }
+
   function build3DView(visibility, hints, territory) {
     const tiles = [];
     const sprites = [];
@@ -1595,7 +1609,8 @@
       sprites.push({
         civ: city.ownerId, kind: "city", name: citySpriteName(city.ownerId, city) || "",
         color: CIV_COLORS[city.ownerId] || "#888", q: city.position.q, r: city.position.r,
-        t: state.map.tiles[ck] ? state.map.tiles[ck].terrain : "plains"
+        t: state.map.tiles[ck] ? state.map.tiles[ck].terrain : "plains",
+        pop: city.population || 1
       });
     }
     for (const unit of Object.values(state.map.units)) {
@@ -1607,6 +1622,7 @@
         civ: unit.ownerId, kind: "unit", name: unitSpriteName(unit.ownerId, unit) || "",
         color: CIV_COLORS[unit.ownerId] || "#888", q: unit.position.q, r: unit.position.r,
         t: state.map.tiles[uk] ? state.map.tiles[uk].terrain : "plains",
+        form: embarked ? "naval" : unitForm(unit.type),
         badge: embarked ? "⛵" : (UNIT_GLYPHS[unit.type] || "•")
       });
     }

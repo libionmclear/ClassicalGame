@@ -37,7 +37,7 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; }
-export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; }
+export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 export interface BoardView {
   tiles: TileView[];
@@ -145,6 +145,119 @@ function shadowTexture(): THREE.Texture {
   return shadowTex;
 }
 const shadowGeo = new THREE.PlaneGeometry(1, 1);
+
+// ---- Procedural low-poly models (placeholders until real glTF art arrives) ----
+// Shared geometries (created once) — meshes are cheap, geometries/materials reused.
+const GEO = {
+  torso: new THREE.CylinderGeometry(0.11, 0.16, 0.34, 6),
+  head: new THREE.IcosahedronGeometry(0.1, 0),
+  shield: new THREE.BoxGeometry(0.04, 0.22, 0.18),
+  pole: new THREE.CylinderGeometry(0.016, 0.016, 0.72, 5),
+  bow: new THREE.TorusGeometry(0.13, 0.016, 4, 8, Math.PI),
+  horse: new THREE.BoxGeometry(0.48, 0.18, 0.2),
+  leg: new THREE.CylinderGeometry(0.03, 0.03, 0.2, 4),
+  hull: new THREE.CylinderGeometry(0.12, 0.22, 0.68, 6),
+  mast: new THREE.CylinderGeometry(0.015, 0.015, 0.4, 4),
+  sail: new THREE.BoxGeometry(0.02, 0.3, 0.3),
+  building: new THREE.BoxGeometry(0.28, 0.4, 0.28),
+  roof: new THREE.ConeGeometry(0.24, 0.22, 4),
+  bigBody: new THREE.BoxGeometry(0.5, 0.34, 0.34),
+  tusk: new THREE.ConeGeometry(0.028, 0.16, 4),
+  trunk: new THREE.CylinderGeometry(0.04, 0.02, 0.24, 4),
+  siegeBase: new THREE.BoxGeometry(0.36, 0.14, 0.28),
+  treeCone: new THREE.ConeGeometry(0.19, 0.44, 6),
+  treeTrunk: new THREE.CylinderGeometry(0.045, 0.055, 0.16, 4),
+  rock: new THREE.IcosahedronGeometry(0.15, 0)
+};
+const SKIN = 0xe0b088, WOOD = 0x6b4a2b, DARKWOOD = 0x4a331f, STEEL = 0x9aa3ad, STONE = 0xcdbb91, GREY = 0x8a8a86, IVORY = 0xeee6d0;
+const matCache = new Map<string, THREE.MeshStandardMaterial>();
+function mat(color: string | number): THREE.MeshStandardMaterial {
+  const key = String(color);
+  let m = matCache.get(key);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color as never), roughness: 0.85, metalness: 0.04, flatShading: true });
+    matCache.set(key, m);
+  }
+  return m;
+}
+function shade(color: string, amt: number): number {
+  const c = new THREE.Color(color);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  c.setHSL(hsl.h, hsl.s, Math.max(0, Math.min(1, hsl.l + amt)));
+  return c.getHex();
+}
+function meshOf(geo: THREE.BufferGeometry, color: number, cast = true): THREE.Mesh {
+  const m = new THREE.Mesh(geo, mat(color));
+  m.castShadow = cast;
+  return m;
+}
+function buildUnit(form: string, color: string): THREE.Group {
+  const g = new THREE.Group();
+  const armor = shade(color, 0);
+  const figure = (lift = 0) => {
+    const t = meshOf(GEO.torso, armor); t.position.set(0, 0.2 + lift, 0); g.add(t);
+    const h = meshOf(GEO.head, SKIN); h.position.set(0, 0.44 + lift, 0); g.add(h);
+  };
+  if (form === "spear") {
+    figure();
+    const spear = meshOf(GEO.pole, WOOD); spear.position.set(0.13, 0.32, 0.02); g.add(spear);
+    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.12, 0.22, 0.03); g.add(sh);
+  } else if (form === "ranged") {
+    figure();
+    const bow = meshOf(GEO.bow, WOOD); bow.position.set(0.13, 0.28, 0); bow.rotation.z = Math.PI / 2; g.add(bow);
+  } else if (form === "mounted") {
+    const horse = meshOf(GEO.horse, WOOD); horse.position.set(0, 0.24, 0); g.add(horse);
+    for (const [lx, lz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) {
+      const leg = meshOf(GEO.leg, DARKWOOD, false); leg.position.set(lx, 0.11, lz); g.add(leg);
+    }
+    const neck = meshOf(GEO.head, WOOD); neck.position.set(0.24, 0.36, 0); g.add(neck);
+    figure(0.26);
+  } else if (form === "elephant") {
+    const body = meshOf(GEO.bigBody, GREY); body.position.set(0, 0.3, 0); g.add(body);
+    for (const [lx, lz] of [[0.2, 0.11], [0.2, -0.11], [-0.2, 0.11], [-0.2, -0.11]]) {
+      const leg = meshOf(GEO.leg, GREY); leg.position.set(lx, 0.11, lz); g.add(leg);
+    }
+    const head = meshOf(GEO.head, GREY); head.scale.setScalar(1.5); head.position.set(0.3, 0.36, 0); g.add(head);
+    const tr = meshOf(GEO.trunk, GREY); tr.position.set(0.4, 0.24, 0); tr.rotation.z = 0.7; g.add(tr);
+    for (const tz of [0.07, -0.07]) { const tk = meshOf(GEO.tusk, IVORY); tk.position.set(0.4, 0.26, tz); tk.rotation.z = 2.0; g.add(tk); }
+    const howdah = meshOf(GEO.building, shade(color, 0)); howdah.scale.set(0.5, 0.4, 0.7); howdah.position.set(-0.05, 0.56, 0); g.add(howdah);
+  } else if (form === "siege") {
+    const b = meshOf(GEO.siegeBase, WOOD); b.position.set(0, 0.1, 0); g.add(b);
+    const arm = meshOf(GEO.pole, DARKWOOD); arm.scale.set(1, 0.55, 1); arm.position.set(0, 0.3, 0); arm.rotation.z = -0.7; g.add(arm);
+    for (const wz of [0.13, -0.13]) { const wl = meshOf(GEO.leg, DARKWOOD, false); wl.rotation.x = Math.PI / 2; wl.position.set(0.12, 0.07, wz); g.add(wl); const wr = meshOf(GEO.leg, DARKWOOD, false); wr.rotation.x = Math.PI / 2; wr.position.set(-0.12, 0.07, wz); g.add(wr); }
+  } else if (form === "naval") {
+    const hull = meshOf(GEO.hull, WOOD); hull.rotation.z = Math.PI / 2; hull.scale.set(1, 1.5, 0.62); hull.position.set(0, 0.14, 0); g.add(hull);
+    const mast = meshOf(GEO.mast, DARKWOOD); mast.position.set(0, 0.36, 0); g.add(mast);
+    const sail = meshOf(GEO.sail, shade(color, 0.12)); sail.position.set(0, 0.34, 0); g.add(sail);
+  } else if (form === "civilian") {
+    figure();
+    const pack = meshOf(GEO.building, WOOD); pack.scale.set(0.5, 0.4, 0.45); pack.position.set(-0.13, 0.24, 0); g.add(pack);
+  } else {
+    // infantry / heavy
+    figure();
+    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.12, 0.22, 0.04); g.add(sh);
+    const sword = meshOf(GEO.pole, STEEL); sword.scale.set(1, 0.42, 1); sword.position.set(0.13, 0.26, 0); g.add(sword);
+  }
+  return g;
+}
+function buildCity(pop: number, color: string): THREE.Group {
+  const g = new THREE.Group();
+  const roofC = shade(color, -0.02), roofD = shade(color, -0.16);
+  const keepH = 1.0 + Math.min(6, pop) * 0.08;
+  const keep = meshOf(GEO.building, STONE); keep.scale.set(0.95, keepH / 0.4, 0.95); keep.position.y = keepH * 0.5; g.add(keep);
+  const kr = meshOf(GEO.roof, roofC); kr.scale.set(1, 1, 1); kr.position.y = keepH + 0.1; kr.rotation.y = Math.PI / 4; g.add(kr);
+  const n = Math.min(7, 2 + pop);
+  for (let i = 0; i < n; i += 1) {
+    const a = (i / n) * Math.PI * 2 + 0.4;
+    const rad = 0.36;
+    const hx = Math.cos(a) * rad, hz = Math.sin(a) * rad;
+    const hgt = 0.26 + (i % 3) * 0.07;
+    const house = meshOf(GEO.building, STONE); house.scale.set(0.52, hgt / 0.4, 0.52); house.position.set(hx, hgt * 0.5, hz); g.add(house);
+    const hr = meshOf(GEO.roof, i % 2 ? roofC : roofD); hr.scale.set(0.55, 0.7, 0.55); hr.position.set(hx, hgt + 0.06, hz); hr.rotation.y = Math.PI / 4; g.add(hr);
+  }
+  return g;
+}
 
 export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -307,47 +420,33 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
   function placeSprites(view: BoardView): void {
     spriteGroup.clear();
-    const cam = camera.position;
     for (const sv of view.sprites) {
       const w = axialToWorld(sv.q, sv.r);
       const top = topOf(sv.t || "plains"); // the tile's real surface height
+      const color = sv.color || "#cccccc";
 
-      // Plant the figure toward the camera-facing (front) edge of its tile, so
-      // its feet meet the ground the viewer actually sees instead of hovering at
-      // the tile's centre with a strip of surface showing in front of them.
-      let ox = cam.x - w.x, oz = cam.z - w.z;
-      const ol = Math.hypot(ox, oz) || 1;
-      const front = sv.kind === "city" ? 0.2 : 0.42;
-      const fx = w.x + (ox / ol) * front;
-      const fz = w.z + (oz / ol) * front;
+      // Build a low-poly 3D model that sits ON the tile and casts a real shadow.
+      const isCity = sv.kind === "city";
+      const model = isCity ? buildCity(sv.pop || 1, color) : buildUnit(sv.form || "infantry", color);
+      const scale = isCity ? 1.15 : 1.5;
+      model.scale.setScalar(scale);
+      model.position.set(w.x, top + 0.01, w.z);
+      spriteGroup.add(model);
 
-      const map = sv.name
-        ? tex("assets/sprites/" + sv.civ + "/" + sv.kind + "-" + sv.name + ".png")
-        : markerTexture(sv.color || "#cccccc", sv.kind); // civ without art -> coloured marker
-      // Size to the art's real aspect (square until it loads) so figures aren't
-      // squished; height is the tuned world size for the kind.
-      const img = (map as THREE.Texture).image as { width?: number; height?: number } | undefined;
-      const aspect = img && img.width && img.height ? img.width / img.height : 0.82;
-      const h = sv.kind === "city" ? 1.7 : 1.2;
-      const wdt = h * aspect;
-
-      // A visible round contact shadow at the feet grounds the billboard.
+      // A faint contact shadow disc under the model for extra grounding.
       const shadow = new THREE.Mesh(shadowGeo, shadowMat);
       shadow.rotation.x = -Math.PI / 2;
-      shadow.position.set(fx, top + 0.03, fz);
-      shadow.scale.set(wdt * 0.92, wdt * 0.58, 1);
+      shadow.position.set(w.x, top + 0.02, w.z);
+      const sh = isCity ? 1.7 : 1.0;
+      shadow.scale.set(sh, sh, 1);
       spriteGroup.add(shadow);
 
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false }));
-      sp.center.set(0.5, 0); // feet at the sprite's bottom edge
-      sp.scale.set(wdt, h, 1);
-      sp.position.set(fx, top, fz); // feet on the surface
-      spriteGroup.add(sp);
+      // Type glyph badge floating above so units stay identifiable.
       if (sv.badge) {
         const b = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(sv.badge), transparent: true, depthWrite: false, depthTest: false }));
         b.center.set(0.5, 0);
-        b.scale.set(0.44, 0.44, 0.44);
-        b.position.set(fx, top + h * 0.9, fz); // just above the figure's head
+        b.scale.set(0.5, 0.5, 0.5);
+        b.position.set(w.x, top + (isCity ? 1.5 : 1.05), w.z);
         b.renderOrder = 999;
         spriteGroup.add(b);
       }
