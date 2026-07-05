@@ -56,6 +56,10 @@
   const researchCloseBtn = document.getElementById("research-close-btn");
   const standingsBtn = document.getElementById("standings-btn");
   const standingsPanelEl = document.getElementById("standings-panel");
+  const profileBtn = document.getElementById("profile-btn");
+  const profileModalEl = document.getElementById("profile-modal");
+  const profileCloseBtn = document.getElementById("profile-close-btn");
+  const profileBodyEl = document.getElementById("profile-body");
   const codexBtn = document.getElementById("codex-btn");
   const codexModalEl = document.getElementById("codex-modal");
   const codexBodyEl = document.getElementById("codex-body");
@@ -80,6 +84,9 @@
   let selectedCityId = null;
   let selectedTileKey = null;
   let actionLog = [];
+  // Set true once a finished game's result has been recorded to the profile, so
+  // the win/loss is counted exactly once (render runs many times per game).
+  let resultRecorded = false;
   // Where the player last pressed on the board — the in-play menu opens there.
   let lastBoardPointer = null;
   // The selection the floating menu was last positioned for (so it only re-anchors
@@ -801,6 +808,12 @@
     if (!victory || !victory.winnerId) {
       resultModalEl.classList.add("hidden");
       return;
+    }
+
+    // Count the finished game into the profile exactly once.
+    if (!resultRecorded) {
+      resultRecorded = true;
+      try { recordGameResult(HUMAN_ID, victory.winnerId === HUMAN_ID, victory.type); } catch (e) {}
     }
 
     const humanWon = victory.winnerId === HUMAN_ID;
@@ -2270,6 +2283,7 @@
     label = "Playing " + myCivName + " — " + label;
 
     state = engine.createInitialGameState(config);
+    resultRecorded = false; // a fresh game's result hasn't been counted yet
     clearSelection();
     // Start with nothing selected — the in-play menu opens where you click.
     actionLog = ["New game started: " + label];
@@ -2306,6 +2320,7 @@
     if (state.humanPlayerId && state.playersById[state.humanPlayerId]) {
       HUMAN_ID = state.humanPlayerId;
     }
+    resultRecorded = false; // let a resumed game record its result when it ends
     clearSelection();
     actionLog = ["Resumed your saved game — turn " + state.turn];
     hintLineEl.textContent = defaultHintText;
@@ -2509,6 +2524,120 @@
     }
     researchBtn.classList.toggle("glow", ready > 0 && isHumanTurn());
     researchBtn.textContent = ready > 0 ? "🔬 Research (" + ready + ")" : "🔬 Research";
+  }
+
+  // ===== Player profile, stats & badges (local, localStorage) =====
+  const PROFILE_KEY = "hegemon_profile";
+  const BADGES = [
+    { id: "first-blood", icon: "⚔️", name: "First Blood", desc: "Play your first campaign.", test: (p) => p.games >= 1 },
+    { id: "first-win", icon: "🏅", name: "First Victory", desc: "Win a campaign.", test: (p) => p.wins >= 1 },
+    { id: "conqueror", icon: "🏛️", name: "Conqueror", desc: "Win by Domination (hold every capital).", test: (p) => p.dominationWins >= 1 },
+    { id: "sage", icon: "📜", name: "Sage", desc: "Win by Score at the age's end.", test: (p) => p.scoreWins >= 1 },
+    { id: "veteran", icon: "🎖️", name: "Veteran", desc: "Play 10 campaigns.", test: (p) => p.games >= 10 },
+    { id: "hegemon", icon: "👑", name: "Hegemon", desc: "Win 5 campaigns.", test: (p) => p.wins >= 5 },
+    { id: "unstoppable", icon: "🔥", name: "Unstoppable", desc: "Win 10 campaigns.", test: (p) => p.wins >= 10 },
+    { id: "polymath", icon: "🌍", name: "Polymath", desc: "Play a campaign as all six peoples.", test: (p) => Object.values(p.byCiv || {}).filter((c) => c.played > 0).length >= 6 }
+  ];
+
+  function loadProfile() {
+    let p = null;
+    try { p = JSON.parse(window.localStorage.getItem(PROFILE_KEY) || "null"); } catch (e) { p = null; }
+    if (!p || typeof p !== "object") p = {};
+    return {
+      name: p.name || "Player",
+      games: p.games || 0,
+      wins: p.wins || 0,
+      losses: p.losses || 0,
+      dominationWins: p.dominationWins || 0,
+      scoreWins: p.scoreWins || 0,
+      byCiv: p.byCiv || {},
+      badges: Array.isArray(p.badges) ? p.badges : []
+    };
+  }
+  function saveProfile(p) {
+    try { window.localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) {}
+  }
+  function recordGameResult(civId, won, victoryType) {
+    const p = loadProfile();
+    p.games += 1;
+    if (won) {
+      p.wins += 1;
+      if (victoryType === "domination") p.dominationWins += 1;
+      else if (victoryType === "score") p.scoreWins += 1;
+    } else {
+      p.losses += 1;
+    }
+    if (civId) {
+      p.byCiv[civId] = p.byCiv[civId] || { played: 0, wins: 0 };
+      p.byCiv[civId].played += 1;
+      if (won) p.byCiv[civId].wins += 1;
+    }
+    for (const b of BADGES) if (!p.badges.includes(b.id) && b.test(p)) p.badges.push(b.id);
+    saveProfile(p);
+    return p;
+  }
+
+  function renderProfile() {
+    if (!profileBodyEl) return;
+    const p = loadProfile();
+    const pct = (w, g) => (g > 0 ? Math.round((w / g) * 100) + "%" : "—");
+    const parts = [];
+    parts.push(
+      '<div class="pf-head">' +
+      '<input id="pf-name" class="pf-name" value="' + String(p.name).replace(/"/g, "&quot;") + '" maxlength="20" title="Your name" />' +
+      '<div class="pf-summary">' +
+      '<span><b>' + p.games + "</b> games</span>" +
+      '<span><b>' + p.wins + "</b> wins <small>(" + pct(p.wins, p.games) + ")</small></span>" +
+      '<span><b>' + p.losses + "</b> losses</span>" +
+      "</div></div>"
+    );
+
+    parts.push('<h3 class="pf-h">Peoples played</h3><div class="pf-civs">');
+    for (const c of engine.CIV_ROSTER || []) {
+      const s = p.byCiv[c.id] || { played: 0, wins: 0 };
+      parts.push(
+        '<div class="pf-civ' + (s.played ? "" : " dim") + '">' +
+        '<span class="pf-dot" style="background:' + (CIV_COLORS[c.id] || c.color) + '"></span>' +
+        '<span class="pf-civname">' + c.civ + "</span>" +
+        '<span class="pf-civstat">' + s.played + " played · " + s.wins + " won <small>(" + pct(s.wins, s.played) + ")</small></span>" +
+        "</div>"
+      );
+    }
+    parts.push("</div>");
+
+    const earned = p.badges.length;
+    parts.push('<h3 class="pf-h">Badges <small>' + earned + " / " + BADGES.length + '</small></h3><div class="pf-badges">');
+    for (const b of BADGES) {
+      const has = p.badges.includes(b.id);
+      parts.push(
+        '<div class="pf-badge' + (has ? " got" : " locked") + '" title="' + b.desc + '">' +
+        '<span class="pf-badge-ico">' + (has ? b.icon : "🔒") + "</span>" +
+        '<span class="pf-badge-name">' + b.name + "</span></div>"
+      );
+    }
+    parts.push("</div>");
+    parts.push('<div class="pf-note">Stats are saved on this device. Accounts, sync & the card collection come later.</div>');
+
+    profileBodyEl.innerHTML = parts.join("");
+    const nameInput = document.getElementById("pf-name");
+    if (nameInput) {
+      nameInput.addEventListener("change", function () {
+        const pp = loadProfile();
+        pp.name = (nameInput.value || "Player").slice(0, 20);
+        saveProfile(pp);
+      });
+    }
+  }
+
+  if (profileBtn && profileModalEl) {
+    profileBtn.addEventListener("click", function () {
+      renderProfile();
+      profileModalEl.classList.remove("hidden");
+    });
+    if (profileCloseBtn) profileCloseBtn.addEventListener("click", function () { profileModalEl.classList.add("hidden"); });
+    profileModalEl.addEventListener("click", function (e) {
+      if (e.target === profileModalEl) profileModalEl.classList.add("hidden");
+    });
   }
 
   // ===== Civilization colour picker =====

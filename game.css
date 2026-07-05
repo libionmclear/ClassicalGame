@@ -952,6 +952,128 @@ button:hover:not(:disabled) {
   font-weight: 700;
 }
 
+/* ===== Player profile ===== */
+.profile-body {
+  max-height: 66vh;
+  overflow-y: auto;
+}
+
+.pf-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.pf-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  background: rgba(10, 20, 36, 0.6);
+  border: 1px solid #33608f;
+  border-radius: 6px;
+  color: #eaf2ff;
+  padding: 6px 10px;
+  min-width: 160px;
+}
+
+.pf-summary {
+  display: flex;
+  gap: 16px;
+  font-size: 0.95rem;
+}
+
+.pf-summary b {
+  font-size: 1.15rem;
+}
+
+.pf-h {
+  margin: 16px 0 8px;
+  font-size: 1rem;
+  border-top: 1px solid #26466e;
+  padding-top: 10px;
+}
+
+.pf-h small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.pf-civs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px;
+}
+
+.pf-civ {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+
+.pf-civ.dim {
+  opacity: 0.45;
+}
+
+.pf-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.pf-civname {
+  font-weight: 700;
+  min-width: 74px;
+}
+
+.pf-civstat {
+  color: var(--muted);
+}
+
+.pf-badges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.pf-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 8px;
+  background: rgba(10, 20, 36, 0.5);
+  border: 1px solid #26466e;
+}
+
+.pf-badge.locked {
+  opacity: 0.45;
+}
+
+.pf-badge.got {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(242, 204, 105, 0.35);
+}
+
+.pf-badge-ico {
+  font-size: 1.5rem;
+}
+
+.pf-badge-name {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.pf-note {
+  margin-top: 14px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .standings-panel {
   background: rgba(10, 20, 36, 0.95);
   border: 1px solid #2a4a70;

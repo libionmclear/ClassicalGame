@@ -19,6 +19,8 @@ matters, unique per civilization.
   openable bottom-right, a Research button that glows when a tech is ready.
 - Strategic resources on the map (v1): deposits with bonus yields + on-board
   badges; deeper mechanics (food upkeep, resource-gated builds) are phase 2.
+- Player profile + stats + badges (local): games/win-loss, per-civ win-rate, and
+  achievement badges, saved on device and recorded at each game's end.
 - Mountains: +2 vision (see further), move cost 3 (slow), impassable without
   Mountain Paths.
 - City borders grow with population: pop ≤2 → 1 hex ring, ≤5 → 2, else 3.
@@ -65,6 +67,18 @@ matters, unique per civilization.
 - [done] Research: a glowing indicator when a tech is available; click to open.
 - [done] Standings: openable from the bottom-right.
 - [done] Compact top-left resource readout (Populus, Labour, Denarii, Scientia).
+
+### Meta-game: profile progression + card collection (NOT pay-to-win)
+Core rule: cards give at most a *small* advantage and everything is also earnable
+by play; money only skips the grind, never buys power. Phases:
+- [done] Profile + stats + badges (local / localStorage).
+- Card inventory + pack-opening loop; unlock civs by finding their card; cosmetic
+  cards (crowns/logos/banners) for the profile.
+- Generals & historical figures (Caesar, Xerxes, Socrates…) — equip up to ~3 at
+  match start for small bonuses; event cards (Vesuvius, Nile flood) used once
+  in-match; custom-picture cards.
+- Backend: accounts/login, cross-device sync, anti-cheat inventory, real
+  purchases. (Ties to the online + app goal.)
 
 ### Graphics / 3D polish
 - Redo the sprites with better, animated art (unit idle/attack, city bustle).
