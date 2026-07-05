@@ -21,8 +21,8 @@ interface GameResult {
   seatCivs: string[];
 }
 
-function playGame(seed: string, size: "small" | "medium" | "large", players: number, humanCiv?: string): GameResult {
-  const config = generateMap({ size, seed, playerCount: players, humanCiv });
+function playGame(seed: string, size: "small" | "medium" | "large", players: number, civOrder?: string[]): GameResult {
+  const config = generateMap({ size, seed, playerCount: players, civOrder });
   let state: GameState = createInitialGameState(config);
   const seatIds = state.players.map((p) => p.id);
   let attacks = 0;
@@ -59,12 +59,25 @@ const games = Number(process.argv[2]) || 24;
 const size = (process.argv[3] as "small" | "medium" | "large") || "medium";
 const players = Number(process.argv[4]) || 3;
 
+// Deterministic Fisher-Yates so each run is reproducible.
+function shuffled(ids: string[], seedNum: number): string[] {
+  const a = [...ids];
+  let s = (seedNum >>> 0) || 1;
+  const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rnd() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const civIds = CIV_ROSTER.map((c) => c.id);
 const results: GameResult[] = [];
 for (let i = 0; i < games; i += 1) {
-  // Rotate which civ is seated first so per-seat stats become civ-neutral (pure
-  // turn-order/position effect) and we can also read a clean per-civ signal.
-  const humanCiv = CIV_ROSTER[i % CIV_ROSTER.length].id;
-  results.push(playGame(`bal-${size}-${i}`, size, players, humanCiv));
+  // Fully shuffle the seat->civ mapping each game so every civ plays every seat
+  // roughly equally — this makes both the per-seat AND per-civ signals clean.
+  const civOrder = shuffled(civIds, i + 1).slice(0, players);
+  results.push(playGame(`bal-${size}-${i}`, size, players, civOrder));
 }
 
 const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);

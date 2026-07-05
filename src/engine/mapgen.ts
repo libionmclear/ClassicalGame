@@ -66,6 +66,8 @@ export interface GenerateMapOptions {
   playerCount?: number;
   /** Civ id the human wants to play — seated first so it is always present. */
   humanCiv?: string;
+  /** Exact seat order of civ ids (overrides humanCiv); used to measure balance. */
+  civOrder?: string[];
 }
 
 export interface CivInfo {
@@ -414,7 +416,13 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   const requested = Math.max(2, Math.min(MAX_PLAYERS, Math.floor(options.playerCount ?? 2)));
   const turnLimit = TURN_LIMITS[size] ?? 60;
   // Seat the human's chosen civ first so it is always in the game (and player 0).
-  const roster = orderRoster(options.humanCiv);
+  // A full civOrder (used by the balance harness) overrides this to seat civs in
+  // an exact order, so every civ can be measured at every seat.
+  const roster = options.civOrder
+    ? (options.civOrder
+        .map((id) => CIV_ROSTER.find((c) => c.id === id))
+        .filter((c): c is CivInfo => Boolean(c)))
+    : orderRoster(options.humanCiv);
 
   // Deterministic retries: a few noise variants until one yields a big enough
   // landmass with well-separated capitals. If a small map genuinely can't seat
