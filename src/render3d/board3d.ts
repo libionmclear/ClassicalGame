@@ -8,6 +8,8 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { createInitialGameState } from "../engine/index";
 import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
@@ -500,6 +502,46 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     return t;
   }
 
+  // ---- Optional real glTF art. Drop a file at the conventional path and it
+  // replaces the procedural placeholder; missing files just stay procedural.
+  //   units:  assets/models/units/<form>.glb   (one soldier — cloned into a squad)
+  //   cities: assets/models/cities/<civ>.glb    (a whole town)
+  const gltfLoader = new GLTFLoader();
+  type GLBEntry = { scene: THREE.Object3D; animations: THREE.AnimationClip[] };
+  const modelCache = new Map<string, GLBEntry | "loading" | "missing">();
+  let mixers: THREE.AnimationMixer[] = [];
+  const animClock = new THREE.Clock();
+  const _box = new THREE.Box3(), _sz = new THREE.Vector3();
+  function getGLB(path: string): GLBEntry | null {
+    const c = modelCache.get(path);
+    if (c === "loading" || c === "missing") return null;
+    if (c) return c;
+    modelCache.set(path, "loading");
+    gltfLoader.load(
+      path,
+      (gltf) => { modelCache.set(path, { scene: gltf.scene, animations: gltf.animations || [] }); if (lastView) placeSprites(lastView); },
+      undefined,
+      () => modelCache.set(path, "missing")
+    );
+    return null;
+  }
+  // A clone normalized to a target height with feet at y=0, whatever the source
+  // scale/orientation; plays its first animation clip if asked.
+  function glbInstance(entry: GLBEntry, targetH: number, animate: boolean): THREE.Object3D {
+    const obj = cloneSkinned(entry.scene);
+    obj.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+    _box.setFromObject(obj); _box.getSize(_sz);
+    obj.scale.setScalar(targetH / (_sz.y || 1));
+    _box.setFromObject(obj);
+    obj.position.y -= _box.min.y;
+    if (animate && entry.animations.length) {
+      const mixer = new THREE.AnimationMixer(obj);
+      mixer.clipAction(entry.animations[0]).play();
+      mixers.push(mixer);
+    }
+    return obj;
+  }
+
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   let pickFn: ((key: string | null) => void) | null = null;
@@ -581,17 +623,40 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
   function placeSprites(view: BoardView): void {
     spriteGroup.clear();
+    mixers = [];
     for (const sv of view.sprites) {
       const w = axialToWorld(sv.q, sv.r);
       const top = topOf(sv.t || "plains"); // the tile's real surface height
       const color = sv.color || "#cccccc";
-
-      // Build a low-poly 3D model that sits ON the tile and casts a real shadow.
       const isCity = sv.kind === "city";
-      const model = isCity
-        ? buildCity(sv.pop || 1, sv.civ)
-        : buildUnit(sv.form || "infantry", color, sv.hpFrac == null ? 1 : sv.hpFrac, sv.q, sv.r);
-      const scale = isCity ? 1.2 : 1.35;
+      const frac = sv.hpFrac == null ? 1 : sv.hpFrac;
+
+      // Prefer real glTF art if the conventional file exists; else the procedural
+      // low-poly placeholder. Either way it sits ON the tile and casts a shadow.
+      let model: THREE.Object3D;
+      let scale: number;
+      if (isCity) {
+        const glb = getGLB("assets/models/cities/" + sv.civ + ".glb");
+        if (glb) { model = glbInstance(glb, 1.4, false); scale = 1; }
+        else { model = buildCity(sv.pop || 1, sv.civ); scale = 1.2; }
+      } else {
+        const form = sv.form || "infantry";
+        const glb = getGLB("assets/models/units/" + form + ".glb");
+        if (glb) {
+          // Clone the one soldier into a squad — count still shows strength.
+          const single = form === "siege" || form === "naval";
+          const base = form === "elephant" ? 2 : form === "mounted" ? 3 : form === "civilian" ? 3 : 6;
+          const count = single ? 1 : Math.max(1, Math.round(base * Math.max(0.05, Math.min(1, frac))));
+          const grp = new THREE.Group();
+          const pos = squadPositions(count);
+          for (let i = 0; i < count; i += 1) {
+            const f = glbInstance(glb, single ? 1.0 : 0.85, true);
+            if (!single) { f.scale.multiplyScalar(0.6); f.position.set(pos[i][0], 0, pos[i][1]); f.rotation.y = (rnd(sv.q, sv.r, i) - 0.5) * 0.6; }
+            grp.add(f);
+          }
+          model = grp; scale = 1;
+        } else { model = buildUnit(form, color, frac, sv.q, sv.r); scale = 1.35; }
+      }
       model.scale.setScalar(scale);
       model.position.set(w.x, top + 0.01, w.z);
       spriteGroup.add(model);
@@ -697,6 +762,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const loop = () => {
     if (!running) return;
     controls.update();
+    const dt = animClock.getDelta();
+    for (const m of mixers) m.update(dt);
     composer.render();
     requestAnimationFrame(loop);
   };

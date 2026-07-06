@@ -89,6 +89,13 @@ const exists = async (p) => {
   }
 };
 
+// Drop-in glTF models (assets/models/units|cities/*.glb) — copied as static
+// files so the 3D board's loader can fetch them (see assets/models/README.md).
+const modelsDir = path.join(root, "assets", "models");
+if (await exists(modelsDir)) {
+  await cp(modelsDir, path.join(publicDir, "assets", "models"), { recursive: true });
+}
+
 let manifest = {};
 if (await exists(spriteDist)) {
   await cp(spriteDist, path.join(publicDir, "assets", "sprites"), { recursive: true });
