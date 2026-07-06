@@ -466,7 +466,7 @@
     if (y.food) parts.push("+" + y.food + " 🌾");
     if (y.production) parts.push("+" + y.production + " ⚒️");
     if (y.gold) parts.push("+" + y.gold + " 🪙");
-    if (y.science) parts.push("+" + y.science + " 🔬");
+    if (y.science) parts.push("+" + y.science + " 🧪");
     return parts.join(", ");
   }
 
@@ -584,7 +584,7 @@
         '<span title="Food per turn (before your army\'s food upkeep)">🌾 ' + y.food + "</span>" +
         '<span title="Labour per turn">⚒️ ' + y.production + "</span>" +
         '<span title="Gold per turn">🪙 ' + y.gold + "</span>" +
-        '<span title="Science per turn">🔬 ' + y.science + "</span></div>"
+        '<span title="Science per turn">🧪 ' + y.science + "</span></div>"
       : "";
     const depRow = deposits.length
       ? '<div class="co-row"><span class="co-label">Deposits</span>' +
@@ -947,7 +947,7 @@
     const parts = [];
     if (fx.gold) parts.push(sign(fx.gold) + " 🪙");
     if (fx.production) parts.push(sign(fx.production) + " ⚒️");
-    if (fx.science) parts.push(sign(fx.science) + " 🔬");
+    if (fx.science) parts.push(sign(fx.science) + " 🧪");
     if (fx.food) parts.push(sign(fx.food) + " 🌾/city");
     if (fx.spawnUnit) parts.push("+1 " + fx.spawnUnit);
     return parts.join("  ·  ");
@@ -2388,7 +2388,7 @@
         const stateLabel = researched
           ? "✓ known"
           : available
-            ? cost + " 🔬" + (affordable ? (rule.forkGroup ? " ⑂" : "") : " ⏳")
+            ? cost + " 🧪" + (affordable ? (rule.forkGroup ? " ⑂" : "") : " ⏳")
             : forkClosed
               ? "path closed"
               : "locked";
@@ -3353,7 +3353,7 @@
     if (perks.food) perkStr.push("+" + perks.food + " 🌾");
     if (perks.production) perkStr.push("+" + perks.production + " ⚒️");
     if (perks.gold) perkStr.push("+" + perks.gold + " 🪙");
-    if (perks.science) perkStr.push("+" + perks.science + " 🔬");
+    if (perks.science) perkStr.push("+" + perks.science + " 🧪");
     const loSlots = (p.loadout || []).map(function (id) {
       const g = CARDS_BY_ID[id];
       return g ? '<span class="cd-lo-ico" title="' + g.name + '">' + g.icon + " " + g.name + "</span>" : "";

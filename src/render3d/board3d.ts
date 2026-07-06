@@ -394,11 +394,11 @@ function addLandmark(g: THREE.Group, s: CivStyle, tier: number): void {
     // aqueduct arcade behind. Nothing overhangs its base.
     const pw = 1.02 * k, pd = 0.6 * k, ph = 0.07 * k;
     const podium = meshOf(GEO.building, s.wall); podium.scale.set(pw / 0.28, ph / 0.4, pd / 0.28); podium.position.y = ph * 0.5; g.add(podium);
-    const colH = 0.28 * k;
+    const colH = 0.32 * k;
     for (let i = 0; i < 4; i += 1) {
       const tx = (i / 3 - 0.5) * pw * 0.82;
       for (const zz of [pd * 0.42, -pd * 0.42]) {
-        const col = meshOf(GEO.column, s.wall); col.scale.set(1, colH / 0.34, 1); col.position.set(tx, ph + colH * 0.5, zz); g.add(col);
+        const col = meshOf(GEO.column, 0xeae3d0); col.scale.set(1.15, colH / 0.34, 1.15); col.position.set(tx, ph + colH * 0.5, zz); g.add(col);
       }
     }
     const entab = meshOf(GEO.beam, s.roofColor); entab.scale.set(pw * 0.9, 1, pd * 1.02 / 0.14); entab.position.y = ph + colH; g.add(entab);
@@ -428,15 +428,50 @@ function addLandmark(g: THREE.Group, s: CivStyle, tier: number): void {
     const th = meshOf(GEO.thatch, s.roofColor); th.scale.set(1.8 * k, 1.1 * k, 1.8 * k); th.position.y = rh + 0.06; g.add(th);
   }
 }
+// A primitive round thatched hut — the very first stage of a settlement.
+function buildHut(wallColor: number): THREE.Group {
+  const g = new THREE.Group();
+  const wall = meshOf(GEO.roundWall, wallColor); wall.scale.set(0.52, 0.5, 0.52); wall.position.y = 0.075; g.add(wall);
+  const roof = meshOf(GEO.thatch, 0x9a7238); roof.scale.set(0.6, 0.55, 0.6); roof.position.y = 0.17; g.add(roof);
+  return g;
+}
+// A little marble colonnaded temple — Rome's signature, shown even before the forum.
+function addColonnadeTemple(g: THREE.Group, s: CivStyle, k: number, cx = 0, cz = 0): void {
+  const marble = 0xeae3d0;
+  const w = 0.44 * k, d = 0.3 * k, bh = 0.06 * k;
+  const podium = meshOf(GEO.building, marble); podium.scale.set(w / 0.28, bh / 0.4, d / 0.28); podium.position.set(cx, bh * 0.5, cz); g.add(podium);
+  const colH = 0.3 * k;
+  for (let i = 0; i < 4; i += 1) {
+    const tx = (i / 3 - 0.5) * w * 0.82;
+    for (const zz of [d * 0.42, -d * 0.42]) {
+      const col = meshOf(GEO.column, marble); col.scale.set(1.15, colH / 0.34, 1.15); col.position.set(cx + tx, bh + colH * 0.5, cz + zz); g.add(col);
+    }
+  }
+  const roof = meshOf(GEO.roof, s.roofColor); roof.scale.set(w / 0.24 * 0.92, 0.62, d / 0.24 * 1.1); roof.rotation.y = Math.PI / 4; roof.position.set(cx, bh + colH + 0.04 * k, cz); g.add(roof);
+}
 function buildCity(pop: number, civ: string): THREE.Group {
   const g = new THREE.Group();
   const s = CIV_STYLE[civ] || CIV_STYLE.rome;
-  const tier = pop <= 2 ? 1 : pop <= 4 ? 2 : pop <= 6 ? 3 : 4; // settlement/town/city/metropolis
+  // Six growth stages: 0 huts · 1 hamlet · 2 village · 3 town · 4 city · 5 metropolis.
+  const tier = pop <= 1 ? 0 : pop <= 2 ? 1 : pop <= 4 ? 2 : pop <= 6 ? 3 : pop <= 9 ? 4 : 5;
 
-  if (tier >= 2) addLandmark(g, s, tier);
+  // Stage 0 (ground level): just a ring of primitive huts.
+  if (tier === 0) {
+    for (let i = 0; i < 3; i += 1) {
+      const a = (i / 3) * Math.PI * 2 + 0.4;
+      const hut = buildHut(s.wall);
+      hut.position.set(Math.cos(a) * 0.17, 0, Math.sin(a) * 0.17);
+      g.add(hut);
+    }
+    return g;
+  }
 
-  const houses = tier === 1 ? 3 : 2 + tier * 2; // 3 / 6 / 8 / 10
-  const rad = tier === 1 ? 0.26 : 0.52; // ring the houses OUTSIDE the central landmark
+  if (tier >= 3) addLandmark(g, s, tier);
+  // Rome always shows columns — a colonnaded temple stands in before the forum.
+  if (civ === "rome" && tier < 3) addColonnadeTemple(g, s, 0.65 + tier * 0.12);
+
+  const houses = 2 + tier * 2; // 4 / 6 / 8 / 10 / 12
+  const rad = tier <= 1 ? 0.42 : 0.54; // ring the houses OUTSIDE any central landmark
   for (let i = 0; i < houses; i += 1) {
     const a = (i / houses) * Math.PI * 2 + 0.35;
     const h = 0.22 + (i % 3) * 0.06 + tier * 0.02;
@@ -444,9 +479,9 @@ function buildCity(pop: number, civ: string): THREE.Group {
     addBuilding(g, s, Math.cos(a) * rad, Math.sin(a) * rad, w, h);
   }
 
-  // City walls appear once it's a proper city.
-  if (tier >= 3) {
-    const wr = 0.72;
+  // City walls appear once it's a proper city (stage 4+).
+  if (tier >= 4) {
+    const wr = 0.74;
     for (let i = 0; i < 6; i += 1) {
       const a = (i / 6) * Math.PI * 2;
       const seg = meshOf(GEO.wallSeg, shade("#" + s.wall.toString(16).padStart(6, "0"), -0.12));
