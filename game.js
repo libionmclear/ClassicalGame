@@ -245,7 +245,8 @@
     const sel = document.getElementById("civ-select");
     if (!sel) return;
     const prev = sel.value;
-    let unlocked = ["gaul", "parthia"];
+    // TESTING: all civs open. Revert to the localStorage-gated version to re-lock.
+    let unlocked = (engine.CIV_ROSTER || []).map(function (c) { return c.id; });
     try {
       const pp = JSON.parse(window.localStorage.getItem("hegemon_profile") || "null");
       if (pp && Array.isArray(pp.unlockedCivs)) unlocked = Array.from(new Set(unlocked.concat(pp.unlockedCivs)));
@@ -2584,7 +2585,9 @@
 
   // The free starter peoples (the lesser powers); the marquee civs must be
   // unlocked by finding (or earning) their card — so the good ones count.
-  const STARTER_CIVS = ["gaul", "parthia"];
+  // TESTING: all civs open for now. Revert to ["gaul", "parthia"] to re-enable
+  // the card gate.
+  const STARTER_CIVS = ["gaul", "parthia", "rome", "greece", "egypt", "carthage"];
   const RARITY = {
     common: { name: "Common", color: "#9aa7b4", weight: 62 },
     rare: { name: "Rare", color: "#4a90d9", weight: 26 },
