@@ -41,11 +41,16 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; }
 export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
+// A segment between two tiles: rivers run along the shared edge, roads along the
+// centre line (from tile q,r to neighbour nq,nr).
+export interface EdgeView { q: number; r: number; nq: number; nr: number; }
 export interface BoardView {
   tiles: TileView[];
   sprites: SpriteView[];
   borders: BorderView[];
   civColors: Record<string, string>;
+  rivers?: EdgeView[];
+  roads?: EdgeView[];
   focus?: { q: number; r: number };
 }
 
@@ -151,9 +156,9 @@ const shadowGeo = new THREE.PlaneGeometry(1, 1);
 // ---- Procedural low-poly models (placeholders until real glTF art arrives) ----
 // Shared geometries (created once) — meshes are cheap, geometries/materials reused.
 const GEO = {
-  torso: new THREE.CylinderGeometry(0.1, 0.13, 0.24, 6),
+  torso: new THREE.CylinderGeometry(0.076, 0.1, 0.22, 6),
   legThin: new THREE.CylinderGeometry(0.036, 0.03, 0.18, 5),
-  arm: new THREE.CylinderGeometry(0.028, 0.024, 0.22, 5),
+  arm: new THREE.CylinderGeometry(0.026, 0.022, 0.22, 5),
   helmet: new THREE.SphereGeometry(0.082, 6, 4, 0, Math.PI * 2, 0, Math.PI * 0.62),
   crest: new THREE.BoxGeometry(0.02, 0.075, 0.12),
   head: new THREE.IcosahedronGeometry(0.09, 0),
@@ -226,17 +231,17 @@ function buildFigure(form: string, color: string, civ?: string): THREE.Group {
   const figure = (lift = 0, helmeted = true) => {
     for (const lx of [0.05, -0.05]) { const leg = meshOf(GEO.legThin, legCol); leg.position.set(lx, 0.09 + lift, 0); g.add(leg); }
     const t = meshOf(GEO.torso, armor); t.position.set(0, 0.3 + lift, 0); g.add(t);
-    for (const ax of [0.13, -0.13]) { const a = meshOf(GEO.arm, armor); a.position.set(ax, 0.3 + lift, 0); g.add(a); }
+    for (const ax of [0.11, -0.11]) { const a = meshOf(GEO.arm, armor); a.position.set(ax, 0.3 + lift, 0); g.add(a); }
     const h = meshOf(GEO.head, SKIN); h.position.set(0, 0.47 + lift, 0); g.add(h);
     if (helmeted) addHelmet(g, 0.5 + lift, civ);
   };
   if (form === "spear") {
     figure();
-    const spear = meshOf(GEO.pole, WOOD); spear.position.set(0.16, 0.34, 0.02); g.add(spear);
-    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.15, 0.26, 0.03); g.add(sh);
+    const spear = meshOf(GEO.pole, WOOD); spear.position.set(0.14, 0.34, 0.02); g.add(spear);
+    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.13, 0.26, 0.03); g.add(sh);
   } else if (form === "ranged") {
     figure();
-    const bow = meshOf(GEO.bow, WOOD); bow.position.set(0.16, 0.3, 0); bow.rotation.z = Math.PI / 2; g.add(bow);
+    const bow = meshOf(GEO.bow, WOOD); bow.position.set(0.14, 0.3, 0); bow.rotation.z = Math.PI / 2; g.add(bow);
   } else if (form === "mounted") {
     const horse = meshOf(GEO.horse, WOOD); horse.position.set(0, 0.24, 0); g.add(horse);
     for (const [lx, lz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) {
@@ -267,8 +272,8 @@ function buildFigure(form: string, color: string, civ?: string): THREE.Group {
   } else {
     // infantry / heavy
     figure();
-    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.15, 0.26, 0.04); g.add(sh);
-    const sword = meshOf(GEO.pole, STEEL); sword.scale.set(1, 0.42, 1); sword.position.set(0.16, 0.3, 0); g.add(sword);
+    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.13, 0.26, 0.04); g.add(sh);
+    const sword = meshOf(GEO.pole, STEEL); sword.scale.set(1, 0.42, 1); sword.position.set(0.14, 0.3, 0); g.add(sword);
   }
   return g;
 }
@@ -794,6 +799,53 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     borderMesh = mesh;
   }
 
+  // Rivers: a blue ribbon along the shared edge between two tiles.
+  const riverGeo = new THREE.BoxGeometry(SIZE * 1.02, 0.06, 0.13);
+  const riverMat = new THREE.MeshStandardMaterial({ color: 0x3f7fd0, roughness: 0.5, metalness: 0.1, emissive: 0x0c2a55, emissiveIntensity: 0.3 });
+  let riverMesh: THREE.InstancedMesh | null = null;
+  // Roads: a dirt ribbon along the centre line joining two adjacent tiles/cities.
+  const roadGeo = new THREE.BoxGeometry(1, 0.05, 0.16);
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0xa07d4c, roughness: 0.95 });
+  let roadMesh: THREE.InstancedMesh | null = null;
+  function drawEdges(
+    kind: "river" | "road",
+    segments: EdgeView[] | undefined,
+    geo: THREE.BoxGeometry,
+    mat: THREE.Material,
+    y: number,
+    along: boolean,
+    prev: THREE.InstancedMesh | null
+  ): THREE.InstancedMesh | null {
+    if (prev) { borderGroup.remove(prev); prev.dispose(); }
+    if (!segments || !segments.length) return null;
+    const mesh = new THREE.InstancedMesh(geo, mat, segments.length);
+    const m = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3(1, 1, 1);
+    const qt = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    segments.forEach((seg, i) => {
+      const a = axialToWorld(seg.q, seg.r);
+      const c = axialToWorld(seg.nq, seg.nr);
+      const mx = (a.x + c.x) / 2, mz = (a.z + c.z) / 2;
+      const dx = c.x - a.x, dz = c.z - a.z;
+      const ang = Math.atan2(dz, dx);
+      // Roads run ALONG the centre line; rivers run perpendicular (the shared edge).
+      qt.setFromAxisAngle(up, along ? -ang : -ang - Math.PI / 2);
+      s.set(along ? Math.hypot(dx, dz) : 1, 1, 1);
+      p.set(mx, y, mz);
+      m.compose(p, qt, s);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    borderGroup.add(mesh);
+    return mesh;
+  }
+  function drawWaterways(view: BoardView): void {
+    roadMesh = drawEdges("road", view.roads, roadGeo, roadMat, 0.11, true, roadMesh);
+    riverMesh = drawEdges("river", view.rivers, riverGeo, riverMat, 0.14, false, riverMesh);
+  }
+
   function pickIndex(cx: number, cy: number): number {
     if (!tileMesh) return -1;
     const rect = canvas.getBoundingClientRect();
@@ -854,6 +906,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       placeSprites(view);
       placeScatter(view);
       drawBorders(view);
+      drawWaterways(view);
       if (view.focus) {
         const w = axialToWorld(view.focus.q, view.focus.r);
         controls.target.set(w.x, 0, w.z);

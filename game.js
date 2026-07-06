@@ -1714,7 +1714,37 @@
         badge: embarked ? "⛵" : (UNIT_GLYPHS[unit.type] || "•")
       });
     }
-    const view = { tiles: tiles, sprites: sprites, borders: borders, civColors: CIV_COLORS };
+    // Rivers: keyed by shared edge "q,r|q,r"; show where either side is discovered.
+    const rivers = [];
+    if (state.map.rivers) {
+      for (const rk in state.map.rivers) {
+        if (!state.map.rivers[rk]) continue;
+        const parts = rk.split("|");
+        if (parts.length !== 2) continue;
+        if (!visibility.discovered.has(parts[0]) && !visibility.discovered.has(parts[1])) continue;
+        const a = parts[0].split(","), b = parts[1].split(",");
+        rivers.push({ q: +a[0], r: +a[1], nq: +b[0], nr: +b[1] });
+      }
+    }
+    // Roads: segments joining adjacent road tiles (and road tiles to cities).
+    const roads = [];
+    const seenRoad = {};
+    for (const key of Object.keys(state.map.tiles)) {
+      const tile = state.map.tiles[key];
+      if (!tile.road || !visibility.discovered.has(key)) continue;
+      const c = key.split(","); const q = +c[0], r = +c[1];
+      for (const d of AXIAL_DIRS) {
+        const nq = q + d[0], nr = r + d[1], nk = nq + "," + nr;
+        const nt = state.map.tiles[nk];
+        if (!nt || !visibility.discovered.has(nk)) continue;
+        if (!nt.road && !getCityAt(nq, nr)) continue;
+        const ek = key < nk ? key + "|" + nk : nk + "|" + key;
+        if (seenRoad[ek]) continue;
+        seenRoad[ek] = 1;
+        roads.push({ q: q, r: r, nq: nq, nr: nr });
+      }
+    }
+    const view = { tiles: tiles, sprites: sprites, borders: borders, civColors: CIV_COLORS, rivers: rivers, roads: roads };
     if (pendingRecenter) {
       const home =
         Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
