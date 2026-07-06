@@ -31,16 +31,22 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
     return Number.POSITIVE_INFINITY;
   }
 
-  // A road makes any land tile quick to cross and bridges rivers.
-  if (toTile.road) return 1;
+  const crossingKey = edgeKey(from, to);
+  const crossingRiver = !!state.map.rivers[crossingKey];
+
+  // A road makes any land tile quick to cross. It also BRIDGES a river — but only
+  // once your people know engineering (how to build a bridge). Without it, a road
+  // still can't spare you the ford, so you slow down to cross.
+  const owner = state.playersById[unit.ownerId];
+  const canBridge = !!owner && owner.techs.includes("engineering");
+  if (toTile.road && (!crossingRiver || canBridge)) return 1;
 
   let cost = terrain.moveCost;
   if (unit.mounted && state.weather.current[toTile.region] === "rain") {
     cost += 1;
   }
 
-  const crossingKey = edgeKey(from, to);
-  if (state.map.rivers[crossingKey]) {
+  if (crossingRiver) {
     cost += 1;
     if (state.weather.current[toTile.region] === "rain") {
       cost += 1;

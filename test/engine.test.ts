@@ -84,6 +84,17 @@ test("movement accounts for river crossing", () => {
   assert.equal(cost, 3);
 });
 
+test("a road bridges a river only once you have engineering", () => {
+  const state = buildState();
+  state.map.tiles["2,1"].road = true;
+  const ctx = { ownerId: "p1", domain: "land" as const, mounted: false };
+  // Without the bridge tech the ford still slows you (forest 2 + river 1).
+  assert.equal(movementCost(state, ctx, { q: 1, r: 1 }, { q: 2, r: 1 }), 3);
+  // Engineering lets the road bridge the river.
+  state.playersById.p1.techs.push("engineering");
+  assert.equal(movementCost(state, ctx, { q: 1, r: 1 }, { q: 2, r: 1 }), 1);
+});
+
 test("combat preview remains deterministic with visible modifiers", () => {
   const state = buildState();
   const preview1 = computeCombatPreview(state, "u1", "u3");
