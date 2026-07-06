@@ -170,6 +170,8 @@ export interface GameState {
   /** Standing trade routes, each paying its owner gold every turn. */
   tradeRoutes: TradeRoute[];
   actionLog: ActionLogEntry[];
+  /** Tiles each player has ever seen (persists fog-of-war across reloads). */
+  discovered?: Record<string, string[]>;
 }
 
 export interface ActionLogEntry {

@@ -68,9 +68,10 @@ const SELGREEN = new THREE.Color(0x7cd682);
 const RED = new THREE.Color(0xe0533d);
 const PATH = new THREE.Color(0x7dd3fc);
 const WHITE = new THREE.Color(0xffffff);
-// Unexplored land reads as an aged papyrus map (sepia), not black — waiting to
-// be discovered.
-const HIDDEN = new THREE.Color(0xc9b48a);
+// Unexplored land reads as an aged papyrus map (sepia), not black — and lies flat
+// (no hex relief) so it's truly undiscovered until you scout it.
+const HIDDEN = new THREE.Color(0xcbb794);
+const HIDDEN_ELEV = 0.04;
 
 // A coloured banner marker for civs that have no sprite art yet.
 const markerTextures = new Map<string, THREE.Texture>();
@@ -784,7 +785,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     const jitter = (((tv.q * 928371 + tv.r * 12547) % 17) / 17 - 0.5) * 0.06;
     const c = new THREE.Color(TERRAIN_COLOR[tv.t] ?? 0x808080).offsetHSL(0, 0, jitter);
     if (tv.o && civColors[tv.o]) c.lerp(new THREE.Color(civColors[tv.o]), 0.17);
-    if (tv.v === 1) c.multiplyScalar(0.5);
+    // Seen-but-not-visible keeps its DISCOVERED terrain colour, only dimmed.
+    if (tv.v === 1) c.multiplyScalar(0.6);
     if (tv.h === 3) c.lerp(GOLD, 0.55);
     else if (tv.h === 4) c.lerp(SELGREEN, 0.5);
     else if (tv.h === 2) c.lerp(RED, 0.5);
@@ -795,14 +797,25 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     return c;
   }
 
+  const _pm = new THREE.Matrix4(), _pp = new THREE.Vector3(), _ps = new THREE.Vector3(), _pq = new THREE.Quaternion();
   function paintTiles(view: BoardView): void {
     if (!tileMesh) return;
     for (const tv of view.tiles) {
       const idx = indexByKey[tv.q + "," + tv.r];
       if (idx == null) continue;
       tileMesh.setColorAt(idx, colorFor(tv, view.civColors));
+      // Height follows visibility: undiscovered tiles lie FLAT (a blank map, no
+      // hex relief); discovered/visible tiles rise to their terrain elevation.
+      const w = axialToWorld(tv.q, tv.r);
+      const top = tv.v === 0 ? HIDDEN_ELEV : topOf(tv.t);
+      const height = Math.max(0.12, top - FLOOR);
+      _pp.set(w.x, (top + FLOOR) / 2, w.z);
+      _ps.set(1, height, 1);
+      _pm.compose(_pp, _pq, _ps);
+      tileMesh.setMatrixAt(idx, _pm);
     }
     if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true;
+    tileMesh.instanceMatrix.needsUpdate = true;
   }
 
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });

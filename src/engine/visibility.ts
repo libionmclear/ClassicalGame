@@ -2,8 +2,6 @@ import { TERRAIN, UNITS } from "./data";
 import { distance, parseKey } from "./hex";
 import type { Coord, GameState, VisibilityResult } from "./types";
 
-const discoveredByPlayer = new Map<string, Set<string>>();
-
 function clampMin(value: number, minValue: number): number {
   return value < minValue ? minValue : value;
 }
@@ -51,11 +49,14 @@ export function computeVisibility(state: GameState, playerId: string): Visibilit
     addVisibilityFromSource(state, unit.position, baseRange, visible);
   }
 
-  const discovered = discoveredByPlayer.get(playerId) ?? new Set<string>();
+  // Discovered tiles are stored ON the game state so fog-of-war survives a reload
+  // and never leaks between games.
+  if (!state.discovered) state.discovered = {};
+  const discovered = new Set<string>(state.discovered[playerId] ?? []);
   for (const key of visible) {
     discovered.add(key);
   }
-  discoveredByPlayer.set(playerId, discovered);
+  state.discovered[playerId] = [...discovered];
 
   return {
     visibleTiles: [...visible],
