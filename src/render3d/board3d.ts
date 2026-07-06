@@ -36,7 +36,7 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
-export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; }
+export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; }
 export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 export interface BoardView {
@@ -259,6 +259,21 @@ function buildCity(pop: number, color: string): THREE.Group {
   return g;
 }
 
+function buildTree(): THREE.Group {
+  const g = new THREE.Group();
+  const trunk = meshOf(GEO.treeTrunk, 0x5a3d22); trunk.position.y = 0.08; g.add(trunk);
+  const crown = meshOf(GEO.treeCone, 0x3f6b3a); crown.position.y = 0.34; g.add(crown);
+  return g;
+}
+function buildRock(): THREE.Mesh {
+  return meshOf(GEO.rock, 0x7d746a);
+}
+// Stable pseudo-random in [0,1) from tile coords + a salt, so scatter never jumps.
+function rnd(q: number, r: number, i: number): number {
+  const s = Math.sin(q * 127.1 + r * 311.7 + i * 74.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
 export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -323,8 +338,43 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
   const spriteGroup = new THREE.Group();
   scene.add(spriteGroup);
+  const scatterGroup = new THREE.Group();
+  scene.add(scatterGroup);
   const borderGroup = new THREE.Group();
   scene.add(borderGroup);
+
+  // Trees on forests, rocks on hills/mountains, denser on timber/ore deposits —
+  // only on fully-visible tiles (bounded by vision) and not where a unit/city sits.
+  function placeScatter(view: BoardView): void {
+    scatterGroup.clear();
+    const occupied = new Set(view.sprites.map((s) => s.q + "," + s.r));
+    for (const tv of view.tiles) {
+      if (tv.v !== 2 || occupied.has(tv.q + "," + tv.r)) continue;
+      const w = axialToWorld(tv.q, tv.r);
+      const top = topOf(tv.t);
+      let trees = tv.t === "forest" ? 3 : 0;
+      let rocks = tv.t === "mountains" ? 3 : tv.t === "hills" ? 1 : 0;
+      if (tv.res === "timber") trees = Math.max(trees, 4);
+      else if (tv.res === "iron" || tv.res === "stone" || tv.res === "silver") rocks = Math.max(rocks, 3);
+      for (let i = 0; i < trees; i += 1) {
+        const a = rnd(tv.q, tv.r, i) * Math.PI * 2;
+        const d = 0.2 + rnd(tv.q, tv.r, i + 10) * 0.5;
+        const t = buildTree();
+        t.scale.setScalar(0.7 + rnd(tv.q, tv.r, i + 20) * 0.5);
+        t.position.set(w.x + Math.cos(a) * d, top, w.z + Math.sin(a) * d);
+        scatterGroup.add(t);
+      }
+      for (let i = 0; i < rocks; i += 1) {
+        const a = rnd(tv.q, tv.r, i + 30) * Math.PI * 2;
+        const d = 0.15 + rnd(tv.q, tv.r, i + 40) * 0.5;
+        const s = 0.6 + rnd(tv.q, tv.r, i + 50) * 0.7;
+        const rk = buildRock();
+        rk.scale.setScalar(s);
+        rk.position.set(w.x + Math.cos(a) * d, top + 0.04 * s, w.z + Math.sin(a) * d);
+        scatterGroup.add(rk);
+      }
+    }
+  }
   const texCache = new Map<string, THREE.Texture>();
   const loader = new THREE.TextureLoader();
   let lastView: BoardView | null = null;
@@ -545,6 +595,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       buildTiles(view);
       paintTiles(view);
       placeSprites(view);
+      placeScatter(view);
       drawBorders(view);
       if (view.focus) {
         const w = axialToWorld(view.focus.q, view.focus.r);
