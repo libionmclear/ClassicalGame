@@ -235,9 +235,10 @@ function buildFigure(form: string, color: string, civ?: string, utype?: string):
   const armor = shade(color, 0);
   const legCol = shade(color, -0.3);
   // Gauls (Celts) fight bare-chested, daubed with blue woad; Roman legionaries get
-  // heavier armour and a taller crest.
+  // heavier armour and a taller crest; hoplites wear a tall Corinthian crest.
   const bareChest = civ === "gaul";
   const legionary = utype === "legionary";
+  const bigCrest = legionary || utype === "hoplite";
   // A little person: two legs, a torso, two arms, a head — helmeted for soldiers.
   const figure = (lift = 0, helmeted = true) => {
     for (const lx of [0.05, -0.05]) { const leg = meshOf(GEO.legThin, legCol); leg.position.set(lx, 0.09 + lift, 0); g.add(leg); }
@@ -253,19 +254,41 @@ function buildFigure(form: string, color: string, civ?: string, utype?: string):
       const plate = meshOf(GEO.torso, STEEL); plate.scale.set(1.08, 0.6, 1.08); plate.position.set(0, 0.33 + lift, 0.02); g.add(plate);
     }
     const h = meshOf(GEO.head, SKIN); h.position.set(0, 0.47 + lift, 0); g.add(h);
-    if (helmeted) addHelmet(g, 0.5 + lift, civ, legionary);
+    if (helmeted) addHelmet(g, 0.5 + lift, civ, bigCrest);
   };
   if (form === "spear") {
     figure();
-    const spear = meshOf(GEO.pole, WOOD); spear.position.set(0.14, 0.34, 0.02); g.add(spear);
-    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.13, 0.26, 0.03); g.add(sh);
+    const spear = meshOf(GEO.pole, WOOD); spear.position.set(0.14, 0.36, 0.02); g.add(spear);
+    if (utype === "hoplite") {
+      // The big round bronze aspis — the shield-wall of the phalanx.
+      const aspis = meshOf(GEO.dome, 0xb08d3a); aspis.scale.set(1.5, 0.45, 1.5); aspis.rotation.z = Math.PI / 2; aspis.position.set(-0.17, 0.3, 0.03); g.add(aspis);
+      const boss = meshOf(GEO.dome, 0x8a6a2a); boss.scale.set(0.5, 0.4, 0.5); boss.rotation.z = Math.PI / 2; boss.position.set(-0.2, 0.3, 0.03); g.add(boss);
+    } else {
+      const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.13, 0.26, 0.03); g.add(sh);
+    }
   } else if (form === "ranged") {
     figure();
     // A bent-stick bow held out front, with a straight string across it.
     const bow = meshOf(GEO.bow, DARKWOOD, false); bow.scale.set(1.35, 1.6, 1.35); bow.position.set(0.17, 0.33, 0.05); bow.rotation.z = Math.PI / 2; g.add(bow);
     const string = meshOf(GEO.pole, 0xd8c9a8, false); string.scale.set(0.5, 0.6, 0.5); string.position.set(0.19, 0.33, 0.05); g.add(string);
+  } else if (form === "mounted" && utype === "war-chariot") {
+    // Egypt — the war chariot: two horses abreast pulling a light cart + archer.
+    for (const hz of [0.15, -0.15]) {
+      const horse = meshOf(GEO.horse, WOOD); horse.scale.set(0.95, 0.85, 0.6); horse.position.set(0.16, 0.24, hz); g.add(horse);
+      for (const lx of [0.12, -0.12]) { const leg = meshOf(GEO.leg, DARKWOOD, false); leg.position.set(0.16 + lx, 0.12, hz); g.add(leg); }
+      const hh = meshOf(GEO.horse, WOOD); hh.scale.set(0.42, 0.4, 0.28); hh.position.set(0.46, 0.33, hz); hh.rotation.z = -0.3; g.add(hh);
+    }
+    const pole = meshOf(GEO.pole, WOOD, false); pole.scale.set(1, 0.55, 1); pole.rotation.z = Math.PI / 2; pole.position.set(0.14, 0.2, 0); g.add(pole);
+    const cart = meshOf(GEO.building, armor); cart.scale.set(1.9, 0.55, 1.35); cart.position.set(-0.22, 0.25, 0); g.add(cart);
+    for (const wz of [0.22, -0.22]) { const wheel = meshOf(GEO.column, DARKWOOD, false); wheel.scale.set(3.8, 0.14, 3.8); wheel.rotation.x = Math.PI / 2; wheel.position.set(-0.24, 0.12, wz); g.add(wheel); }
+    const ct = meshOf(GEO.torso, armor); ct.scale.set(0.9, 0.9, 0.9); ct.position.set(-0.24, 0.46, 0); g.add(ct);
+    const ch = meshOf(GEO.head, SKIN); ch.scale.setScalar(0.9); ch.position.set(-0.24, 0.62, 0); g.add(ch);
+    addHelmet(g, 0.65, civ);
+    const cbow = meshOf(GEO.bow, DARKWOOD, false); cbow.scale.set(1.3, 1.5, 1.3); cbow.rotation.z = Math.PI / 2; cbow.position.set(-0.1, 0.48, 0.05); g.add(cbow);
   } else if (form === "mounted") {
     const hy = 0.26; // horse back height
+    const cataphract = utype === "cataphract";
+    const horseArcher = utype === "horse-archer";
     const horse = meshOf(GEO.horse, WOOD); horse.position.set(0, hy, 0); g.add(horse);
     for (const [lx, lz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) {
       const leg = meshOf(GEO.leg, DARKWOOD, false); leg.position.set(lx, 0.13, lz); g.add(leg);
@@ -275,13 +298,22 @@ function buildFigure(form: string, color: string, civ?: string, utype?: string):
     const headM = meshOf(GEO.horse, WOOD); headM.scale.set(0.62, 0.5, 0.42); headM.position.set(0.38, hy + 0.19, 0); headM.rotation.z = -0.35; g.add(headM);
     for (const ez of [0.05, -0.05]) { const ear = meshOf(GEO.tusk, WOOD, false); ear.scale.set(0.55, 0.55, 0.55); ear.position.set(0.31, hy + 0.3, ez); g.add(ear); }
     const tail = meshOf(GEO.arm, WOOD); tail.scale.set(0.9, 0.9, 0.9); tail.position.set(-0.25, hy + 0.02, 0); tail.rotation.z = 0.9; g.add(tail);
-    // Rider astride and FACING FORWARD (+x, toward the head): arms reach to the reins.
+    // Cataphract: full barding (armour) draped over the horse.
+    if (cataphract) { const barding = meshOf(GEO.building, 0x9198a2); barding.scale.set(1.85, 0.55, 0.95); barding.position.set(0, hy + 0.01, 0); g.add(barding); }
+    // Rider astride and FACING FORWARD (+x, toward the head).
     const seatY = hy + 0.06;
-    const torso = meshOf(GEO.torso, armor); torso.scale.set(0.92, 0.9, 0.92); torso.position.set(-0.02, seatY + 0.14, 0); g.add(torso);
-    for (const az of [0.08, -0.08]) { const a = meshOf(GEO.arm, armor); a.scale.set(0.8, 0.8, 0.8); a.position.set(0.13, seatY + 0.12, az); a.rotation.z = 1.05; g.add(a); }
+    const riderCol = cataphract ? STEEL : armor;
+    const torso = meshOf(GEO.torso, riderCol); torso.scale.set(0.92, 0.9, 0.92); torso.position.set(-0.02, seatY + 0.14, 0); g.add(torso);
     const rh = meshOf(GEO.head, SKIN); rh.scale.set(0.92, 0.92, 0.92); rh.position.set(0.0, seatY + 0.32, 0); g.add(rh);
-    addHelmet(g, seatY + 0.35, civ);
-    for (const side of [1, -1]) { const leg = meshOf(GEO.legThin, legCol); leg.scale.set(1, 1.15, 1); leg.position.set(0.02, seatY, side * 0.11); leg.rotation.x = side * 0.6; g.add(leg); }
+    addHelmet(g, seatY + 0.35, civ, cataphract);
+    if (horseArcher) {
+      // The Parthian shot: a drawn bow instead of reins.
+      const bow = meshOf(GEO.bow, DARKWOOD, false); bow.scale.set(1.25, 1.4, 1.25); bow.rotation.z = Math.PI / 2; bow.position.set(0.08, seatY + 0.16, 0.07); g.add(bow);
+      for (const az of [0.06, -0.06]) { const a = meshOf(GEO.arm, riderCol); a.scale.set(0.8, 0.8, 0.8); a.position.set(0.08, seatY + 0.15, az); a.rotation.z = 1.2; g.add(a); }
+    } else {
+      for (const az of [0.08, -0.08]) { const a = meshOf(GEO.arm, riderCol); a.scale.set(0.8, 0.8, 0.8); a.position.set(0.13, seatY + 0.12, az); a.rotation.z = 1.05; g.add(a); }
+    }
+    for (const side of [1, -1]) { const leg = meshOf(GEO.legThin, cataphract ? STEEL : legCol); leg.scale.set(1, 1.15, 1); leg.position.set(0.02, seatY, side * 0.11); leg.rotation.x = side * 0.6; g.add(leg); }
   } else if (form === "elephant") {
     const body = meshOf(GEO.bigBody, GREY); body.position.set(0, 0.3, 0); g.add(body);
     for (const [lx, lz] of [[0.2, 0.11], [0.2, -0.11], [-0.2, 0.11], [-0.2, -0.11]]) {
@@ -290,7 +322,11 @@ function buildFigure(form: string, color: string, civ?: string, utype?: string):
     const head = meshOf(GEO.head, GREY); head.scale.setScalar(1.5); head.position.set(0.3, 0.36, 0); g.add(head);
     const tr = meshOf(GEO.trunk, GREY); tr.position.set(0.4, 0.24, 0); tr.rotation.z = 0.7; g.add(tr);
     for (const tz of [0.07, -0.07]) { const tk = meshOf(GEO.tusk, IVORY); tk.position.set(0.4, 0.26, tz); tk.rotation.z = 2.0; g.add(tk); }
-    const howdah = meshOf(GEO.building, shade(color, 0)); howdah.scale.set(0.5, 0.4, 0.7); howdah.position.set(-0.05, 0.56, 0); g.add(howdah);
+    // Carthage's war beast carries a crenellated fighting-tower with a crew.
+    const howdah = meshOf(GEO.building, shade(color, 0)); howdah.scale.set(0.55, 0.6, 0.75); howdah.position.set(-0.05, 0.58, 0); g.add(howdah);
+    for (const cz of [0.13, 0, -0.13]) { const cr = meshOf(GEO.building, shade(color, -0.12)); cr.scale.set(0.13, 0.28, 0.13); cr.position.set(-0.05, 0.74, cz); g.add(cr); }
+    const crewT = meshOf(GEO.torso, armor); crewT.scale.set(0.68, 0.68, 0.68); crewT.position.set(-0.05, 0.82, 0); g.add(crewT);
+    const crewH = meshOf(GEO.head, SKIN); crewH.scale.setScalar(0.68); crewH.position.set(-0.05, 0.94, 0); g.add(crewH);
   } else if (form === "siege") {
     const b = meshOf(GEO.siegeBase, WOOD); b.position.set(0, 0.1, 0); g.add(b);
     const arm = meshOf(GEO.pole, DARKWOOD); arm.scale.set(1, 0.55, 1); arm.position.set(0, 0.3, 0); arm.rotation.z = -0.7; g.add(arm);
@@ -314,8 +350,11 @@ function buildFigure(form: string, color: string, civ?: string, utype?: string):
   } else {
     // infantry / heavy
     figure();
-    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.13, 0.26, 0.04); g.add(sh);
-    const sword = meshOf(GEO.pole, STEEL); sword.scale.set(1, 0.42, 1); sword.position.set(0.14, 0.3, 0); g.add(sword);
+    const gaesatae = utype === "gaesatae";
+    if (!gaesatae) { const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.13, 0.26, 0.04); g.add(sh); }
+    // Gaesatae wield the long Celtic sword (and a gold torc) instead of a shield.
+    const sword = meshOf(GEO.pole, STEEL); sword.scale.set(1, gaesatae ? 0.78 : 0.42, 1); sword.position.set(0.15, gaesatae ? 0.38 : 0.3, 0); g.add(sword);
+    if (gaesatae) { const torc = meshOf(GEO.bow, 0xd9b45a, false); torc.scale.set(0.55, 0.55, 0.55); torc.rotation.x = Math.PI / 2; torc.position.set(0, 0.44, 0.02); g.add(torc); }
   }
   return g;
 }
