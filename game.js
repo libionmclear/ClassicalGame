@@ -98,6 +98,8 @@
   // Set true once a finished game's result has been recorded to the profile, so
   // the win/loss is counted exactly once (render runs many times per game).
   let resultRecorded = false;
+  // Civs already announced as destroyed, so we say it once each.
+  let announcedDead = {};
   // Where the player last pressed on the board — the in-play menu opens there.
   let lastBoardPointer = null;
   // The selection the floating menu was last positioned for (so it only re-anchors
@@ -1161,6 +1163,20 @@
     if (wounded) showCombatToast("🛡️ " + wounded + " of your " + (wounded === 1 ? "unit" : "units") + " took damage", "loss");
   }
 
+  // Announce (once) any civ that has just lost its last city.
+  function checkEliminations() {
+    if (!state || !state.players) return;
+    for (const p of state.players) {
+      const alive = p.cityIds && p.cityIds.length > 0;
+      if (alive || announcedDead[p.id]) continue;
+      announcedDead[p.id] = 1;
+      const nm = civName(p.id) || p.id;
+      if (p.id === HUMAN_ID) showCombatToast("☠️ " + nm + " has fallen!", "loss");
+      else showCombatToast("☠️ " + nm + " has been destroyed!", "win");
+      logAction("☠️ " + nm + " has been wiped from the map.");
+    }
+  }
+
   function apply(action) {
     try {
       const beforeSummary = action.type === "END_TURN" && action.playerId === HUMAN_ID ? snapshotHumanState() : null;
@@ -1172,7 +1188,8 @@
         action.type === "RUSH_PRODUCTION" ||
         action.type === "IMPROVE_TILE" ||
         action.type === "RESEARCH_TECH" ||
-        action.type === "RESOLVE_EVENT";
+        action.type === "RESOLVE_EVENT" ||
+        action.type === "RENAME_CITY";
       state = engine.applyAction(state, action);
       if (!keepSelection) clearSelection();
       else if (selectedCityId && !state.map.cities[selectedCityId]) clearSelection();
@@ -1180,8 +1197,10 @@
       render();
       // Snapshot (post my action, pre-AI) so we can report enemy combat after.
       const forcesBefore = snapshotHumanForces();
+      checkEliminations(); // your own capture may have just wiped a civ out
       runAiUntilHuman();
       reportEnemyCombat(forcesBefore);
+      checkEliminations(); // the AI may have eliminated someone on its turn
       saveGame();
 
       if (beforeSummary) {
@@ -1857,6 +1876,7 @@
   }
 
   function cityDisplayName(city) {
+    if (city.name) return city.name; // player-given name wins
     if (city.isCapital && CIV_CAPITAL[city.ownerId]) return CIV_CAPITAL[city.ownerId];
     return (CIV_ADJ[city.ownerId] || civName(city.ownerId)) + " city";
   }
@@ -1891,8 +1911,11 @@
       const q = selectedCity.queue || [];
       const banked = Math.floor(selectedCity.production || 0);
       const building = q.length ? " · Building " + itemName(q[0]) + " " + Math.min(banked, itemCost(q[0])) + "/" + itemCost(q[0]) : "";
+      const renameBtn = selectedCity.ownerId === HUMAN_ID
+        ? ' <button class="rename-btn" data-rename="1" title="Rename this city">✎</button>'
+        : "";
       selectionLineEl.innerHTML =
-        (selectedCity.isCapital ? "🏛️ " : "🏘️ ") + cityDisplayName(selectedCity) +
+        (selectedCity.isCapital ? "🏛️ " : "🏘️ ") + cityDisplayName(selectedCity) + renameBtn +
         '<span class="sel-sub"> Pop ' + selectedCity.population + " · HP " + selectedCity.hp + "/" + selectedCity.maxHp +
         " · Growth " + Math.floor(selectedCity.food || 0) + "/" + need +
         " · ⚒️ " + banked + building + "</span>";
@@ -2439,6 +2462,7 @@
     // stale "Victory/Defeat" overlay even if something below misbehaves.
     resultModalEl.classList.add("hidden");
     if (menuOverlayEl) menuOverlayEl.classList.add("hidden");
+    announcedDead = {};
 
     const choice = (mapSizeSelectEl && mapSizeSelectEl.value) || "medium";
     const chosenCiv = (civSelectEl && civSelectEl.value) || "rome";
@@ -2658,6 +2682,20 @@
     });
   }
 
+  // Rename a city: the ✎ next to a city's name prompts for a new one.
+  if (selectionLineEl) {
+    selectionLineEl.addEventListener("click", function (e) {
+      const t = e.target;
+      if (!t || !t.dataset || !t.dataset.rename || !selectedCityId) return;
+      const city = state.map.cities[selectedCityId];
+      if (!city || city.ownerId !== HUMAN_ID) return;
+      const name = window.prompt("Name this city:", cityDisplayName(city));
+      if (name && name.trim()) {
+        apply({ type: "RENAME_CITY", playerId: HUMAN_ID, cityId: selectedCityId, name: name.trim().slice(0, 24) });
+      }
+    });
+  }
+
   // ===== Codex (browsable historical encyclopedia) =====
   function buildCodex() {
     if (!codexBodyEl) return;
@@ -2732,6 +2770,13 @@
     if (researchCloseBtn) researchCloseBtn.addEventListener("click", function () { researchModalEl.classList.add("hidden"); });
     researchModalEl.addEventListener("click", function (e) {
       if (e.target === researchModalEl) researchModalEl.classList.add("hidden");
+    });
+  }
+
+  // ===== Standings (openable from the bottom-right) =====
+  if (standingsBtn && standingsPanelEl) {
+    standingsBtn.addEventListener("click", function () {
+      standingsPanelEl.classList.toggle("hidden");
     });
   }
 

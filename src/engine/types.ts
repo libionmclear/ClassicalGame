@@ -88,6 +88,8 @@ export interface Unit {
 export interface City {
   id: string;
   ownerId: string;
+  /** Player-facing name (defaults to a generated one if unset). */
+  name?: string;
   position: Coord;
   population: number;
   hp: number;
@@ -272,6 +274,13 @@ export interface UpgradeUnitAction {
   unitId: string;
 }
 
+export interface RenameCityAction {
+  type: "RENAME_CITY";
+  playerId: string;
+  cityId: string;
+  name: string;
+}
+
 export interface ImproveTileAction {
   type: "IMPROVE_TILE";
   playerId: string;
@@ -298,7 +307,8 @@ export type GameAction =
   | RushProductionAction
   | EstablishTradeRouteAction
   | ImproveTileAction
-  | UpgradeUnitAction;
+  | UpgradeUnitAction
+  | RenameCityAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

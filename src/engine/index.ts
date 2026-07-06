@@ -18,7 +18,7 @@ import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction } from "./types";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -461,6 +461,15 @@ function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTA
     const attackerOwner = state.playersById[attacker.ownerId];
     attackerOwner.unitIds = attackerOwner.unitIds.filter((id) => id !== attacker.id);
   }
+}
+
+function applyRenameCity(state: GameState, action: RenameCityAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const city = cityAt(state, action.cityId);
+  if (city.ownerId !== action.playerId) throw new Error("Cannot rename an enemy city");
+  const name = action.name.trim().slice(0, 24);
+  if (!name) throw new Error("City name cannot be empty");
+  city.name = name;
 }
 
 function computeCityAttackDamage(state: GameState, attacker: Unit, city: City): number {
@@ -1524,6 +1533,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "UPGRADE_UNIT":
       applyUpgradeUnit(state, action);
+      break;
+    case "RENAME_CITY":
+      applyRenameCity(state, action);
       break;
     default: {
       const unknownAction: never = action;

@@ -400,6 +400,13 @@ test("a ranged attacker holds its ground after a kill", () => {
   assert.deepEqual(state.map.units.u2.position, { q: 2, r: 0 }); // did NOT advance
 });
 
+test("a player renames their own city but not an enemy's", () => {
+  let state = buildState();
+  state = applyAction(state, { type: "RENAME_CITY", playerId: "p1", cityId: "c1", name: "Roma Aeterna" });
+  assert.equal(state.map.cities.c1.name, "Roma Aeterna");
+  assert.throws(() => applyAction(state, { type: "RENAME_CITY", playerId: "p1", cityId: "c2", name: "Nope" }));
+});
+
 test("victors march into a captured city", () => {
   let state = buildState();
   state.map.units.u3.position = { q: 3, r: 1 }; // move the garrison out of the tile
