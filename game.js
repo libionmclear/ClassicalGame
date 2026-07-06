@@ -394,6 +394,19 @@
     2: "Age II — Kingdoms",
     3: "Age III — Empires"
   };
+  // An icon per tech, so the tree reads at a glance.
+  const TECH_ICONS = {
+    "bronze-working": "🔨", sailing: "⛵", writing: "📜", masonry: "🧱", archery: "🏹", irrigation: "💧",
+    "phalanx-doctrine": "🛡️", "skirmish-doctrine": "🏃", "temple-economy": "⛩️", coinage: "🪙",
+    "iron-working": "⚔️", "combined-arms": "🎖️", "open-sea-sailing": "🌊", engineering: "🏗️",
+    "horseback-riding": "🐎", "mountain-paths": "⛰️", "caravan-logistics": "🐪", republic: "🏛️",
+    monarchy: "👑", "ramming-fleets": "🚢", "merchant-marine": "⚓", "roads-logistics": "🛣️",
+    siegecraft: "🎯", medicine: "⚕️", "law-administration": "⚖️", "currency-reform": "💰",
+    cartography: "🗺️", assimilation: "🤝", "tribute-empire": "🏰", pottery: "🏺", mathematics: "📐",
+    philosophy: "💭", metallurgy: "🔩", aqueducts: "🌉", astronomy: "🔭", rhetoric: "🗣️",
+    "hoplite-phalanx": "🛡️", chariotry: "🏇", "legionary-system": "🦅", "war-elephants": "🐘",
+    "iron-mastery": "🗡️", "horse-archery": "🏇"
+  };
   // Display name + one-line sourced history note (the educational layer).
   const TECH_INFO = {
     "bronze-working": { name: "Bronze Working", note: "Alloying copper and tin armed the first city militias (~3000 BC). EFFECT: unlocks the Spearman — your anti-cavalry line." },
@@ -2358,12 +2371,30 @@
     }
   }
 
+  // Highlight (or clear) the whole prerequisite chain of a tech — "what to
+  // research to get here".
+  function highlightTechChain(id, techs, cardById, on) {
+    const seen = {};
+    (function walk(t) {
+      const rule = techs[t];
+      if (!rule) return;
+      for (const p of rule.prerequisites || []) {
+        if (seen[p]) continue;
+        seen[p] = 1;
+        if (cardById[p]) cardById[p].classList.toggle("pr-chain", on);
+        walk(p);
+      }
+    })(id);
+  }
+
   function renderTechTree(victory) {
     if (!techTreeEl) return;
     const techs = engine.TECHS || {};
     const player = human();
     const canAct = isHumanTurn() && !victory.winnerId;
     techTreeEl.innerHTML = "";
+    techTreeEl.className = "tech-tree-grid";
+    const cardById = {};
 
     for (const age of [1, 2, 3]) {
       // Show shared techs plus only this player's own civ-unique techs.
@@ -2371,11 +2402,15 @@
         (id) => techs[id].age === age && (!techs[id].civ || civMatches(player, techs[id].civ))
       );
       if (!ids.length) continue;
+      // Roots first, so a column reads top-to-bottom like a tree.
+      ids.sort((a, b) => (techs[a].prerequisites || []).length - (techs[b].prerequisites || []).length);
 
+      const col = document.createElement("div");
+      col.className = "tech-col";
       const title = document.createElement("div");
       title.className = "tech-age-title";
       title.textContent = AGE_LABELS[age] || "Age " + age;
-      techTreeEl.appendChild(title);
+      col.appendChild(title);
 
       for (const id of ids) {
         const rule = techs[id];
@@ -2383,40 +2418,43 @@
         const researched = player.techs.includes(id);
         const available = !researched && canResearchSafe(player, id);
         const forkClosed =
-          !researched &&
-          !available &&
-          rule.forkGroup &&
-          player.forkChoices[rule.forkGroup] &&
-          player.forkChoices[rule.forkGroup] !== rule.forkBranch;
-
+          !researched && !available && rule.forkGroup &&
+          player.forkChoices[rule.forkGroup] && player.forkChoices[rule.forkGroup] !== rule.forkBranch;
         const cost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id) : (engine.researchCost ? engine.researchCost(id) : 0);
         const affordable = player.science >= cost;
 
-        const item = document.createElement("button");
-        item.className =
-          "tech-item " +
-          (researched ? "done" : available ? "avail" : forkClosed ? "closed" : "locked") +
-          (rule.forkGroup ? " is-fork" : "");
-        item.disabled = !(available && affordable && canAct);
-        item.title = info.note + (available ? "\nCost: " + cost + " science" : "");
+        const prereqs = (rule.prerequisites || []).map(function (p) {
+          return { name: (TECH_INFO[p] && TECH_INFO[p].name) || p, have: player.techs.includes(p) };
+        });
+        const needsHtml = prereqs.length && !researched && !available
+          ? '<span class="tech-needs">needs ' + prereqs.map(function (p) {
+              return '<span class="' + (p.have ? "pr-have" : "pr-miss") + '">' + p.name + "</span>";
+            }).join(" + ") + "</span>"
+          : "";
 
-        const stateLabel = researched
-          ? "✓ known"
-          : available
-            ? cost + " 🧪" + (affordable ? (rule.forkGroup ? " ⑂" : "") : " ⏳")
-            : forkClosed
-              ? "path closed"
-              : "locked";
-        item.innerHTML =
-          '<span class="tech-name">' + info.name + "</span>" +
-          '<span class="tech-state">' + stateLabel + "</span>";
+        const card = document.createElement("button");
+        card.className = "tech-card " + (researched ? "done" : available ? "avail" : forkClosed ? "closed" : "locked") + (rule.forkGroup ? " is-fork" : "");
+        card.disabled = !(available && affordable && canAct);
+        card.dataset.tech = id;
+        card.title = info.name + " — " + info.note +
+          (researched ? "\n✓ Researched." : available ? "\nCost: " + cost + " science" : prereqs.length ? "\nRequires: " + prereqs.map(function (p) { return p.name; }).join(", ") : "");
 
-        item.addEventListener("click", function () {
-          if (item.disabled) return;
+        const badge = researched ? "✓" : available ? (cost + " 🧪" + (affordable ? (rule.forkGroup ? " ⑂" : "") : " ⏳")) : forkClosed ? "closed" : "🔒";
+        card.innerHTML =
+          '<span class="tech-ico">' + (TECH_ICONS[id] || "🔬") + "</span>" +
+          '<span class="tech-body"><span class="tech-name">' + info.name + "</span>" + needsHtml + "</span>" +
+          '<span class="tech-state">' + badge + "</span>";
+
+        card.addEventListener("click", function () {
+          if (card.disabled) return;
           apply({ type: "RESEARCH_TECH", playerId: HUMAN_ID, techId: id });
         });
-        techTreeEl.appendChild(item);
+        card.addEventListener("mouseenter", function () { highlightTechChain(id, techs, cardById, true); });
+        card.addEventListener("mouseleave", function () { highlightTechChain(id, techs, cardById, false); });
+        col.appendChild(card);
+        cardById[id] = card;
       }
+      techTreeEl.appendChild(col);
     }
   }
 

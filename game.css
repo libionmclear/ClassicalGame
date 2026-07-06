@@ -1813,6 +1813,109 @@ details.panel-collapse > summary {
   cursor: default;
 }
 
+/* ===== Research tree (columns by age, icons, prereq chain) ===== */
+.research-card {
+  width: min(960px, 96vw);
+  max-width: 96vw;
+}
+
+.tech-tree-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-height: 64vh;
+  overflow: auto;
+  padding: 2px;
+}
+
+.tech-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tech-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: #16283f;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.tech-card .tech-ico {
+  font-size: 1.2rem;
+  line-height: 1;
+  flex: none;
+  filter: grayscale(0.4);
+}
+
+.tech-card .tech-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tech-card .tech-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tech-card .tech-needs {
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.tech-needs .pr-have { color: #7ed957; }
+.tech-needs .pr-miss { color: #e0a05a; }
+
+.tech-card .tech-state {
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.tech-card.is-fork { border-left: 3px solid #b98bd8; }
+
+.tech-card.done { background: #22331f; }
+.tech-card.done .tech-ico { filter: none; }
+.tech-card.done .tech-name { color: #a9d69a; }
+.tech-card.done .tech-state { color: #7ed957; }
+
+.tech-card.avail {
+  border-color: var(--accent);
+  background: #1a3252;
+}
+.tech-card.avail .tech-ico { filter: none; }
+.tech-card.avail .tech-name { color: #f3d59a; }
+.tech-card.avail:hover:not(:disabled) { filter: brightness(1.12); }
+
+.tech-card.locked,
+.tech-card.closed { opacity: 0.62; cursor: not-allowed; }
+.tech-card.closed .tech-name { text-decoration: line-through; }
+.tech-card:disabled { cursor: default; }
+
+/* Hovering a tech lights up the whole path you'd research to reach it. */
+.tech-card.pr-chain {
+  outline: 2px solid var(--gold);
+  outline-offset: -1px;
+  background: #2a3a24;
+}
+
+@media (max-width: 720px) {
+  .tech-tree-grid { grid-template-columns: 1fr; }
+}
+
 .action-log {
   max-height: 200px;
   overflow: auto;

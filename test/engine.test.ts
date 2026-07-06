@@ -635,20 +635,26 @@ function embarkState(techs: string[]) {
   });
 }
 
-test("a land army can embark onto water only once its people can sail", () => {
-  const withSail = embarkState(["sailing"]);
+test("a land army embarks only from a harbour, and only with sailing", () => {
+  const withPort = embarkState(["sailing"]);
+  withPort.map.cities.port = { id: "port", ownerId: "a", position: { q: 0, r: 0 }, population: 2, hp: 40, maxHp: 40, buildings: ["harbor"] };
+  const noPort = embarkState(["sailing"]); // can sail, but no harbour to launch from
   const noSail = embarkState([]);
   const ctx = { ownerId: "a", domain: "land" as const };
   assert.ok(
-    Number.isFinite(movementCost(withSail, ctx, { q: 0, r: 0 }, { q: 1, r: 0 })),
-    "a sailing civ's land unit can embark onto the coast"
+    Number.isFinite(movementCost(withPort, ctx, { q: 0, r: 0 }, { q: 1, r: 0 })),
+    "from a harbour city a sailing civ can embark onto the coast"
+  );
+  assert.ok(
+    !Number.isFinite(movementCost(noPort, ctx, { q: 0, r: 0 }, { q: 1, r: 0 })),
+    "no harbour, no putting to sea"
   );
   assert.ok(
     !Number.isFinite(movementCost(noSail, ctx, { q: 0, r: 0 }, { q: 1, r: 0 })),
     "without sailing it cannot enter the water"
   );
-  // Open sea still needs the deeper tech even with sailing.
-  assert.ok(!Number.isFinite(movementCost(withSail, ctx, { q: 1, r: 0 }, { q: 2, r: 0 })));
+  // Open sea still needs the deeper tech even from a harbour.
+  assert.ok(!Number.isFinite(movementCost(withPort, ctx, { q: 1, r: 0 }, { q: 2, r: 0 })));
 });
 
 test("an embarked army is a soft target and cannot attack", () => {

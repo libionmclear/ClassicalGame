@@ -8,6 +8,14 @@ interface UnitMovementContext {
   mounted?: boolean;
 }
 
+// Is there a friendly city WITH a Harbour on this tile? (the only place troops
+// may put to sea).
+function hasHarbourAt(state: GameState, c: Coord, ownerId: string): boolean {
+  for (const city of Object.values(state.map.cities)) {
+    if (city.ownerId === ownerId && city.position.q === c.q && city.position.r === c.r && (city.buildings ?? []).includes("harbor")) return true;
+  }
+  return false;
+}
 // A tile "touches" a river if any of its six edges carries one.
 function touchesRiver(state: GameState, c: Coord): boolean {
   for (const n of neighborsOf(c)) {
@@ -28,6 +36,11 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
   if (terrain.navalOnly && unit.domain !== "naval") {
     const owner = state.playersById[unit.ownerId];
     if (!owner || !owner.techs.includes("sailing")) return Number.POSITIVE_INFINITY;
+    // No sea voyage without a port: a land unit can only EMBARK (step from land
+    // onto water) from one of its own cities that has a Harbour.
+    const fromTile = state.map.tiles[keyOf(from)];
+    const leavingLand = fromTile && !(TERRAIN[fromTile.terrain] && TERRAIN[fromTile.terrain].navalOnly);
+    if (leavingLand && !hasHarbourAt(state, from, unit.ownerId)) return Number.POSITIVE_INFINITY;
   }
   if (!terrain.navalOnly && unit.domain === "naval") return Number.POSITIVE_INFINITY;
 
