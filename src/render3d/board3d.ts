@@ -882,11 +882,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     else if (tv.h === 1) c.lerp(GREEN, 0.4);
     else if (tv.h === 5) c.lerp(PATH, 0.4);
     if (tv.h === 6) c.lerp(WHITE, 0.55);
-    // Weather tints the visible ground: overcast rain, grey storm, pale fog, warm heat.
-    if (tv.wx === "rain") c.lerp(new THREE.Color(0x4a5a6e), 0.28);
-    else if (tv.wx === "storm") c.lerp(new THREE.Color(0x2f3742), 0.42);
-    else if (tv.wx === "fog") c.lerp(new THREE.Color(0xb9c2c9), 0.4);
-    else if (tv.wx === "heat") c.lerp(new THREE.Color(0xd88a3a), 0.16);
+    // Weather gives a SUBTLE atmospheric cast — never enough to wash a visible
+    // tile out to the pale "undiscovered" look.
+    if (tv.wx === "rain") c.lerp(new THREE.Color(0x4a5a6e), 0.15);
+    else if (tv.wx === "storm") c.lerp(new THREE.Color(0x2f3742), 0.26);
+    else if (tv.wx === "fog") c.lerp(new THREE.Color(0xaab4bc), 0.18);
+    else if (tv.wx === "heat") c.lerp(new THREE.Color(0xd88a3a), 0.11);
     return c;
   }
 
@@ -1026,7 +1027,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
 
   // Rivers: a blue ribbon along the shared edge between two tiles.
-  const riverGeo = new THREE.BoxGeometry(SIZE * 1.02, 0.06, 0.13);
+  const riverGeo = new THREE.BoxGeometry(1, 0.06, 0.17);
   const riverMat = new THREE.MeshStandardMaterial({ color: 0x3f7fd0, roughness: 0.5, metalness: 0.1, emissive: 0x0c2a55, emissiveIntensity: 0.3 });
   let riverMesh: THREE.InstancedMesh | null = null;
   // Roads: a dirt ribbon along the centre line joining two adjacent tiles/cities.
@@ -1089,7 +1090,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     for (const tv of view.tiles) terrainByKey[tv.q + "," + tv.r] = tv.t;
     const heightOf = (q: number, r: number): number => topOf(terrainByKey[q + "," + r] || "plains");
     roadMesh = drawEdges(view.roads, roadGeo, roadMat, 0.05, true, heightOf, roadMesh);
-    riverMesh = drawEdges(view.rivers, riverGeo, riverMat, 0.04, false, heightOf, riverMesh);
+    // Rivers flow ALONG the path (centre to centre) like roads, so consecutive
+    // segments join into one continuous waterway instead of disjoint edge-bars.
+    riverMesh = drawEdges(view.rivers, riverGeo, riverMat, 0.04, true, heightOf, riverMesh);
   }
 
   function pickIndex(cx: number, cy: number): number {
