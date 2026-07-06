@@ -245,12 +245,22 @@ function buildFigure(form: string, color: string, civ?: string): THREE.Group {
     figure();
     const bow = meshOf(GEO.bow, WOOD); bow.position.set(0.14, 0.3, 0); bow.rotation.z = Math.PI / 2; g.add(bow);
   } else if (form === "mounted") {
-    const horse = meshOf(GEO.horse, WOOD); horse.position.set(0, 0.24, 0); g.add(horse);
+    const hy = 0.26; // horse back height
+    const horse = meshOf(GEO.horse, WOOD); horse.position.set(0, hy, 0); g.add(horse);
     for (const [lx, lz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) {
-      const leg = meshOf(GEO.leg, DARKWOOD, false); leg.position.set(lx, 0.11, lz); g.add(leg);
+      const leg = meshOf(GEO.leg, DARKWOOD, false); leg.position.set(lx, 0.13, lz); g.add(leg);
     }
-    const neck = meshOf(GEO.head, WOOD); neck.position.set(0.24, 0.36, 0); g.add(neck);
-    figure(0.26);
+    // A proper neck sloping up to the head, plus a tail.
+    const neck = meshOf(GEO.arm, WOOD); neck.scale.set(1.8, 1.05, 1.8); neck.position.set(0.24, hy + 0.11, 0); neck.rotation.z = -0.7; g.add(neck);
+    const hhead = meshOf(GEO.head, WOOD); hhead.scale.set(1.05, 0.75, 0.7); hhead.position.set(0.33, hy + 0.2, 0); g.add(hhead);
+    const tail = meshOf(GEO.arm, WOOD); tail.scale.set(0.9, 0.9, 0.9); tail.position.set(-0.25, hy + 0.02, 0); tail.rotation.z = 0.9; g.add(tail);
+    // Rider SITS astride: torso on the horse's back, legs hanging down each flank.
+    const seatY = hy + 0.06;
+    const torso = meshOf(GEO.torso, armor); torso.scale.set(0.92, 0.9, 0.92); torso.position.set(-0.02, seatY + 0.14, 0); g.add(torso);
+    for (const az of [0.1, -0.1]) { const a = meshOf(GEO.arm, armor); a.scale.set(0.85, 0.85, 0.85); a.position.set(0.02, seatY + 0.14, az); a.rotation.x = az > 0 ? -0.3 : 0.3; g.add(a); }
+    const rh = meshOf(GEO.head, SKIN); rh.scale.set(0.92, 0.92, 0.92); rh.position.set(-0.02, seatY + 0.32, 0); g.add(rh);
+    addHelmet(g, seatY + 0.35, civ);
+    for (const side of [1, -1]) { const leg = meshOf(GEO.legThin, legCol); leg.scale.set(1, 1.15, 1); leg.position.set(0.0, seatY, side * 0.11); leg.rotation.x = side * 0.6; g.add(leg); }
   } else if (form === "elephant") {
     const body = meshOf(GEO.bigBody, GREY); body.position.set(0, 0.3, 0); g.add(body);
     for (const [lx, lz] of [[0.2, 0.11], [0.2, -0.11], [-0.2, 0.11], [-0.2, -0.11]]) {
@@ -463,6 +473,43 @@ function buildAnimal(color: number): THREE.Group {
   const head = meshOf(GEO.head, color); head.scale.setScalar(0.7); head.position.set(0.14, 0.17, 0); g.add(head);
   return g;
 }
+// Tile improvements, drawn as a small distinct structure on the ground.
+function buildImprovement(imp: string): THREE.Group {
+  const g = new THREE.Group();
+  if (imp === "farm") {
+    for (let i = 0; i < 4; i += 1) {
+      const row = meshOf(GEO.beam, i % 2 ? 0xc9b061 : 0x8f9c4c, false);
+      row.scale.set(0.46, 0.5, 0.85); row.position.set(-0.18 + i * 0.12, 0.03, 0); g.add(row);
+    }
+  } else if (imp === "vineyard") {
+    for (let i = 0; i < 3; i += 1) for (let j = 0; j < 3; j += 1) {
+      const v = meshOf(GEO.treeCone, 0x3f6b3a, false); v.scale.set(0.26, 0.55, 0.26);
+      v.position.set(-0.16 + i * 0.16, 0.05, -0.16 + j * 0.16); g.add(v);
+    }
+  } else if (imp === "lumber-camp") {
+    for (let i = 0; i < 3; i += 1) {
+      const log = meshOf(GEO.trunk, i % 2 ? 0x6b4a2b : 0x7a5636); log.scale.set(2.2, 2.2, 2.2);
+      log.rotation.x = Math.PI / 2; log.position.set(-0.08, 0.06 + i * 0.055, -0.12 + (i % 2) * 0.03); g.add(log);
+    }
+    const stump = meshOf(GEO.treeTrunk, 0x5a3d22); stump.scale.set(1.3, 0.9, 1.3); stump.position.set(0.15, 0.06, 0.12); g.add(stump);
+  } else if (imp === "quarry") {
+    const mound = meshOf(GEO.rock, 0xcabf9b); mound.scale.set(1.5, 1.0, 1.5); mound.position.set(-0.08, 0.07, -0.02); g.add(mound);
+    for (let i = 0; i < 3; i += 1) { const b = meshOf(GEO.building, 0xd6cca6); b.scale.set(0.42, 0.4, 0.42); b.position.set(0.12 - i * 0.02, 0.06 + i * 0.07, 0.1); g.add(b); }
+  } else if (imp === "mine") {
+    const mound = meshOf(GEO.rock, 0x7d746a); mound.scale.set(1.7, 1.3, 1.7); mound.position.set(-0.04, 0.08, 0); g.add(mound);
+    const adit = meshOf(GEO.building, 0x241f1b, false); adit.scale.set(0.34, 0.5, 0.3); adit.position.set(0.12, 0.09, 0); g.add(adit);
+    const beam = meshOf(GEO.column, 0x4a331f, false); beam.scale.set(1, 0.7, 1); beam.position.set(0.12, 0.13, 0); g.add(beam);
+  } else if (imp === "pasture") {
+    const cow = buildAnimal(0x8a6a44); cow.scale.setScalar(0.9); g.add(cow);
+    for (let i = 0; i < 5; i += 1) { const a = (i / 5) * Math.PI * 2; const post = meshOf(GEO.column, 0x6b4a2b, false); post.scale.set(0.8, 0.5, 0.8); post.position.set(Math.cos(a) * 0.24, 0.05, Math.sin(a) * 0.24); g.add(post); }
+  } else if (imp === "trade-post") {
+    const tent = meshOf(GEO.thatch, 0xd6b678); tent.scale.set(0.95, 0.85, 0.95); tent.position.set(0, 0.1, 0); g.add(tent);
+    const crate = meshOf(GEO.building, 0x8a6a44); crate.scale.set(0.4, 0.4, 0.4); crate.position.set(0.16, 0.05, 0.1); g.add(crate);
+  } else if (imp !== "road") {
+    const m = meshOf(GEO.building, 0x9a8f7a); m.scale.set(0.4, 0.4, 0.4); m.position.set(0, 0.06, 0); g.add(m);
+  }
+  return g;
+}
 // A small coloured cone prop (wheat sheaf, vine bush, reed, …).
 function buildTuft(color: number, h: number, wide = 0.5): THREE.Mesh {
   const m = meshOf(GEO.treeCone, color, false);
@@ -558,6 +605,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     scatterGroup.clear();
     const occupied = new Set(view.sprites.map((s) => s.q + "," + s.r));
     for (const tv of view.tiles) {
+      // Improvements are ground works — show them on any discovered tile, even
+      // under a unit, so a farm/mine/vineyard is always visible.
+      if (tv.imp && tv.imp !== "road" && tv.v >= 1) {
+        const wp = axialToWorld(tv.q, tv.r);
+        const im = buildImprovement(tv.imp);
+        im.position.set(wp.x, topOf(tv.t) + 0.01, wp.z);
+        scatterGroup.add(im);
+      }
       if (tv.v !== 2 || occupied.has(tv.q + "," + tv.r)) continue;
       const w = axialToWorld(tv.q, tv.r);
       const top = topOf(tv.t);
