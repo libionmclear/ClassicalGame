@@ -54,6 +54,11 @@
   const researchBtn = document.getElementById("research-btn");
   const researchModalEl = document.getElementById("research-modal");
   const researchCloseBtn = document.getElementById("research-close-btn");
+  const menuBtn = document.getElementById("menu-btn");
+  const menuOverlayEl = document.getElementById("menu-overlay");
+  const menuCloseBtn = document.getElementById("menu-close");
+  const fullscreenBtn = document.getElementById("fullscreen-btn");
+  const turnIndicatorEl = document.getElementById("turn-indicator");
   const standingsBtn = document.getElementById("standings-btn");
   const standingsPanelEl = document.getElementById("standings-panel");
   const profileBtn = document.getElementById("profile-btn");
@@ -2013,6 +2018,13 @@
         '<span style="color:' + activeColor + ';font-weight:700">' + (current.civ || current.id) + "</span>" +
         (current.id === HUMAN_ID ? " (your move)" : " is moving…");
 
+      // Top-right corner: "Rome · Turn 1/60".
+      if (turnIndicatorEl) {
+        const nOf = state.turnLimit ? state.turn + "/" + state.turnLimit : String(state.turn);
+        turnIndicatorEl.innerHTML =
+          '<span class="ti-civ" style="color:' + activeColor + '">' + (current.civ || current.id) + "</span> · Turn " + nOf;
+      }
+
       const visibility = getHumanVisibility();
       const hints = getTileHintsForSelectedUnit(visibility);
       const territory = engine.computeTerritory ? engine.computeTerritory(state) : {};
@@ -2211,7 +2223,7 @@
       // a banked total (which read as spendable and confused players).
       { ico: "⚒️", val: (inc.production || 0) + "/t", lbl: "Labor", delta: null },
       { ico: "🪙", val: rome.gold, lbl: "Denarii", delta: inc.gold },
-      { ico: "🔬", val: rome.science, lbl: "Scientia", delta: inc.science }
+      { ico: "🧪", val: rome.science, lbl: "Scientia", delta: inc.science }
     ];
     resourceBarEl.innerHTML = resources
       .map(function (r) {
@@ -2259,6 +2271,7 @@
     // Clear any leftover result modal first, so a new game can never inherit a
     // stale "Victory/Defeat" overlay even if something below misbehaves.
     resultModalEl.classList.add("hidden");
+    if (menuOverlayEl) menuOverlayEl.classList.add("hidden");
 
     const choice = (mapSizeSelectEl && mapSizeSelectEl.value) || "medium";
     const chosenCiv = (civSelectEl && civSelectEl.value) || "rome";
@@ -2547,10 +2560,31 @@
     });
   }
 
-  // ===== Standings (openable from the bottom-right) =====
-  if (standingsBtn && standingsPanelEl) {
-    standingsBtn.addEventListener("click", function () {
-      standingsPanelEl.classList.toggle("hidden");
+  // ===== Menu overlay (setup + profile + deck) =====
+  function openMenu() { if (menuOverlayEl) menuOverlayEl.classList.remove("hidden"); }
+  function closeMenu() { if (menuOverlayEl) menuOverlayEl.classList.add("hidden"); }
+  if (menuBtn) menuBtn.addEventListener("click", openMenu);
+  if (menuCloseBtn) menuCloseBtn.addEventListener("click", closeMenu);
+  if (menuOverlayEl) menuOverlayEl.addEventListener("click", function (e) { if (e.target === menuOverlayEl) closeMenu(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMenu(); });
+
+  // ===== Fullscreen (let the board fill the screen) =====
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener("click", function () {
+      const el = document.documentElement;
+      if (!document.fullscreenElement) {
+        if (el.requestFullscreen) el.requestFullscreen().catch(function () {});
+        document.body.classList.add("fullscreen");
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen().catch(function () {});
+        document.body.classList.remove("fullscreen");
+      }
+      // Give the layout a tick, then tell the board to resize to the new box.
+      setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 60);
+    });
+    document.addEventListener("fullscreenchange", function () {
+      document.body.classList.toggle("fullscreen", !!document.fullscreenElement);
+      setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 60);
     });
   }
 
@@ -2567,7 +2601,12 @@
       if (player.science >= cost) ready += 1;
     }
     researchBtn.classList.toggle("glow", ready > 0 && isHumanTurn());
-    researchBtn.textContent = ready > 0 ? "🔬 Research (" + ready + ")" : "🔬 Research";
+    // Keep the flask glyph; show a small count in the badge span.
+    const badge = researchBtn.querySelector(".flask-badge");
+    if (badge) badge.textContent = ready > 0 ? "(" + ready + ")" : "";
+    researchBtn.title = ready > 0
+      ? "Research — " + ready + " discovery" + (ready === 1 ? "" : "ies") + " ready"
+      : "Research — open the tech tree";
   }
 
   // ===== Player profile, stats & badges (local, localStorage) =====

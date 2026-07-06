@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>HEGEMON Prototype</title>
+  <!-- Ancient, narrow but readable type: Cinzel (Roman display) + Spectral (body). -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Spectral:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="game.css" />
   <!-- Installable app (PWA) -->
   <link rel="manifest" href="/manifest.webmanifest" />
@@ -25,65 +29,77 @@
 <body>
   <main class="app">
     <header class="topbar">
-      <h1>HEGEMON Prototype</h1>
-      <div class="controls">
-        <label class="map-picker">
-          Map
-          <select id="map-size-select">
-            <optgroup label="Scenarios (real maps)" id="scenario-optgroup"></optgroup>
-            <optgroup label="Random maps">
-              <option value="small">Small</option>
-              <option value="medium" selected>Medium</option>
-              <option value="large">Large</option>
-              <option value="xl">XL</option>
-            </optgroup>
-          </select>
-        </label>
-        <label class="map-picker">
-          Play as
-          <select id="civ-select"></select>
-        </label>
-        <label class="map-picker">
-          Civs
-          <select id="player-count-select">
-            <option value="2">2</option>
-            <option value="3" selected>3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-          </select>
-        </label>
-        <label class="map-picker">
-          Difficulty
-          <select id="difficulty-select">
-            <option value="easy">Easy</option>
-            <option value="normal" selected>Normal</option>
-            <option value="hard">Hard</option>
-          </select>
-        </label>
-        <label class="map-picker">
-          Victory
-          <select id="victory-mode-select">
-            <option value="quick" selected>Quick (turn limit)</option>
-            <option value="domination">Domination</option>
-          </select>
-        </label>
-        <label class="map-picker" id="turns-picker">
-          Turns
-          <input id="turns-input" type="number" min="10" max="300" step="5" value="60" />
-        </label>
-        <button id="new-game-btn">New Game</button>
-        <button id="end-turn-btn">End Turn</button>
-        <button id="profile-btn" class="ghost-btn" title="Your profile, stats & badges">👤 Profile</button>
-        <button id="cards-btn" class="ghost-btn" title="Card collection & packs">🃏 Cards</button>
-        <button id="research-btn" class="ghost-btn" title="Research (open the tech tree)">🔬 Research</button>
-        <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖 Codex</button>
-        <button id="colors-btn" class="ghost-btn" title="Civilization colours">🎨</button>
-        <button id="board-toggle-btn" class="ghost-btn" title="Switch 2D / 3D board">🧊 3D</button>
-        <button id="zoom-out-btn" class="ghost-btn zoom-btn" title="Zoom out">−</button>
-        <button id="zoom-in-btn" class="ghost-btn zoom-btn" title="Zoom in">+</button>
-      </div>
+      <button id="menu-btn" class="ghost-btn menu-btn" title="Menu — new game, profile, deck">☰ Menu</button>
+      <span class="topbar-brand">HEGEMON</span>
+      <button id="end-turn-btn" class="primary-btn">End Turn</button>
+      <div class="topbar-gap"></div>
+      <button id="research-btn" class="ghost-btn flask-btn" title="Research — open the tech tree (the flask glows when a discovery is ready)">🧪<span class="flask-badge"></span></button>
+      <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖</button>
+      <button id="colors-btn" class="ghost-btn" title="Civilization colours">🎨</button>
+      <button id="board-toggle-btn" class="ghost-btn" title="Switch 2D / 3D board">🧊 3D</button>
+      <button id="fullscreen-btn" class="ghost-btn" title="Fullscreen">⛶</button>
+      <button id="zoom-out-btn" class="ghost-btn zoom-btn" title="Zoom out">−</button>
+      <button id="zoom-in-btn" class="ghost-btn zoom-btn" title="Zoom in">+</button>
     </header>
+
+    <!-- Game setup + meta, opened from the ☰ Menu button -->
+    <div id="menu-overlay" class="menu-overlay hidden">
+      <div class="menu-card">
+        <div class="menu-head">
+          <h2>HEGEMON</h2>
+          <button id="menu-close" class="cp-close" title="Close" aria-label="Close">✕</button>
+        </div>
+        <div class="menu-section">
+          <h3>New Campaign</h3>
+          <div class="menu-grid">
+            <label class="map-picker">Map
+              <select id="map-size-select">
+                <optgroup label="Scenarios (real maps)" id="scenario-optgroup"></optgroup>
+                <optgroup label="Random maps">
+                  <option value="small">Small</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="large">Large</option>
+                  <option value="xl">XL</option>
+                </optgroup>
+              </select>
+            </label>
+            <label class="map-picker">Play as
+              <select id="civ-select"></select>
+            </label>
+            <label class="map-picker">Civs
+              <select id="player-count-select">
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+              </select>
+            </label>
+            <label class="map-picker">Difficulty
+              <select id="difficulty-select">
+                <option value="easy">Easy</option>
+                <option value="normal" selected>Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+            <label class="map-picker">Victory
+              <select id="victory-mode-select">
+                <option value="quick" selected>Quick (turn limit)</option>
+                <option value="domination">Domination</option>
+              </select>
+            </label>
+            <label class="map-picker" id="turns-picker">Turns
+              <input id="turns-input" type="number" min="10" max="300" step="5" value="60" />
+            </label>
+          </div>
+          <button id="new-game-btn" class="primary-btn menu-wide">⚔ Begin New Campaign</button>
+        </div>
+        <div class="menu-section menu-actions">
+          <button id="profile-btn" class="ghost-btn" title="Your profile, stats & badges">👤 Profile &amp; Stats</button>
+          <button id="cards-btn" class="ghost-btn" title="Card collection & packs">🃏 My Deck</button>
+        </div>
+      </div>
+    </div>
 
     <section class="status-panel">
       <div class="status-main">
@@ -102,6 +118,9 @@
 
       <!-- Compact resource readout, top-left over the board -->
       <div id="resource-bar" class="res-bar hud-tl"></div>
+
+      <!-- Whose turn it is, top-right corner (e.g. "Rome · Turn 1/60") -->
+      <div id="turn-indicator" class="turn-indicator hud-tr"></div>
 
       <aside class="control-panel hidden" id="control-panel">
         <div class="cp-head">

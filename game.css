@@ -9,6 +9,12 @@
   --gold: #f2cc69;
   --rome: #e77c3a;
   --carthage: #56a8e6;
+  /* Aged papyrus palette for the top menu / setup overlay. */
+  --papyrus: #e7d7ac;
+  --papyrus-2: #d8c491;
+  --papyrus-edge: #b79b62;
+  --ink: #3a2a15;
+  --ink-soft: #6a5228;
 }
 
 * {
@@ -22,9 +28,15 @@ html {
 
 body {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Spectral", Georgia, "Times New Roman", serif;
   background: radial-gradient(circle at 50% 0%, #16304f, var(--bg));
   color: var(--text);
+}
+
+/* Display type (headings, turn badge, brand) — Roman monumental. */
+h1, h2, h3, .topbar-brand, .turn-indicator, .menu-head h2 {
+  font-family: "Cinzel", "Spectral", Georgia, serif;
+  letter-spacing: 0.03em;
 }
 
 /* Utility: must beat later rules like `.result-modal { display: flex }`
@@ -39,45 +51,102 @@ body {
   padding: 16px;
 }
 
+/* ===== Top menu — aged papyrus ===== */
 .topbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.topbar h1 {
-  margin: 0;
-  font-size: 1.5rem;
-  letter-spacing: 0.04em;
-}
-
-.controls {
   display: flex;
   gap: 8px;
   align-items: center;
+  margin-bottom: 12px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 235, 0.55), rgba(0, 0, 0, 0.04)),
+    repeating-linear-gradient(90deg, rgba(120, 90, 40, 0.05) 0 3px, rgba(120, 90, 40, 0) 3px 7px),
+    linear-gradient(135deg, var(--papyrus), var(--papyrus-2));
+  border: 1px solid var(--papyrus-edge);
+  box-shadow: 0 2px 0 rgba(120, 90, 40, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.topbar-brand {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-right: 4px;
+}
+
+.topbar-gap {
+  flex: 1 1 auto;
+}
+
+/* Parchment buttons in the bar (override the dark ghost/solid styles). */
+.topbar button {
+  background: linear-gradient(180deg, #f2e6c4, var(--papyrus-2));
+  color: var(--ink);
+  border: 1px solid var(--papyrus-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.topbar button:hover:not(:disabled) {
+  color: var(--ink);
+  filter: brightness(1.04);
+}
+
+.topbar .menu-btn,
+.topbar .primary-btn {
+  font-weight: 700;
+}
+
+.topbar .primary-btn {
+  background: linear-gradient(180deg, #d9b45a, #c69a3c);
+  border-color: #a97f2c;
+}
+
+.topbar .zoom-btn {
+  min-width: 34px;
+}
+
+.flask-btn {
+  position: relative;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.flask-badge {
+  font-family: "Spectral", serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-left: 3px;
+  color: #2f6b34;
+}
+
+/* Flask glows green when a discovery is ready. */
+.flask-btn.glow {
+  border-color: #7ed957 !important;
+  box-shadow: 0 0 0 0 rgba(126, 217, 87, 0.7);
+  animation: research-pulse 1.6s ease-out infinite;
 }
 
 .map-picker {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
 .map-picker select,
+.map-picker input,
 #map-size-select {
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--line);
+  background: #f4ead0;
+  color: var(--ink);
+  border: 1px solid var(--papyrus-edge);
   border-radius: 4px;
   padding: 6px 8px;
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   cursor: pointer;
 }
 
@@ -2021,7 +2090,142 @@ details.panel-collapse > summary {
   }
 
   .topbar {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-wrap: wrap;
   }
+
+  .topbar-brand {
+    display: none;
+  }
+}
+
+/* ===== Turn indicator, top-right of the board ===== */
+.hud-tr {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 30;
+}
+
+.turn-indicator {
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: linear-gradient(135deg, var(--papyrus), var(--papyrus-2));
+  border: 1px solid var(--papyrus-edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+
+.turn-indicator .ti-civ {
+  font-weight: 700;
+}
+
+/* ===== Menu / setup overlay ===== */
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 16px;
+  background: rgba(6, 12, 22, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.menu-overlay.hidden {
+  display: none;
+}
+
+.menu-card {
+  width: min(560px, 100%);
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 235, 0.5), rgba(0, 0, 0, 0.03)),
+    repeating-linear-gradient(90deg, rgba(120, 90, 40, 0.045) 0 4px, rgba(120, 90, 40, 0) 4px 9px),
+    linear-gradient(135deg, var(--papyrus), var(--papyrus-2));
+  border: 1px solid var(--papyrus-edge);
+  border-radius: 12px;
+  padding: 16px 18px 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--papyrus-edge);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.menu-head h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--ink);
+}
+
+.menu-head .cp-close {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--papyrus-edge);
+}
+
+.menu-section {
+  margin-bottom: 14px;
+}
+
+.menu-section h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.primary-btn.menu-wide {
+  width: 100%;
+  background: linear-gradient(180deg, #d9b45a, #c69a3c);
+  color: var(--ink);
+  border: 1px solid #a97f2c;
+  font-size: 1.02rem;
+  padding: 10px 12px;
+}
+
+.menu-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.menu-actions .ghost-btn {
+  flex: 1 1 40%;
+  background: #f2e6c4;
+  color: var(--ink);
+  border: 1px solid var(--papyrus-edge);
+  padding: 9px 10px;
+}
+
+.menu-actions .ghost-btn:hover:not(:disabled) {
+  color: var(--ink);
+  filter: brightness(1.04);
+}
+
+/* ===== Fullscreen: let the board fill the whole screen ===== */
+body.fullscreen .app {
+  max-width: none;
+  padding: 6px;
+}
+
+body.fullscreen .status-panel {
+  display: none;
 }
