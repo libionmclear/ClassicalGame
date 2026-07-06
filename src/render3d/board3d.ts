@@ -68,7 +68,9 @@ const SELGREEN = new THREE.Color(0x7cd682);
 const RED = new THREE.Color(0xe0533d);
 const PATH = new THREE.Color(0x7dd3fc);
 const WHITE = new THREE.Color(0xffffff);
-const HIDDEN = new THREE.Color(0x0d1420);
+// Unexplored land reads as an aged papyrus map (sepia), not black — waiting to
+// be discovered.
+const HIDDEN = new THREE.Color(0xc9b48a);
 
 // A coloured banner marker for civs that have no sprite art yet.
 const markerTextures = new Map<string, THREE.Texture>();
@@ -542,8 +544,23 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   renderer.toneMappingExposure = 1.05;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a1a2f);
-  scene.fog = new THREE.Fog(0x0a1a2f, 55, 120);
+  // A sky-dome gradient: light blue overhead fading to a deep-blue horizon (the
+  // "not played" floor stays dark). Fog blends distant terrain into the horizon.
+  scene.fog = new THREE.Fog(0x3f6fa3, 70, 180);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      topColor: { value: new THREE.Color(0xbfe0f7) },
+      bottomColor: { value: new THREE.Color(0x0a1626) },
+      offset: { value: 150 },
+      exponent: { value: 0.5 }
+    },
+    vertexShader: "varying vec3 vWorld; void main(){ vWorld = (modelMatrix * vec4(position,1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: "uniform vec3 topColor; uniform vec3 bottomColor; uniform float offset; uniform float exponent; varying vec3 vWorld; void main(){ float h = normalize(vWorld + vec3(0.0, offset, 0.0)).y; gl_FragColor = vec4(mix(bottomColor, topColor, pow(clamp(h,0.0,1.0), exponent)), 1.0); }"
+  });
+  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 16), skyMat);
+  scene.add(skyDome);
 
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 800);
   const controls = new OrbitControls(camera, canvas);
