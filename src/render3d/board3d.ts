@@ -686,6 +686,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   rain.visible = false;
   scene.add(rain);
   let rainOn = false;
+  let rainCX = 0, rainCZ = 0, rainSX = 1, rainSZ = 1; // wet-region footprint
 
   // A pointy-top hex prism. CylinderGeometry(...,6) is already pointy-top (a
   // vertex faces +Z), which matches axialToWorld — so do NOT rotate it, or the
@@ -1150,8 +1151,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     const dt = animClock.getDelta();
     for (const m of mixers) m.update(dt);
     if (rainOn) {
-      // Follow the view and rain straight down, recycling drops back to the top.
-      rain.position.set(controls.target.x, 0, controls.target.z);
+      // Rain falls ONLY over the wet region's footprint (not the whole board).
+      rain.position.set(rainCX, 0, rainCZ);
+      rain.scale.set(rainSX, 1, rainSZ);
       const pos = rainGeo.getAttribute("position") as THREE.BufferAttribute;
       const fall = (stormy ? 46 : 30) * dt;
       const arr = pos.array as Float32Array;
@@ -1175,15 +1177,25 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       placeScatter(view);
       drawBorders(view);
       drawWaterways(view);
-      // Show rain when a visible region is wet; storm is heavier + darker.
+      // Rain only over the wet region's footprint: measure the bounds of the
+      // visible rain/storm tiles and size the drop volume to just cover them.
       let wet = false; stormy = false;
+      let mnX = Infinity, mxX = -Infinity, mnZ = Infinity, mxZ = -Infinity;
       for (const t of view.tiles) {
-        if (t.v !== 2) continue;
-        if (t.wx === "storm") { wet = true; stormy = true; break; }
-        if (t.wx === "rain") wet = true;
+        if (t.v !== 2 || (t.wx !== "rain" && t.wx !== "storm")) continue;
+        wet = true;
+        if (t.wx === "storm") stormy = true;
+        const w = axialToWorld(t.q, t.r);
+        if (w.x < mnX) mnX = w.x; if (w.x > mxX) mxX = w.x;
+        if (w.z < mnZ) mnZ = w.z; if (w.z > mxZ) mxZ = w.z;
       }
       rainOn = wet;
       rain.visible = wet;
+      if (wet) {
+        rainCX = (mnX + mxX) / 2; rainCZ = (mnZ + mxZ) / 2;
+        rainSX = Math.max(0.12, (mxX - mnX + SIZE * 2) / RAIN_SPREAD);
+        rainSZ = Math.max(0.12, (mxZ - mnZ + SIZE * 2) / RAIN_SPREAD);
+      }
       rainMat.opacity = stormy ? 0.75 : 0.5;
       rainMat.color.set(stormy ? 0x8fa4bc : 0xaec4dc);
       if (view.focus) {
