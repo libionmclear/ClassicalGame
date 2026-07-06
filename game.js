@@ -25,6 +25,7 @@
   const upgradeBtn = document.getElementById("upgrade-btn");
   const controlPanelEl = document.getElementById("control-panel");
   const cpCloseBtn = document.getElementById("cp-close");
+  const unitDetailToggleEl = document.getElementById("unit-detail-toggle");
   const unitActionsGroupEl = document.getElementById("unit-actions-group");
   const cityOutputGroupEl = document.getElementById("city-output-group");
   const cityOutputEl = document.getElementById("city-output");
@@ -101,6 +102,10 @@
   // The selection the floating menu was last positioned for (so it only re-anchors
   // when the selection changes, not on every re-render).
   let ctxPositionedFor = null;
+  // Selecting a unit shows a small symbol (not the full panel) so it doesn't
+  // block the board; the player taps the symbol to expand the unit's actions.
+  let unitDetailsOpen = false;
+  let lastUnitKey = null;
   let hoveredPathKeys = new Set();
   let pendingRecenter = true;
   let combatFlashKeys = new Set();
@@ -1090,6 +1095,8 @@
     selectedUnitId = null;
     selectedCityId = null;
     selectedTileKey = null;
+    unitDetailsOpen = false;
+    lastUnitKey = null;
     hoveredPathKeys = new Set();
   }
 
@@ -1826,15 +1833,54 @@
 
   // Show/hide the floating command panel, position it near where the player
   // clicked on the board, and reveal only the groups that fit the selection.
+  function unitGlyph(type) {
+    const f = typeof unitForm === "function" ? unitForm(type) : "infantry";
+    return { naval: "⛵", civilian: "⚒", elephant: "🐘", siege: "🎯", mounted: "🐎", ranged: "🏹", spear: "🔱", infantry: "⚔" }[f] || "⚔";
+  }
+  // Place the small "open details" symbol next to a freshly-selected unit.
+  function showUnitToggle(unit) {
+    if (!unitDetailToggleEl) return;
+    unitDetailToggleEl.textContent = unitGlyph(unit.type);
+    unitDetailToggleEl.classList.remove("hidden");
+    const playArea = controlPanelEl.parentElement;
+    const pa = playArea.getBoundingClientRect();
+    let left, top;
+    if (lastBoardPointer) { left = lastBoardPointer.x - pa.left + 14; top = lastBoardPointer.y - pa.top - 16; }
+    else { left = pa.width - 64; top = 60; }
+    left = Math.max(6, Math.min(left, pa.width - 48));
+    top = Math.max(6, Math.min(top, pa.height - 48));
+    unitDetailToggleEl.style.left = left + "px";
+    unitDetailToggleEl.style.top = top + "px";
+  }
+
   function positionContextPanel(selectedUnit, selectedCity) {
     if (!controlPanelEl) return;
     const tileSel = !selectedUnit && !selectedCity && selectedTileKey && state.map.tiles[selectedTileKey];
     const anything = selectedUnit || selectedCity || tileSel;
     if (!anything) {
       controlPanelEl.classList.add("hidden");
+      if (unitDetailToggleEl) unitDetailToggleEl.classList.add("hidden");
       ctxPositionedFor = null;
+      lastUnitKey = null;
       return;
     }
+
+    // A freshly-selected unit shows only a small symbol so it doesn't hide the
+    // board; tapping the symbol opens the full actions panel.
+    if (selectedUnit) {
+      const uKey = "u:" + selectedUnit.id;
+      if (uKey !== lastUnitKey) { unitDetailsOpen = false; lastUnitKey = uKey; }
+      if (!unitDetailsOpen) {
+        controlPanelEl.classList.add("hidden");
+        showUnitToggle(selectedUnit);
+        ctxPositionedFor = null; // re-anchor the panel when it opens
+        return;
+      }
+    } else {
+      lastUnitKey = null;
+    }
+    if (unitDetailToggleEl) unitDetailToggleEl.classList.add("hidden");
+
     controlPanelEl.classList.remove("hidden");
 
     const show = function (el, on) { if (el) el.style.display = on ? "" : "none"; };
@@ -2479,6 +2525,14 @@
   if (cpCloseBtn) {
     cpCloseBtn.addEventListener("click", function () {
       clearSelection();
+      render();
+    });
+  }
+
+  // Tapping the unit symbol expands the full actions panel.
+  if (unitDetailToggleEl) {
+    unitDetailToggleEl.addEventListener("click", function () {
+      unitDetailsOpen = true;
       render();
     });
   }

@@ -2220,6 +2220,34 @@ details.panel-collapse > summary {
   filter: brightness(1.04);
 }
 
+/* ===== Selected-unit symbol (tap to open the actions panel) ===== */
+.unit-detail-toggle {
+  position: absolute;
+  z-index: 31;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--ink);
+  background: linear-gradient(180deg, #f2e6c4, var(--papyrus-2));
+  border: 2px solid var(--gold);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  animation: udt-pulse 1.5s ease-out infinite;
+}
+
+.unit-detail-toggle:hover {
+  filter: brightness(1.06);
+}
+
+@keyframes udt-pulse {
+  0% { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(242, 204, 105, 0.7); }
+  70% { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5), 0 0 0 9px rgba(242, 204, 105, 0); }
+  100% { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(242, 204, 105, 0); }
+}
+
 /* ===== Fullscreen: let the board fill the whole screen ===== */
 body.fullscreen .app {
   max-width: none;
