@@ -409,6 +409,18 @@ test("a ranged attacker holds its ground after a kill", () => {
   assert.deepEqual(state.map.units.u2.position, { q: 2, r: 0 }); // did NOT advance
 });
 
+test("a city cannot be founded on open water", () => {
+  const state = buildState();
+  state.map.units.s1 = { id: "s1", type: "settler", ownerId: "p1", position: { q: 4, r: 2 }, hp: 12, maxHp: 12, movementRemaining: 2, veterancy: "recruit" };
+  state.playersById.p1.unitIds.push("s1");
+  // (4,2) is a coast tile — founding there must be rejected.
+  assert.throws(() => applyAction(state, { type: "FOUND_CITY", playerId: "p1", settlerId: "s1", cityId: "cX" }));
+  // On land it succeeds.
+  state.map.units.s1.position = { q: 1, r: 0 };
+  const next = applyAction(state, { type: "FOUND_CITY", playerId: "p1", settlerId: "s1", cityId: "cX" });
+  assert.equal(next.map.cities.cX.ownerId, "p1");
+});
+
 test("a player renames their own city but not an enemy's", () => {
   let state = buildState();
   state = applyAction(state, { type: "RENAME_CITY", playerId: "p1", cityId: "c1", name: "Roma Aeterna" });

@@ -732,14 +732,16 @@ export function playerFoodUpkeep(state: GameState, playerId: string): number {
 // back to the city tile if the city is somehow landlocked or the water is full.
 function navalLaunchTile(state: GameState, city: City): Coord {
   const occupied = new Set(Object.values(state.map.units).map((u) => keyOf(u.position)));
+  let firstWater: Coord | null = null;
   for (const n of neighborsOf(city.position)) {
     const tile = state.map.tiles[keyOf(n)];
-    if (!tile) continue;
-    if (tile.terrain !== "coast" && tile.terrain !== "sea") continue;
-    if (occupied.has(keyOf(n))) continue;
-    return n;
+    if (!tile || (tile.terrain !== "coast" && tile.terrain !== "sea")) continue;
+    if (!firstWater) firstWater = n;
+    if (!occupied.has(keyOf(n))) return n; // free water — the ideal berth
   }
-  return { ...city.position };
+  // No FREE adjacent water: stack onto adjacent water rather than beach the ship
+  // on the city's land tile. (A landlocked city can't build ships anyway.)
+  return firstWater ?? { ...city.position };
 }
 
 function completeQueueItem(state: GameState, city: City, id: string): void {
@@ -1224,6 +1226,9 @@ function applyFoundCity(state: GameState, action: FoundCityAction): void {
   if (settler.ownerId !== action.playerId) throw new Error("Cannot use enemy settler");
   if (settler.type !== "settler") throw new Error("Only settler can found a city");
   if (state.map.cities[action.cityId]) throw new Error(`City id ${action.cityId} already exists`);
+
+  const here = tileAt(state, settler.position);
+  if (here.terrain === "sea" || here.terrain === "coast") throw new Error("Cannot found a city on open water");
 
   for (const city of Object.values(state.map.cities)) {
     if (city.position.q === settler.position.q && city.position.r === settler.position.r) {
