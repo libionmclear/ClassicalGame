@@ -8,6 +8,14 @@ interface UnitMovementContext {
   mounted?: boolean;
 }
 
+// A tile "touches" a river if any of its six edges carries one.
+function touchesRiver(state: GameState, c: Coord): boolean {
+  for (const n of neighborsOf(c)) {
+    if (state.map.rivers[edgeKey(c, n)]) return true;
+  }
+  return false;
+}
+
 export function movementCost(state: GameState, unit: UnitMovementContext, from: Coord, to: Coord): number {
   const toTile = state.map.tiles[keyOf(to)];
   if (!toTile) return Number.POSITIVE_INFINITY;
@@ -40,6 +48,12 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
   const owner = state.playersById[unit.ownerId];
   const canBridge = !!owner && owner.techs.includes("engineering");
   if (toTile.road && (!crossingRiver || canBridge)) return 1;
+
+  // Rivers double as roads FOR NOW: moving ALONG a river (both tiles on the same
+  // bank, not fording it) travels at road speed. Land units only.
+  if (!crossingRiver && unit.domain === "land" && !terrain.navalOnly && touchesRiver(state, from) && touchesRiver(state, to)) {
+    return 1;
+  }
 
   let cost = terrain.moveCost;
   if (unit.mounted && state.weather.current[toTile.region] === "rain") {

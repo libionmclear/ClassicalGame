@@ -996,7 +996,8 @@
   function getTileHintsForSelectedUnit(visibility) {
     const hints = {
       reachable: new Set(),
-      attackable: new Set()
+      attackable: new Set(),
+      tradeDest: new Set()
     };
 
     if (!selectedUnitId) return hints;
@@ -1005,6 +1006,17 @@
 
     const unitDef = engine.UNITS[unit.type];
     if (!unitDef) return hints;
+
+    // A selected merchant highlights the cities it could open a trade route to
+    // (any city, so long as you have another city to anchor the route).
+    if (unit.type === "merchant") {
+      const ownCities = Object.values(state.map.cities).filter((c) => c.ownerId === unit.ownerId);
+      for (const c of Object.values(state.map.cities)) {
+        const key = c.position.q + "," + c.position.r;
+        if (!visibility.discovered.has(key)) continue;
+        if (ownCities.some((o) => o.id !== c.id)) hints.tradeDest.add(key);
+      }
+    }
     const embarked = engine.isEmbarked && engine.isEmbarked(state, unit); // can't attack at sea
 
     for (const key of visibility.visible) {
@@ -1433,6 +1445,7 @@
     if (!isVisible) cls += isDiscovered ? " discovered" : " fog";
     if (hints.reachable.has(key)) cls += " reachable";
     if (hints.attackable.has(key)) cls += " attackable";
+    if (hints.tradeDest && hints.tradeDest.has(key)) cls += " trade-dest";
     if (hoveredPathKeys.has(key)) cls += " path-preview";
     if (combatFlashKeys.has(key)) cls += " combat-flash";
     if (isVisible && state.weather && state.weather.current) {
@@ -1683,6 +1696,7 @@
                (selCity && selCity.position.q === q && selCity.position.r === r)) h = 3;
       else if (selectedTileKey === key) h = 4;
       else if (hints.attackable.has(key)) h = 2;
+      else if (hints.tradeDest && hints.tradeDest.has(key)) h = 7;
       else if (hints.reachable.has(key)) h = 1;
       else if (hoveredPathKeys.has(key)) h = 5;
       tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null });

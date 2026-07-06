@@ -771,6 +771,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (tv.h === 3) c.lerp(GOLD, 0.55);
     else if (tv.h === 4) c.lerp(SELGREEN, 0.5);
     else if (tv.h === 2) c.lerp(RED, 0.5);
+    else if (tv.h === 7) c.lerp(GOLD, 0.6); // trade destination
     else if (tv.h === 1) c.lerp(GREEN, 0.4);
     else if (tv.h === 5) c.lerp(PATH, 0.4);
     if (tv.h === 6) c.lerp(WHITE, 0.55);

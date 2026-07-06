@@ -95,6 +95,15 @@ test("a road bridges a river only once you have engineering", () => {
   assert.equal(movementCost(state, ctx, { q: 1, r: 1 }, { q: 2, r: 1 }), 1);
 });
 
+test("moving along a river bank travels at road speed", () => {
+  const state = buildState();
+  state.map.rivers["2,1|2,2"] = true; // (2,1) touches a river
+  state.map.rivers["3,0|3,1"] = true; // (3,1) touches a river
+  const ctx = { ownerId: "p1", domain: "land" as const, mounted: false };
+  // (2,1) is forest (cost 2); entering it from riverside (3,1) without fording is road-fast.
+  assert.equal(movementCost(state, ctx, { q: 3, r: 1 }, { q: 2, r: 1 }), 1);
+});
+
 test("combat preview remains deterministic with visible modifiers", () => {
   const state = buildState();
   const preview1 = computeCombatPreview(state, "u1", "u3");
