@@ -449,9 +449,53 @@ function addColonnadeTemple(g: THREE.Group, s: CivStyle, k: number, cx = 0, cz =
   }
   const roof = meshOf(GEO.roof, s.roofColor); roof.scale.set(w / 0.24 * 0.92, 0.62, d / 0.24 * 1.1); roof.rotation.y = Math.PI / 4; roof.position.set(cx, bh + colH + 0.04 * k, cz); g.add(roof);
 }
-function buildCity(pop: number, civ: string): THREE.Group {
+// Stage 1 signature: a wooden palisade ring — a defended hamlet.
+function addPalisade(g: THREE.Group): void {
+  const n = 14, r = 0.5;
+  for (let i = 0; i < n; i += 1) {
+    const a = (i / n) * Math.PI * 2;
+    const stake = meshOf(GEO.column, 0x6b4a2b, false);
+    stake.scale.set(1.15, 0.62, 1.15);
+    stake.position.set(Math.cos(a) * r, 0.1, Math.sin(a) * r);
+    g.add(stake);
+  }
+}
+// Stage 2 signature: a market stall (posts + striped awning) — trade arrives.
+function addMarket(g: THREE.Group, cx: number, cz: number): void {
+  for (const [x, z] of [[0.07, 0.07], [0.07, -0.07], [-0.07, 0.07], [-0.07, -0.07]]) {
+    const post = meshOf(GEO.column, 0x8a6a44, false); post.scale.set(1, 0.55, 1); post.position.set(cx + x, 0.09, cz + z); g.add(post);
+  }
+  const awning = meshOf(GEO.slab, 0xb0603a); awning.scale.set(0.62, 1.2, 0.62); awning.position.set(cx, 0.22, cz); g.add(awning);
+  const crate = meshOf(GEO.building, 0x8a6a44); crate.scale.set(0.32, 0.3, 0.32); crate.position.set(cx + 0.14, 0.05, cz + 0.02); g.add(crate);
+}
+// Stage 4+ signature: stone walls with corner towers (+ banners at stage 5).
+function addWalls(g: THREE.Group, s: CivStyle, tier: number, banner: number): void {
+  const wr = 0.76;
+  const wc = shade("#" + s.wall.toString(16).padStart(6, "0"), -0.14);
+  for (let i = 0; i < 6; i += 1) {
+    const a = (i / 6) * Math.PI * 2;
+    const seg = meshOf(GEO.wallSeg, wc);
+    seg.position.set(Math.cos(a) * wr, 0.11, Math.sin(a) * wr);
+    seg.rotation.y = a + Math.PI / 2;
+    g.add(seg);
+    const ta = a + Math.PI / 6, tx = Math.cos(ta) * wr, tz = Math.sin(ta) * wr;
+    const tower = meshOf(GEO.building, wc); tower.scale.set(0.5, 0.95, 0.5); tower.position.set(tx, 0.19, tz); g.add(tower);
+    if (tier >= 5) {
+      const pole = meshOf(GEO.mast, 0x3a2a15, false); pole.scale.set(1, 1.3, 1); pole.position.set(tx, 0.52, tz); g.add(pole);
+      const flag = meshOf(GEO.sail, banner); flag.scale.set(1, 0.5, 0.55); flag.position.set(tx + 0.06, 0.56, tz); g.add(flag);
+    }
+  }
+}
+// Stage 5 signature: a tall marble victory column with a gilded cap.
+function addMonument(g: THREE.Group, s: CivStyle, cx: number, cz: number): void {
+  const h = 0.9;
+  const col = meshOf(GEO.pole, 0xeae3d0); col.scale.set(3.4, h / 0.72, 3.4); col.position.set(cx, h * 0.5, cz); g.add(col);
+  const cap = meshOf(GEO.building, s.roofColor); cap.scale.set(0.5, 0.5, 0.5); cap.position.set(cx, h + 0.05, cz); g.add(cap);
+}
+function buildCity(pop: number, civ: string, color?: string): THREE.Group {
   const g = new THREE.Group();
   const s = CIV_STYLE[civ] || CIV_STYLE.rome;
+  const banner = color ? new THREE.Color(color).getHex() : s.roofColor;
   // Six growth stages: 0 huts · 1 hamlet · 2 village · 3 town · 4 city · 5 metropolis.
   const tier = pop <= 1 ? 0 : pop <= 2 ? 1 : pop <= 4 ? 2 : pop <= 6 ? 3 : pop <= 9 ? 4 : 5;
 
@@ -466,29 +510,21 @@ function buildCity(pop: number, civ: string): THREE.Group {
     return g;
   }
 
-  if (tier >= 3) addLandmark(g, s, tier);
-  // Rome always shows columns — a colonnaded temple stands in before the forum.
+  // Each stage gets a distinct signature so the six read apart at a glance.
+  if (tier === 1) addPalisade(g);                                  // hamlet: palisade
+  if (tier === 2) addMarket(g, 0, 0);                              // village: market
+  if (tier >= 3) addLandmark(g, s, tier);                          // town+: the civ landmark
   if (civ === "rome" && tier < 3) addColonnadeTemple(g, s, 0.65 + tier * 0.12);
+  if (tier >= 4) addWalls(g, s, tier, banner);                     // city+: walls + towers (+banners at 5)
+  if (tier >= 5) addMonument(g, s, -0.24, -0.24);                  // metropolis: victory column
 
-  const houses = 2 + tier * 2; // 4 / 6 / 8 / 10 / 12
-  const rad = tier <= 1 ? 0.42 : 0.54; // ring the houses OUTSIDE any central landmark
+  const houses = tier === 1 ? 3 : tier === 2 ? 5 : 2 + tier * 2;   // 3 / 5 / 8 / 10 / 12
+  const rad = tier <= 1 ? 0.34 : tier === 2 ? 0.42 : 0.56;
   for (let i = 0; i < houses; i += 1) {
     const a = (i / houses) * Math.PI * 2 + 0.35;
-    const h = 0.22 + (i % 3) * 0.06 + tier * 0.02;
-    const w = 0.15 + (i % 2) * 0.03;
+    const h = 0.2 + (i % 3) * 0.06 + tier * 0.03;                  // taller buildings as the city grows
+    const w = 0.14 + (i % 2) * 0.03 + tier * 0.006;
     addBuilding(g, s, Math.cos(a) * rad, Math.sin(a) * rad, w, h);
-  }
-
-  // City walls appear once it's a proper city (stage 4+).
-  if (tier >= 4) {
-    const wr = 0.74;
-    for (let i = 0; i < 6; i += 1) {
-      const a = (i / 6) * Math.PI * 2;
-      const seg = meshOf(GEO.wallSeg, shade("#" + s.wall.toString(16).padStart(6, "0"), -0.12));
-      seg.position.set(Math.cos(a) * wr, 0.1, Math.sin(a) * wr);
-      seg.rotation.y = a + Math.PI / 2;
-      g.add(seg);
-    }
   }
   return g;
 }
@@ -893,7 +929,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       if (isCity) {
         const glb = getGLB("assets/models/cities/" + sv.civ + ".glb");
         if (glb) { model = glbInstance(glb, 1.4, false); scale = 1; }
-        else { model = buildCity(sv.pop || 1, sv.civ); scale = 1.2; }
+        else { model = buildCity(sv.pop || 1, sv.civ, sv.color); scale = 1.2; }
       } else {
         const form = sv.form || "infantry";
         const glb = getGLB("assets/models/units/" + form + ".glb");
