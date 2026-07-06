@@ -2895,7 +2895,7 @@
     researchBtn.classList.toggle("glow", ready > 0 && isHumanTurn());
     // Keep the flask glyph; show a small count in the badge span.
     const badge = researchBtn.querySelector(".flask-badge");
-    if (badge) badge.textContent = ready > 0 ? "(" + ready + ")" : "";
+    if (badge) badge.textContent = ready > 0 ? String(ready) : "";
     researchBtn.title = ready > 0
       ? "Research — " + ready + " discovery" + (ready === 1 ? "" : "ies") + " ready"
       : "Research — open the tech tree";

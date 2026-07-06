@@ -33,7 +33,6 @@
       <span class="topbar-brand">HEGEMON</span>
       <button id="end-turn-btn" class="primary-btn">End Turn</button>
       <div class="topbar-gap"></div>
-      <button id="research-btn" class="ghost-btn flask-btn" title="Research — open the tech tree (the flask glows when a discovery is ready)">🧪<span class="flask-badge"></span></button>
       <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖</button>
       <button id="colors-btn" class="ghost-btn" title="Civilization colours">🎨</button>
       <button id="board-toggle-btn" class="ghost-btn" title="Switch 2D / 3D board">🧊 3D</button>
@@ -160,17 +159,20 @@
       <!-- Compact resource readout, top-left over the board -->
       <div id="resource-bar" class="res-bar hud-tl"></div>
 
-      <!-- Whose turn it is, top-right corner (e.g. "Rome · Turn 1/60") -->
-      <div id="turn-indicator" class="turn-indicator hud-tr"></div>
+      <!-- Top-right: whose turn it is, plus Research + Standings icons -->
+      <div class="hud-tr hud-tr-stack">
+        <div id="turn-indicator" class="turn-indicator"></div>
+        <div class="hud-tr-icons">
+          <button id="research-btn" class="hud-icon flask-btn" title="Research — open the tech tree (glows when a discovery is ready)">🧪<span class="flask-badge"></span></button>
+          <button id="standings-btn" class="hud-icon" title="Standings" aria-label="Standings">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><rect x="3" y="13" width="4.4" height="8" rx="1"/><rect x="9.8" y="8" width="4.4" height="13" rx="1"/><rect x="16.6" y="3" width="4.4" height="18" rx="1"/></svg>
+          </button>
+        </div>
+        <div id="standings-panel" class="standings-panel hidden"><div id="ranking" class="ranking"></div></div>
+      </div>
 
       <!-- Combat result banners, top-center over the board -->
       <div id="combat-toasts" class="combat-toasts"></div>
-
-      <!-- Standings, openable from the bottom-right (text button, no icon) -->
-      <div id="standings-wrap" class="hud-br">
-        <button id="standings-btn" class="ghost-btn" title="Show standings">Standings</button>
-        <div id="standings-panel" class="standings-panel hidden"><div id="ranking" class="ranking"></div></div>
-      </div>
 
       <!-- Tap-to-open badge for a selected unit (keeps the board clear) -->
       <button id="unit-detail-toggle" class="unit-detail-toggle hidden" title="Unit details &amp; actions"></button>
