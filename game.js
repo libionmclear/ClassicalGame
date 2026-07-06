@@ -1623,6 +1623,7 @@
         color: CIV_COLORS[unit.ownerId] || "#888", q: unit.position.q, r: unit.position.r,
         t: state.map.tiles[uk] ? state.map.tiles[uk].terrain : "plains",
         form: embarked ? "naval" : unitForm(unit.type),
+        hpFrac: unit.maxHp ? Math.max(0, Math.min(1, unit.hp / unit.maxHp)) : 1,
         badge: embarked ? "⛵" : (UNIT_GLYPHS[unit.type] || "•")
       });
     }

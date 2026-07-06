@@ -37,7 +37,7 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; }
-export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; }
+export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; hpFrac?: number; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 export interface BoardView {
   tiles: TileView[];
@@ -167,7 +167,15 @@ const GEO = {
   siegeBase: new THREE.BoxGeometry(0.36, 0.14, 0.28),
   treeCone: new THREE.ConeGeometry(0.19, 0.44, 6),
   treeTrunk: new THREE.CylinderGeometry(0.045, 0.055, 0.16, 4),
-  rock: new THREE.IcosahedronGeometry(0.15, 0)
+  rock: new THREE.IcosahedronGeometry(0.15, 0),
+  // City architecture
+  dome: new THREE.SphereGeometry(0.2, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
+  column: new THREE.CylinderGeometry(0.028, 0.028, 0.34, 6),
+  roundWall: new THREE.CylinderGeometry(0.16, 0.18, 0.3, 7),
+  thatch: new THREE.ConeGeometry(0.22, 0.32, 7),
+  wallSeg: new THREE.BoxGeometry(0.42, 0.2, 0.08),
+  slab: new THREE.BoxGeometry(0.34, 0.05, 0.34),
+  pyramid: new THREE.ConeGeometry(0.34, 0.5, 4)
 };
 const SKIN = 0xe0b088, WOOD = 0x6b4a2b, DARKWOOD = 0x4a331f, STEEL = 0x9aa3ad, STONE = 0xcdbb91, GREY = 0x8a8a86, IVORY = 0xeee6d0;
 const matCache = new Map<string, THREE.MeshStandardMaterial>();
@@ -192,7 +200,7 @@ function meshOf(geo: THREE.BufferGeometry, color: number, cast = true): THREE.Me
   m.castShadow = cast;
   return m;
 }
-function buildUnit(form: string, color: string): THREE.Group {
+function buildFigure(form: string, color: string): THREE.Group {
   const g = new THREE.Group();
   const armor = shade(color, 0);
   const figure = (lift = 0) => {
@@ -241,20 +249,123 @@ function buildUnit(form: string, color: string): THREE.Group {
   }
   return g;
 }
-function buildCity(pop: number, color: string): THREE.Group {
+// Small formation offsets so N figures cluster neatly, centred on the tile.
+function squadPositions(n: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+  const rows = Math.ceil(n / cols);
+  const sp = 0.26;
+  let i = 0;
+  for (let row = 0; row < rows && i < n; row += 1) {
+    const inRow = Math.min(cols, n - i);
+    for (let c = 0; c < inRow; c += 1) {
+      out.push([(c - (inRow - 1) / 2) * sp, (row - (rows - 1) / 2) * sp]);
+      i += 1;
+    }
+  }
+  return out;
+}
+// A unit is drawn as a SQUAD of small figures — the count shows its strength, so
+// a wounded unit fields fewer and a healed one more. Big single things (elephant,
+// siege, ship) stay as one, scaled a touch by health.
+function buildUnit(form: string, color: string, hpFrac: number, q: number, r: number): THREE.Group {
+  const frac = hpFrac == null ? 1 : Math.max(0.05, Math.min(1, hpFrac));
+  const single = form === "siege" || form === "naval";
+  const base = form === "elephant" ? 2 : form === "mounted" ? 3 : form === "civilian" ? 3 : 6;
   const g = new THREE.Group();
-  const roofC = shade(color, -0.02), roofD = shade(color, -0.16);
-  const keepH = 1.0 + Math.min(6, pop) * 0.08;
-  const keep = meshOf(GEO.building, STONE); keep.scale.set(0.95, keepH / 0.4, 0.95); keep.position.y = keepH * 0.5; g.add(keep);
-  const kr = meshOf(GEO.roof, roofC); kr.scale.set(1, 1, 1); kr.position.y = keepH + 0.1; kr.rotation.y = Math.PI / 4; g.add(kr);
-  const n = Math.min(7, 2 + pop);
-  for (let i = 0; i < n; i += 1) {
-    const a = (i / n) * Math.PI * 2 + 0.4;
-    const rad = 0.36;
-    const hx = Math.cos(a) * rad, hz = Math.sin(a) * rad;
-    const hgt = 0.26 + (i % 3) * 0.07;
-    const house = meshOf(GEO.building, STONE); house.scale.set(0.52, hgt / 0.4, 0.52); house.position.set(hx, hgt * 0.5, hz); g.add(house);
-    const hr = meshOf(GEO.roof, i % 2 ? roofC : roofD); hr.scale.set(0.55, 0.7, 0.55); hr.position.set(hx, hgt + 0.06, hz); hr.rotation.y = Math.PI / 4; g.add(hr);
+  if (single) {
+    const fig = buildFigure(form, color);
+    fig.scale.setScalar(0.9 + 0.1 * frac);
+    g.add(fig);
+    return g;
+  }
+  const count = Math.max(1, Math.round(base * frac));
+  const pos = squadPositions(count);
+  for (let i = 0; i < count; i += 1) {
+    const fig = buildFigure(form, color);
+    fig.scale.setScalar(0.6);
+    fig.position.set(pos[i][0], 0, pos[i][1]);
+    fig.rotation.y = (rnd(q, r, i) - 0.5) * 0.6; // slight facing variation
+    g.add(fig);
+  }
+  return g;
+}
+// Historical architecture per civ: wall material, house-roof style, and a
+// signature central landmark.
+interface CivStyle { wall: number; roof: "pitch" | "flat" | "dome" | "cone"; roofColor: number; landmark: string; }
+const CIV_STYLE: Record<string, CivStyle> = {
+  rome: { wall: 0xd8cba0, roof: "pitch", roofColor: 0xb0392b, landmark: "dome" }, // red tiles, domed temple
+  greece: { wall: 0xeae3d0, roof: "flat", roofColor: 0xdfe6ee, landmark: "columns" }, // white marble, colonnade
+  egypt: { wall: 0xd9c07a, roof: "flat", roofColor: 0xcaa85a, landmark: "pyramid" }, // sandstone, pyramid
+  carthage: { wall: 0xcbb98f, roof: "flat", roofColor: 0x9b6bd0, landmark: "obelisk" }, // Punic, obelisk
+  gaul: { wall: 0x8a6a44, roof: "cone", roofColor: 0x6b5a34, landmark: "roundhouse" }, // timber roundhouses + thatch
+  parthia: { wall: 0xcaa46a, roof: "dome", roofColor: 0xd98a3a, landmark: "iwan" } // mudbrick, domed iwan
+};
+function addBuilding(g: THREE.Group, s: CivStyle, x: number, z: number, w: number, h: number): void {
+  if (s.roof === "cone") {
+    const wall = meshOf(GEO.roundWall, s.wall); wall.scale.set(w / 0.16, h / 0.3, w / 0.16); wall.position.set(x, h * 0.5, z); g.add(wall);
+    const th = meshOf(GEO.thatch, s.roofColor); th.scale.set(w / 0.2 * 1.1, h / 0.3, w / 0.2 * 1.1); th.position.set(x, h + 0.08, z); g.add(th);
+    return;
+  }
+  const wall = meshOf(GEO.building, s.wall); wall.scale.set(w / 0.28, h / 0.4, w / 0.28); wall.position.set(x, h * 0.5, z); g.add(wall);
+  if (s.roof === "pitch") {
+    const roof = meshOf(GEO.roof, s.roofColor); roof.scale.set(w / 0.24 * 0.95, 0.7, w / 0.24 * 0.95); roof.position.set(x, h + 0.07, z); roof.rotation.y = Math.PI / 4; g.add(roof);
+  } else if (s.roof === "dome") {
+    const dm = meshOf(GEO.dome, s.roofColor); dm.scale.set(w / 0.2 * 0.8, h * 0.5, w / 0.2 * 0.8); dm.position.set(x, h, z); g.add(dm);
+  } else {
+    const slab = meshOf(GEO.slab, s.roofColor); slab.scale.set(w / 0.34, 1, w / 0.34); slab.position.set(x, h + 0.02, z); g.add(slab);
+  }
+}
+function addLandmark(g: THREE.Group, s: CivStyle, tier: number): void {
+  const k = 0.7 + tier * 0.12;
+  const L = s.landmark;
+  if (L === "pyramid") {
+    const p = meshOf(GEO.pyramid, s.wall); p.scale.setScalar(k * 0.85); p.position.y = 0.5 * k * 0.85 * 0.5; g.add(p);
+  } else if (L === "columns") {
+    const bh = 0.42 * k;
+    const base = meshOf(GEO.building, s.wall); base.scale.set(1.5 * k, bh / 0.4, 1.2 * k); base.position.y = bh * 0.5; g.add(base);
+    for (let i = 0; i < 8; i += 1) { const a = (i / 8) * Math.PI * 2; const col = meshOf(GEO.column, s.wall); col.scale.set(1, k, 1); col.position.set(Math.cos(a) * 0.19 * k, bh + 0.17 * k, Math.sin(a) * 0.15 * k); g.add(col); }
+    const roof = meshOf(GEO.slab, s.roofColor); roof.scale.set(1.6 * k, 1, 1.3 * k); roof.position.y = bh + 0.34 * k; g.add(roof);
+  } else if (L === "dome" || L === "iwan") {
+    const hh = 0.5 * k;
+    const hall = meshOf(GEO.building, s.wall); hall.scale.set(1.3 * k, hh / 0.4, 1.2 * k); hall.position.y = hh * 0.5; g.add(hall);
+    const dm = meshOf(GEO.dome, s.roofColor); dm.scale.set((L === "iwan" ? 1.0 : 1.6) * k, (L === "iwan" ? 1.4 : 1.2) * k, (L === "iwan" ? 1.0 : 1.6) * k); dm.position.y = hh; g.add(dm);
+  } else if (L === "obelisk") {
+    const oh = 0.72 * k;
+    const ob = meshOf(GEO.pole, s.wall); ob.scale.set(2.4, oh / 0.72, 2.4); ob.position.y = oh * 0.5; g.add(ob);
+    const cap = meshOf(GEO.roof, s.roofColor); cap.scale.set(0.4, 0.4, 0.4); cap.position.y = oh; g.add(cap);
+  } else {
+    const rh = 0.5 * k;
+    const wall = meshOf(GEO.roundWall, s.wall); wall.scale.set(1.7 * k, rh / 0.3, 1.7 * k); wall.position.y = rh * 0.5; g.add(wall);
+    const th = meshOf(GEO.thatch, s.roofColor); th.scale.set(1.8 * k, 1.1 * k, 1.8 * k); th.position.y = rh + 0.06; g.add(th);
+  }
+}
+function buildCity(pop: number, civ: string): THREE.Group {
+  const g = new THREE.Group();
+  const s = CIV_STYLE[civ] || CIV_STYLE.rome;
+  const tier = pop <= 2 ? 1 : pop <= 4 ? 2 : pop <= 6 ? 3 : 4; // settlement/town/city/metropolis
+
+  if (tier >= 2) addLandmark(g, s, tier);
+
+  const houses = tier === 1 ? 3 : 2 + tier * 2; // 3 / 6 / 8 / 10
+  const rad = tier === 1 ? 0.26 : 0.42;
+  for (let i = 0; i < houses; i += 1) {
+    const a = (i / houses) * Math.PI * 2 + 0.35;
+    const h = 0.22 + (i % 3) * 0.06 + tier * 0.02;
+    const w = 0.15 + (i % 2) * 0.03;
+    addBuilding(g, s, Math.cos(a) * rad, Math.sin(a) * rad, w, h);
+  }
+
+  // City walls appear once it's a proper city.
+  if (tier >= 3) {
+    const wr = 0.64;
+    for (let i = 0; i < 6; i += 1) {
+      const a = (i / 6) * Math.PI * 2;
+      const seg = meshOf(GEO.wallSeg, shade("#" + s.wall.toString(16).padStart(6, "0"), -0.12));
+      seg.position.set(Math.cos(a) * wr, 0.1, Math.sin(a) * wr);
+      seg.rotation.y = a + Math.PI / 2;
+      g.add(seg);
+    }
   }
   return g;
 }
@@ -477,8 +588,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
       // Build a low-poly 3D model that sits ON the tile and casts a real shadow.
       const isCity = sv.kind === "city";
-      const model = isCity ? buildCity(sv.pop || 1, color) : buildUnit(sv.form || "infantry", color);
-      const scale = isCity ? 1.15 : 1.5;
+      const model = isCity
+        ? buildCity(sv.pop || 1, sv.civ)
+        : buildUnit(sv.form || "infantry", color, sv.hpFrac == null ? 1 : sv.hpFrac, sv.q, sv.r);
+      const scale = isCity ? 1.2 : 1.35;
       model.scale.setScalar(scale);
       model.position.set(w.x, top + 0.01, w.z);
       spriteGroup.add(model);
