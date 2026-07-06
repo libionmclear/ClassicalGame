@@ -1718,7 +1718,8 @@
       else if (hints.tradeDest && hints.tradeDest.has(key)) h = 7;
       else if (hints.reachable.has(key)) h = 1;
       else if (hoveredPathKeys.has(key)) h = 5;
-      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null });
+      const wx = v === 2 && state.weather && state.weather.current ? (state.weather.current[tile.region] || "clear") : "clear";
+      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null, wx: wx });
       if (owner && v > 0) {
         for (const d of AXIAL_DIRS) {
           const nk = q + d[0] + "," + (r + d[1]);

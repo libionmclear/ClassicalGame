@@ -38,7 +38,7 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
-export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; }
+export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; }
 export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 // A segment between two tiles: rivers run along the shared edge, roads along the
@@ -634,6 +634,23 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   seaMesh.receiveShadow = true;
   scene.add(seaMesh);
 
+  // Rain/storm: a volume of falling streaks that follows the view, shown only when
+  // a visible region is wet. Storm makes it heavier + darker.
+  const RAIN_N = 1600, RAIN_SPREAD = 70, RAIN_TOP = 42;
+  const rainArr = new Float32Array(RAIN_N * 3);
+  for (let i = 0; i < RAIN_N; i += 1) {
+    rainArr[i * 3] = (Math.random() - 0.5) * RAIN_SPREAD;
+    rainArr[i * 3 + 1] = Math.random() * RAIN_TOP;
+    rainArr[i * 3 + 2] = (Math.random() - 0.5) * RAIN_SPREAD;
+  }
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute("position", new THREE.BufferAttribute(rainArr, 3));
+  const rainMat = new THREE.PointsMaterial({ color: 0xaec4dc, size: 0.16, transparent: true, opacity: 0.55, depthWrite: false });
+  const rain = new THREE.Points(rainGeo, rainMat);
+  rain.visible = false;
+  scene.add(rain);
+  let rainOn = false;
+
   // A pointy-top hex prism. CylinderGeometry(...,6) is already pointy-top (a
   // vertex faces +Z), which matches axialToWorld — so do NOT rotate it, or the
   // tiles turn flat-top and no longer interlock. Circumradius ~= SIZE so hexes
@@ -829,6 +846,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     else if (tv.h === 1) c.lerp(GREEN, 0.4);
     else if (tv.h === 5) c.lerp(PATH, 0.4);
     if (tv.h === 6) c.lerp(WHITE, 0.55);
+    // Weather tints the visible ground: overcast rain, grey storm, pale fog, warm heat.
+    if (tv.wx === "rain") c.lerp(new THREE.Color(0x4a5a6e), 0.28);
+    else if (tv.wx === "storm") c.lerp(new THREE.Color(0x2f3742), 0.42);
+    else if (tv.wx === "fog") c.lerp(new THREE.Color(0xb9c2c9), 0.4);
+    else if (tv.wx === "heat") c.lerp(new THREE.Color(0xd88a3a), 0.16);
     return c;
   }
 
@@ -1082,11 +1104,24 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   resize();
 
   let running = true;
+  let stormy = false;
   const loop = () => {
     if (!running) return;
     controls.update();
     const dt = animClock.getDelta();
     for (const m of mixers) m.update(dt);
+    if (rainOn) {
+      // Follow the view and rain straight down, recycling drops back to the top.
+      rain.position.set(controls.target.x, 0, controls.target.z);
+      const pos = rainGeo.getAttribute("position") as THREE.BufferAttribute;
+      const fall = (stormy ? 46 : 30) * dt;
+      const arr = pos.array as Float32Array;
+      for (let i = 1; i < arr.length; i += 3) {
+        arr[i] -= fall;
+        if (arr[i] < 0) arr[i] = RAIN_TOP;
+      }
+      pos.needsUpdate = true;
+    }
     composer.render();
     requestAnimationFrame(loop);
   };
@@ -1101,6 +1136,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       placeScatter(view);
       drawBorders(view);
       drawWaterways(view);
+      // Show rain when a visible region is wet; storm is heavier + darker.
+      let wet = false; stormy = false;
+      for (const t of view.tiles) {
+        if (t.v !== 2) continue;
+        if (t.wx === "storm") { wet = true; stormy = true; break; }
+        if (t.wx === "rain") wet = true;
+      }
+      rainOn = wet;
+      rain.visible = wet;
+      rainMat.opacity = stormy ? 0.75 : 0.5;
+      rainMat.color.set(stormy ? 0x8fa4bc : 0xaec4dc);
       if (view.focus) {
         const w = axialToWorld(view.focus.q, view.focus.r);
         controls.target.set(w.x, 0, w.z);
