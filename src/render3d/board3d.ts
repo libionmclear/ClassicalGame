@@ -39,7 +39,7 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; }
-export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
+export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; utype?: string; pop?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 // A segment between two tiles: rivers run along the shared edge, roads along the
 // centre line (from tile q,r to neighbour nq,nr).
@@ -220,25 +220,40 @@ function meshOf(geo: THREE.BufferGeometry, color: number, cast = true): THREE.Me
 const CREST: Record<string, number> = {
   rome: 0xb0392b, greece: 0xdfe6ee, egypt: 0x2f6ea5, carthage: 0x9b6bd0, gaul: 0x7fa23a, parthia: 0xd98a3a
 };
-function addHelmet(g: THREE.Group, y: number, civ?: string): void {
+function addHelmet(g: THREE.Group, y: number, civ?: string, big = false): void {
   const c = civ || "rome";
   const helmCol = c === "gaul" ? 0xc0894a : c === "egypt" ? 0xcaa85a : STEEL; // bronze Gaul, gilt Egypt, else steel
   const helm = meshOf(GEO.helmet, helmCol); helm.position.set(0, y, 0); g.add(helm);
-  const crest = meshOf(GEO.crest, CREST[c] ?? 0xb0392b, false); crest.position.set(0, y + 0.05, 0);
+  const crest = meshOf(GEO.crest, CREST[c] ?? 0xb0392b, false);
+  if (big) crest.scale.set(1.4, 2.1, 1.2); // taller plume for the legionary
+  crest.position.set(0, y + (big ? 0.09 : 0.05), 0);
   if (c === "rome") crest.rotation.y = Math.PI / 2; // transverse Roman crest
   g.add(crest);
 }
-function buildFigure(form: string, color: string, civ?: string): THREE.Group {
+function buildFigure(form: string, color: string, civ?: string, utype?: string): THREE.Group {
   const g = new THREE.Group();
   const armor = shade(color, 0);
   const legCol = shade(color, -0.3);
+  // Gauls (Celts) fight bare-chested, daubed with blue woad; Roman legionaries get
+  // heavier armour and a taller crest.
+  const bareChest = civ === "gaul";
+  const legionary = utype === "legionary";
   // A little person: two legs, a torso, two arms, a head — helmeted for soldiers.
   const figure = (lift = 0, helmeted = true) => {
     for (const lx of [0.05, -0.05]) { const leg = meshOf(GEO.legThin, legCol); leg.position.set(lx, 0.09 + lift, 0); g.add(leg); }
-    const t = meshOf(GEO.torso, armor); t.position.set(0, 0.3 + lift, 0); g.add(t);
-    for (const ax of [0.11, -0.11]) { const a = meshOf(GEO.arm, armor); a.position.set(ax, 0.3 + lift, 0); g.add(a); }
+    const t = meshOf(GEO.torso, bareChest ? SKIN : armor); t.position.set(0, 0.3 + lift, 0); g.add(t);
+    for (const ax of [0.11, -0.11]) { const a = meshOf(GEO.arm, bareChest ? SKIN : armor); a.position.set(ax, 0.3 + lift, 0); g.add(a); }
+    if (bareChest) {
+      // Blue woad tattoos on the chest.
+      for (const [tx, ty] of [[0.03, 0.34], [-0.03, 0.28], [0.0, 0.4]]) { const w = meshOf(GEO.crest, 0x2f6ea5, false); w.scale.set(0.5, 0.4, 0.16); w.position.set(tx, ty + lift, 0.09); g.add(w); }
+    }
+    if (legionary) {
+      // Extra armour: shoulder pauldrons + a chest plate.
+      for (const ax of [0.12, -0.12]) { const pa = meshOf(GEO.slab, STEEL); pa.scale.set(0.28, 1.4, 0.5); pa.position.set(ax, 0.4 + lift, 0); g.add(pa); }
+      const plate = meshOf(GEO.torso, STEEL); plate.scale.set(1.08, 0.6, 1.08); plate.position.set(0, 0.33 + lift, 0.02); g.add(plate);
+    }
     const h = meshOf(GEO.head, SKIN); h.position.set(0, 0.47 + lift, 0); g.add(h);
-    if (helmeted) addHelmet(g, 0.5 + lift, civ);
+    if (helmeted) addHelmet(g, 0.5 + lift, civ, legionary);
   };
   if (form === "spear") {
     figure();
@@ -323,13 +338,13 @@ function squadPositions(n: number): Array<[number, number]> {
 // A unit is drawn as a SQUAD of small figures — the count shows its strength, so
 // a wounded unit fields fewer and a healed one more. Big single things (elephant,
 // siege, ship) stay as one, scaled a touch by health.
-function buildUnit(form: string, color: string, hpFrac: number, q: number, r: number, civ?: string): THREE.Group {
+function buildUnit(form: string, color: string, hpFrac: number, q: number, r: number, civ?: string, utype?: string): THREE.Group {
   const frac = hpFrac == null ? 1 : Math.max(0.05, Math.min(1, hpFrac));
   const single = form === "siege" || form === "naval";
   const base = form === "elephant" ? 2 : form === "mounted" ? 3 : form === "civilian" ? 3 : 6;
   const g = new THREE.Group();
   if (single) {
-    const fig = buildFigure(form, color, civ);
+    const fig = buildFigure(form, color, civ, utype);
     fig.scale.setScalar(0.9 + 0.1 * frac);
     g.add(fig);
     return g;
@@ -337,7 +352,7 @@ function buildUnit(form: string, color: string, hpFrac: number, q: number, r: nu
   const count = Math.max(1, Math.round(base * frac));
   const pos = squadPositions(count);
   for (let i = 0; i < count; i += 1) {
-    const fig = buildFigure(form, color, civ);
+    const fig = buildFigure(form, color, civ, utype);
     fig.scale.setScalar(0.6);
     fig.position.set(pos[i][0], 0, pos[i][1]);
     fig.rotation.y = (rnd(q, r, i) - 0.5) * 0.6; // slight facing variation
@@ -969,7 +984,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
             grp.add(f);
           }
           model = grp; scale = 1;
-        } else { model = buildUnit(form, color, frac, sv.q, sv.r, sv.civ); scale = 1.35; }
+        } else { model = buildUnit(form, color, frac, sv.q, sv.r, sv.civ, sv.utype); scale = 1.35; }
       }
       model.scale.setScalar(scale);
       model.position.set(w.x, top + 0.01, w.z);
