@@ -206,15 +206,18 @@
           <div id="build-queue" class="build-queue"></div>
         </div>
 
-        <details class="panel-group panel-collapse" id="recruit-group">
-          <summary>City Actions — Recruit <span class="collapse-caret">▸</span></summary>
-          <div id="build-menu" class="build-menu"></div>
-        </details>
+        <div class="cp-tabs" id="city-tabs">
+          <button class="cp-tab" data-tab="units" title="Recruit units">⚔<span>Units</span></button>
+          <button class="cp-tab" data-tab="improvements" title="Buildings">🏛<span>Improvements</span></button>
+        </div>
 
-        <details class="panel-group panel-collapse" id="buildings-group">
-          <summary>City Buildings <span class="collapse-caret">▸</span></summary>
+        <div class="panel-group cp-tabpane" id="recruit-group" data-pane="units">
+          <div id="build-menu" class="build-menu"></div>
+        </div>
+
+        <div class="panel-group cp-tabpane" id="buildings-group" data-pane="improvements">
           <div id="building-menu" class="build-menu"></div>
-        </details>
+        </div>
       </aside>
     </section>
   </main>

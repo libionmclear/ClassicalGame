@@ -879,22 +879,61 @@ button:hover:not(:disabled) {
    outline; they remain only as hooks for scripting/tests). */
 
 /* ===== Command panel — a floating popover anchored to the selection ===== */
+/* A slide-in side overlay on the right, with a compact type scale. */
 .control-panel {
   position: absolute;
   z-index: 40;
-  width: 288px;
-  max-height: 76vh;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: 270px;
   overflow-y: auto;
+  font-size: 0.82rem;
   background: rgba(14, 26, 44, 0.97);
   border: 1px solid #33608f;
-  border-radius: 8px;
-  padding: 8px 12px 12px;
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  border-radius: 10px;
+  padding: 8px 11px 12px;
+  box-shadow: -8px 0 34px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(2px);
+  transform: translateX(0);
+  transition: transform 0.18s ease-out, opacity 0.18s ease-out;
 }
 
 .control-panel.hidden {
   display: none;
+}
+
+/* ===== City menu tabs (Units / Improvements) ===== */
+.cp-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 6px;
+}
+
+.cp-tab {
+  flex: 1 1 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: #16324f;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.cp-tab.active {
+  background: var(--accent);
+  color: #f4f9ff;
+  border-color: var(--accent);
+}
+
+.cp-tab span {
+  font-size: 0.82rem;
 }
 
 /* When a unit is selected, the panel is click-through except its own controls,
@@ -944,8 +983,17 @@ button:hover:not(:disabled) {
 }
 
 .control-panel h2 {
-  margin: 0 0 8px;
-  font-size: 1.1rem;
+  margin: 0 0 6px;
+  font-size: 0.98rem;
+}
+
+.control-panel .panel-group h3 {
+  font-size: 0.78rem;
+}
+
+.control-panel .build-menu button,
+.control-panel .panel-group button {
+  font-size: 0.82rem;
 }
 
 .cp-hint {

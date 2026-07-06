@@ -25,7 +25,9 @@
   const upgradeBtn = document.getElementById("upgrade-btn");
   const controlPanelEl = document.getElementById("control-panel");
   const cpCloseBtn = document.getElementById("cp-close");
+  const cityTabsEl = document.getElementById("city-tabs");
   const unitDetailToggleEl = document.getElementById("unit-detail-toggle");
+  let cityTab = "units"; // which city pane is showing: units | improvements
   const combatToastsEl = document.getElementById("combat-toasts");
   const unitActionsGroupEl = document.getElementById("unit-actions-group");
   const cityOutputGroupEl = document.getElementById("city-output-group");
@@ -2063,38 +2065,21 @@
     show(improveGroupEl, !!tileSel);
     show(cityOutputGroupEl, !!selectedCity);
     show(queueGroupEl, !!selectedCity);
-    // A selected unit needs the board behind the panel clickable (to move/attack);
-    // cities/tiles keep the solid, scrollable panel.
+    // A selected unit lets the board behind the panel stay clickable (to move/attack).
     controlPanelEl.classList.toggle("cp-clickthrough", !!selectedUnit);
-    show(recruitGroupEl, !!selectedCity);
-    show(buildingsGroupEl, !!selectedCity);
-    // Research is a city concern; open it by default when a city is picked.
-    show(researchGroupEl, !!selectedCity);
-    if (selectedCity && recruitGroupEl && recruitGroupEl.tagName === "DETAILS") recruitGroupEl.open = true;
+    // City content is split into two tabs: Units (recruit) and Improvements (buildings).
+    show(cityTabsEl, !!selectedCity);
+    show(recruitGroupEl, !!selectedCity && cityTab === "units");
+    show(buildingsGroupEl, !!selectedCity && cityTab === "improvements");
+    show(researchGroupEl, false); // research now lives on the top-right flask
+    updateCityTabButtons();
+    // The panel is a fixed side overlay (see CSS) — no floating position needed.
+  }
 
-    // Anchor only when the selection identity changes (so it doesn't jump while
-    // you interact with it).
-    const selKey = selectedUnit ? "u:" + selectedUnit.id : selectedCity ? "c:" + selectedCity.id : "t:" + selectedTileKey;
-    if (selKey === ctxPositionedFor) return;
-    ctxPositionedFor = selKey;
-
-    const playArea = controlPanelEl.parentElement; // .play-area (position:relative)
-    const pa = playArea.getBoundingClientRect();
-    const pw = controlPanelEl.offsetWidth || 288;
-    const ph = controlPanelEl.offsetHeight || 320;
-    let left, top;
-    if (lastBoardPointer) {
-      left = lastBoardPointer.x - pa.left + 22; // to the right of the cursor
-      if (left + pw > pa.width - 6) left = lastBoardPointer.x - pa.left - pw - 22; // flip left
-      top = lastBoardPointer.y - pa.top - 10;
-    } else {
-      left = pa.width - pw - 12;
-      top = 12;
-    }
-    left = Math.max(6, Math.min(left, pa.width - pw - 6));
-    top = Math.max(6, Math.min(top, Math.max(6, pa.height - ph - 6)));
-    controlPanelEl.style.left = left + "px";
-    controlPanelEl.style.top = top + "px";
+  function updateCityTabButtons() {
+    if (!cityTabsEl) return;
+    const btns = cityTabsEl.querySelectorAll(".cp-tab");
+    for (const b of btns) b.classList.toggle("active", b.dataset.tab === cityTab);
   }
 
   // Improvements for the selected land tile: build a farm/mine/… funded by the
@@ -2750,6 +2735,16 @@
   if (unitDetailToggleEl) {
     unitDetailToggleEl.addEventListener("click", function () {
       unitDetailsOpen = true;
+      render();
+    });
+  }
+
+  // City menu tabs: switch between Units and Improvements.
+  if (cityTabsEl) {
+    cityTabsEl.addEventListener("click", function (e) {
+      const btn = e.target.closest ? e.target.closest(".cp-tab") : null;
+      if (!btn || !btn.dataset.tab) return;
+      cityTab = btn.dataset.tab;
       render();
     });
   }
