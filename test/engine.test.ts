@@ -372,6 +372,33 @@ test("city can be captured and domination victory is detected", () => {
   assert.equal(victory.winnerId, "p1");
 });
 
+test("a melee attacker advances into the tile after destroying the defender", () => {
+  let state = buildState();
+  state.map.units.u3.hp = 1; // one hit from death
+  state = applyAction(state, { type: "ATTACK", playerId: "p1", attackerId: "u1", defenderId: "u3" });
+  assert.equal(state.map.units.u3, undefined); // defender destroyed
+  assert.deepEqual(state.map.units.u1.position, { q: 2, r: 1 }); // took the ground
+});
+
+test("a ranged attacker holds its ground after a kill", () => {
+  let state = buildState();
+  state.map.units.u2.position = { q: 2, r: 0 }; // archer adjacent to the enemy at (2,1)
+  state.map.units.u3.hp = 1;
+  state = applyAction(state, { type: "ATTACK", playerId: "p1", attackerId: "u2", defenderId: "u3" });
+  assert.equal(state.map.units.u3, undefined);
+  assert.deepEqual(state.map.units.u2.position, { q: 2, r: 0 }); // did NOT advance
+});
+
+test("victors march into a captured city", () => {
+  let state = buildState();
+  state.map.units.u3.position = { q: 3, r: 1 }; // move the garrison out of the tile
+  state.map.cities.c2.position = { q: 2, r: 1 };
+  state.map.cities.c2.hp = 4;
+  state = applyAction(state, { type: "ATTACK_CITY", playerId: "p1", attackerId: "u1", cityId: "c2" });
+  assert.equal(state.map.cities.c2.ownerId, "p1");
+  assert.deepEqual(state.map.units.u1.position, { q: 2, r: 1 }); // marched into the fallen city
+});
+
 function seaState(techs: string[] = ["sailing"]) {
   const tiles: Record<string, { terrain: string; region: string }> = {};
   for (let r = 0; r < 3; r += 1) {

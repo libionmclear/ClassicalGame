@@ -403,6 +403,32 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   };
 }
 
+// After winning, a MELEE attacker advances into the tile it just cleared (the
+// classic "take the ground"). Ranged/siege units hold their position, and we
+// never advance into a tile that still holds other units or an enemy city.
+function tryAdvanceInto(state: GameState, attacker: Unit, target: Coord): void {
+  if (!attacker || attacker.hp <= 0) return;
+  const def = UNITS[attacker.type];
+  if ((def.range ?? 1) > 1) return; // ranged/siege don't move onto the target
+  if (distance(attacker.position, target) !== 1) return; // must have been adjacent
+  const blocked = Object.values(state.map.units).some(
+    (u) => u.id !== attacker.id && u.position.q === target.q && u.position.r === target.r
+  );
+  if (blocked) return; // an enemy (or friendly) unit still stands there
+  const cityHere = Object.values(state.map.cities).find(
+    (c) => c.position.q === target.q && c.position.r === target.r
+  );
+  if (cityHere && cityHere.ownerId !== attacker.ownerId) return; // don't walk into an enemy city
+  const step = movementCost(
+    state,
+    { ownerId: attacker.ownerId, domain: def.domain, mounted: def.mounted },
+    attacker.position,
+    target
+  );
+  if (!Number.isFinite(step)) return; // terrain the attacker can't enter
+  attacker.position = { q: target.q, r: target.r };
+}
+
 function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTACK" }>): void {
   assertPlayerTurn(state, action.playerId);
   const attacker = unitAt(state, action.attackerId);
@@ -416,6 +442,8 @@ function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTA
   defender.hp = preview.defenderRemainingHp;
   attacker.movementRemaining = 0;
 
+  const defenderPos: Coord = { q: defender.position.q, r: defender.position.r };
+
   if (defender.hp <= 0) {
     delete state.map.units[defender.id];
     const defenderOwner = state.playersById[defender.ownerId];
@@ -423,6 +451,9 @@ function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTA
 
     if (attacker.veterancy === "recruit") attacker.veterancy = "veteran";
     else if (attacker.veterancy === "veteran") attacker.veterancy = "elite";
+
+    // Take the ground the enemy held.
+    if (attacker.hp > 0) tryAdvanceInto(state, attacker, defenderPos);
   }
 
   if (attacker.hp <= 0) {
@@ -470,6 +501,8 @@ function applyAttackCity(state: GameState, action: AttackCityAction): void {
     city.population = Math.max(1, city.population - 1);
     city.hp = Math.ceil(city.maxHp * 0.6);
     syncOwnershipIndexes(state);
+    // March the victors into the fallen city.
+    tryAdvanceInto(state, attacker, { q: city.position.q, r: city.position.r });
   }
 }
 
