@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HEGEMON — 3D Showcase</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Spectral:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a1626; color: #e9f2fc; font-family: "Spectral", Georgia, serif; overflow: hidden; }
+    #gal { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+    .panel {
+      position: fixed; z-index: 10; top: 12px; left: 12px; max-width: 340px;
+      background: linear-gradient(135deg, #e7d7ac, #d8c491); color: #3a2a15;
+      border: 1px solid #b79b62; border-radius: 10px; padding: 12px 14px;
+      box-shadow: 0 10px 34px rgba(0,0,0,0.5); font-size: 0.86rem;
+    }
+    .panel h1 { font-family: "Cinzel", serif; font-size: 1.2rem; margin: 0 0 6px; letter-spacing: 0.04em; }
+    .panel p { margin: 6px 0; }
+    .rows { margin: 8px 0 2px; }
+    .rowitem { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+    .sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.35); }
+    .cols { font-size: 0.8rem; color: #5b4a2c; }
+    .hint { font-size: 0.78rem; color: #6a5228; margin-top: 8px; }
+    .tag { display:inline-block; background:#3a2a15; color:#e7d7ac; border-radius:4px; padding:1px 6px; font-size:0.72rem; margin:1px 2px; }
+    .err { position: fixed; z-index: 20; left: 50%; top: 50%; transform: translate(-50%,-50%); color:#ffb4a2; }
+  </style>
+</head>
+<body>
+  <canvas id="gal"></canvas>
+  <div class="panel">
+    <h1>HEGEMON — 3D Showcase</h1>
+    <p>Every civilization's <b>units</b> (left block) and its <b>six city stages</b> (right block), one civ per row.</p>
+    <div class="rows" id="civ-rows"></div>
+    <div class="cols">
+      <p style="margin:8px 0 3px"><b>Unit columns →</b><br/>
+        <span class="tag">Warrior</span><span class="tag">Spearman</span><span class="tag">Archer</span><span class="tag">Horseman</span><span class="tag">Elephant</span><span class="tag">Siege</span><span class="tag">Trireme</span><span class="tag">Settler</span></p>
+      <p style="margin:3px 0"><b>City stages →</b><br/>
+        <span class="tag">0 huts</span><span class="tag">1 hamlet</span><span class="tag">2 village</span><span class="tag">3 town</span><span class="tag">4 city</span><span class="tag">5 metro</span></p>
+    </div>
+    <div class="hint">Drag to orbit · right-drag to pan · scroll to zoom.</div>
+  </div>
+  <div class="err" id="err" style="display:none">Could not load the 3D board bundle. Build with <code>npm run build:web</code>.</div>
+
+  <script src="/web/board3d.bundle.js"></script>
+  <script>
+    (function () {
+      if (!window.Board3D) { document.getElementById("err").style.display = "block"; return; }
+      var CIVS = [
+        { id: "rome", name: "Rome", color: "#c0392b" },
+        { id: "greece", name: "Athenians", color: "#2e86de" },
+        { id: "egypt", name: "Egypt", color: "#d4ac0d" },
+        { id: "carthage", name: "Carthage", color: "#8e44ad" },
+        { id: "gaul", name: "Gaul", color: "#27ae60" },
+        { id: "parthia", name: "Parthia", color: "#e67e22" }
+      ];
+      var UNITS = [
+        { form: "infantry", badge: "⚔" }, { form: "spear", badge: "🔱" }, { form: "ranged", badge: "🏹" },
+        { form: "mounted", badge: "🐎" }, { form: "elephant", badge: "🐘" }, { form: "siege", badge: "🎯" },
+        { form: "naval", badge: "⛵" }, { form: "civilian", badge: "⚒" }
+      ];
+      var POPS = [1, 2, 3, 5, 8, 12]; // stages 0..5
+      var CITY_GAP = 1; // blank column between units and cities
+
+      // Row legend (colour swatch per civ).
+      var rows = document.getElementById("civ-rows");
+      CIVS.forEach(function (c) {
+        var d = document.createElement("div"); d.className = "rowitem";
+        d.innerHTML = '<span class="sw" style="background:' + c.color + '"></span><b>' + c.name + "</b>";
+        rows.appendChild(d);
+      });
+
+      var tiles = [], sprites = [];
+      var seen = {};
+      function addTile(q, r, t) { var k = q + "," + r; if (seen[k]) return; seen[k] = 1; tiles.push({ q: q, r: r, t: t || "plains", v: 2, o: null, h: 0, res: null, imp: null, wx: "clear" }); }
+
+      var cityStartCol = UNITS.length + CITY_GAP;
+      var totalCols = cityStartCol + POPS.length;
+      CIVS.forEach(function (c, i) {
+        var r = i * 2;
+        // Units
+        UNITS.forEach(function (u, j) {
+          addTile(j, r);
+          sprites.push({ civ: c.id, kind: "unit", name: "", color: c.color, q: j, r: r, t: "plains", form: u.form, hpFrac: 1, badge: u.badge });
+        });
+        // Cities (six stages)
+        POPS.forEach(function (pop, k) {
+          var q = cityStartCol + k;
+          addTile(q, r);
+          sprites.push({ civ: c.id, kind: "city", name: "", color: c.color, q: q, r: r, t: "plains", pop: pop });
+        });
+        // pad blank tiles around for a continuous board
+        for (var q = -1; q <= totalCols; q++) { addTile(q, r); addTile(q, r + 1); }
+        addTile(-1, r - 1);
+      });
+
+      var civColors = {}; CIVS.forEach(function (c) { civColors[c.id] = c.color; });
+      var board = Board3D.createBoard(document.getElementById("gal"));
+      var focusQ = totalCols / 2, focusR = (CIVS.length - 1); // centre of the grid
+      board.render({ tiles: tiles, sprites: sprites, borders: [], civColors: civColors, rivers: [], roads: [], focus: { q: focusQ, r: focusR } });
+    })();
+  </script>
+</body>
+</html>
