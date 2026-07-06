@@ -246,24 +246,27 @@ function buildFigure(form: string, color: string, civ?: string): THREE.Group {
     const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.13, 0.26, 0.03); g.add(sh);
   } else if (form === "ranged") {
     figure();
-    const bow = meshOf(GEO.bow, WOOD); bow.position.set(0.14, 0.3, 0); bow.rotation.z = Math.PI / 2; g.add(bow);
+    // A bent-stick bow held out front, with a straight string across it.
+    const bow = meshOf(GEO.bow, DARKWOOD, false); bow.scale.set(1.35, 1.6, 1.35); bow.position.set(0.17, 0.33, 0.05); bow.rotation.z = Math.PI / 2; g.add(bow);
+    const string = meshOf(GEO.pole, 0xd8c9a8, false); string.scale.set(0.5, 0.6, 0.5); string.position.set(0.19, 0.33, 0.05); g.add(string);
   } else if (form === "mounted") {
     const hy = 0.26; // horse back height
     const horse = meshOf(GEO.horse, WOOD); horse.position.set(0, hy, 0); g.add(horse);
     for (const [lx, lz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) {
       const leg = meshOf(GEO.leg, DARKWOOD, false); leg.position.set(lx, 0.13, lz); g.add(leg);
     }
-    // A proper neck sloping up to the head, plus a tail.
+    // Neck up to an ELONGATED head/muzzle (angled down), with ears and a tail.
     const neck = meshOf(GEO.arm, WOOD); neck.scale.set(1.8, 1.05, 1.8); neck.position.set(0.24, hy + 0.11, 0); neck.rotation.z = -0.7; g.add(neck);
-    const hhead = meshOf(GEO.head, WOOD); hhead.scale.set(1.05, 0.75, 0.7); hhead.position.set(0.33, hy + 0.2, 0); g.add(hhead);
+    const headM = meshOf(GEO.horse, WOOD); headM.scale.set(0.62, 0.5, 0.42); headM.position.set(0.38, hy + 0.19, 0); headM.rotation.z = -0.35; g.add(headM);
+    for (const ez of [0.05, -0.05]) { const ear = meshOf(GEO.tusk, WOOD, false); ear.scale.set(0.55, 0.55, 0.55); ear.position.set(0.31, hy + 0.3, ez); g.add(ear); }
     const tail = meshOf(GEO.arm, WOOD); tail.scale.set(0.9, 0.9, 0.9); tail.position.set(-0.25, hy + 0.02, 0); tail.rotation.z = 0.9; g.add(tail);
-    // Rider SITS astride: torso on the horse's back, legs hanging down each flank.
+    // Rider astride and FACING FORWARD (+x, toward the head): arms reach to the reins.
     const seatY = hy + 0.06;
     const torso = meshOf(GEO.torso, armor); torso.scale.set(0.92, 0.9, 0.92); torso.position.set(-0.02, seatY + 0.14, 0); g.add(torso);
-    for (const az of [0.1, -0.1]) { const a = meshOf(GEO.arm, armor); a.scale.set(0.85, 0.85, 0.85); a.position.set(0.02, seatY + 0.14, az); a.rotation.x = az > 0 ? -0.3 : 0.3; g.add(a); }
-    const rh = meshOf(GEO.head, SKIN); rh.scale.set(0.92, 0.92, 0.92); rh.position.set(-0.02, seatY + 0.32, 0); g.add(rh);
+    for (const az of [0.08, -0.08]) { const a = meshOf(GEO.arm, armor); a.scale.set(0.8, 0.8, 0.8); a.position.set(0.13, seatY + 0.12, az); a.rotation.z = 1.05; g.add(a); }
+    const rh = meshOf(GEO.head, SKIN); rh.scale.set(0.92, 0.92, 0.92); rh.position.set(0.0, seatY + 0.32, 0); g.add(rh);
     addHelmet(g, seatY + 0.35, civ);
-    for (const side of [1, -1]) { const leg = meshOf(GEO.legThin, legCol); leg.scale.set(1, 1.15, 1); leg.position.set(0.0, seatY, side * 0.11); leg.rotation.x = side * 0.6; g.add(leg); }
+    for (const side of [1, -1]) { const leg = meshOf(GEO.legThin, legCol); leg.scale.set(1, 1.15, 1); leg.position.set(0.02, seatY, side * 0.11); leg.rotation.x = side * 0.6; g.add(leg); }
   } else if (form === "elephant") {
     const body = meshOf(GEO.bigBody, GREY); body.position.set(0, 0.3, 0); g.add(body);
     for (const [lx, lz] of [[0.2, 0.11], [0.2, -0.11], [-0.2, 0.11], [-0.2, -0.11]]) {
@@ -278,9 +281,18 @@ function buildFigure(form: string, color: string, civ?: string): THREE.Group {
     const arm = meshOf(GEO.pole, DARKWOOD); arm.scale.set(1, 0.55, 1); arm.position.set(0, 0.3, 0); arm.rotation.z = -0.7; g.add(arm);
     for (const wz of [0.13, -0.13]) { const wl = meshOf(GEO.leg, DARKWOOD, false); wl.rotation.x = Math.PI / 2; wl.position.set(0.12, 0.07, wz); g.add(wl); const wr = meshOf(GEO.leg, DARKWOOD, false); wr.rotation.x = Math.PI / 2; wr.position.set(-0.12, 0.07, wz); g.add(wr); }
   } else if (form === "naval") {
-    const hull = meshOf(GEO.hull, WOOD); hull.rotation.z = Math.PI / 2; hull.scale.set(1, 1.5, 0.62); hull.position.set(0, 0.14, 0); g.add(hull);
-    const mast = meshOf(GEO.mast, DARKWOOD); mast.position.set(0, 0.36, 0); g.add(mast);
-    const sail = meshOf(GEO.sail, shade(color, 0.12)); sail.position.set(0, 0.34, 0); g.add(sail);
+    // A long, low galley (not a log): hull + deck, a raised pointed prow with a
+    // bronze ram, oars along the sides, and a sail.
+    const hullCol = 0x6b4a2b, deckCol = 0x8a6a44;
+    const hull = meshOf(GEO.building, hullCol); hull.scale.set(2.4, 0.4, 1.05); hull.position.set(0, 0.14, 0); g.add(hull);
+    const deck = meshOf(GEO.slab, deckCol); deck.scale.set(2.0, 1, 0.85); deck.position.set(0, 0.23, 0); g.add(deck);
+    const prow = meshOf(GEO.roof, hullCol); prow.scale.set(0.75, 1.0, 1.05); prow.rotation.z = -Math.PI / 2; prow.position.set(0.37, 0.16, 0); g.add(prow);
+    const ram = meshOf(GEO.tusk, STEEL, false); ram.scale.set(1.3, 1.3, 1.3); ram.rotation.z = -Math.PI / 2; ram.position.set(0.46, 0.11, 0); g.add(ram);
+    for (const oz of [0.16, -0.16]) for (const ox of [-0.16, 0, 0.16]) {
+      const oar = meshOf(GEO.mast, DARKWOOD, false); oar.scale.set(1, 0.7, 1); oar.rotation.x = Math.PI / 2; oar.rotation.z = 0.35; oar.position.set(ox, 0.11, oz * 1.25); g.add(oar);
+    }
+    const mast = meshOf(GEO.mast, DARKWOOD); mast.position.set(-0.04, 0.42, 0); g.add(mast);
+    const sail = meshOf(GEO.sail, shade(color, 0.12)); sail.position.set(-0.04, 0.4, 0); g.add(sail);
   } else if (form === "civilian") {
     figure(0, false); // bare-headed worker
     const pack = meshOf(GEO.building, WOOD); pack.scale.set(0.5, 0.4, 0.45); pack.position.set(-0.15, 0.28, 0); g.add(pack);
@@ -405,6 +417,14 @@ function addLandmark(g: THREE.Group, s: CivStyle, tier: number): void {
     // Temple at one end (walls + pitched roof rest flush) and the aqueduct behind.
     addBuilding(g, s, pw * 0.34, 0, 0.34 * k, 0.34 * k);
     addAqueduct(g, s, -pw * 0.05, -pd * 0.85, k);
+    // At the grandest stage, a small columned temple crowns the forum's entablature.
+    if (tier >= 5) {
+      const ty = ph + colH + 0.02 * k;
+      const temple = new THREE.Group();
+      addColonnadeTemple(temple, s, 0.5 * k, 0, 0);
+      temple.position.set(-pw * 0.02, ty, 0);
+      g.add(temple);
+    }
   } else if (L === "pyramid") {
     const p = meshOf(GEO.pyramid, s.wall); p.scale.setScalar(k * 0.85); p.position.y = 0.5 * k * 0.85 * 0.5; g.add(p);
   } else if (L === "columns") {
@@ -497,7 +517,8 @@ function buildCity(pop: number, civ: string, color?: string): THREE.Group {
   const s = CIV_STYLE[civ] || CIV_STYLE.rome;
   const banner = color ? new THREE.Color(color).getHex() : s.roofColor;
   // Six growth stages: 0 huts · 1 hamlet · 2 village · 3 town · 4 city · 5 metropolis.
-  const tier = pop <= 1 ? 0 : pop <= 2 ? 1 : pop <= 4 ? 2 : pop <= 6 ? 3 : pop <= 9 ? 4 : 5;
+  // Cities are FOUNDED as huts (stage 0) — capitals start at pop 2, so stage 0 spans pop 1–2.
+  const tier = pop <= 2 ? 0 : pop <= 3 ? 1 : pop <= 5 ? 2 : pop <= 7 ? 3 : pop <= 9 ? 4 : 5;
 
   // Stage 0 (ground level): just a ring of primitive huts.
   if (tier === 0) {
