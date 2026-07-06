@@ -39,7 +39,7 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; }
-export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; hpFrac?: number; }
+export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; pop?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 export interface BoardView {
   tiles: TileView[];
@@ -728,6 +728,23 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const sh = isCity ? 1.7 : 1.0;
       shadow.scale.set(sh, sh, 1);
       spriteGroup.add(shadow);
+
+      // Garrison: a small soldier standing at the city gate, so a defended city
+      // reads at a glance; a count chip shows how many are inside.
+      if (isCity && sv.garrison && sv.garrison > 0) {
+        const gfig = buildFigure(sv.gForm || "infantry", sv.gColor || color, sv.civ);
+        gfig.scale.setScalar(0.85);
+        gfig.position.set(w.x + SIZE * 0.34, top + 0.01, w.z + SIZE * 0.5);
+        spriteGroup.add(gfig);
+        if (sv.garrison > 1) {
+          const gb = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture("×" + sv.garrison), transparent: true, depthWrite: false, depthTest: false }));
+          gb.center.set(0.5, 0);
+          gb.scale.set(0.5, 0.5, 0.5);
+          gb.position.set(w.x + SIZE * 0.34, top + 0.62, w.z + SIZE * 0.5);
+          gb.renderOrder = 999;
+          spriteGroup.add(gb);
+        }
+      }
 
       // Type glyph badge floating above so units stay identifiable.
       if (sv.badge) {

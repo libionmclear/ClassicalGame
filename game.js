@@ -26,6 +26,7 @@
   const controlPanelEl = document.getElementById("control-panel");
   const cpCloseBtn = document.getElementById("cp-close");
   const unitDetailToggleEl = document.getElementById("unit-detail-toggle");
+  const combatToastsEl = document.getElementById("combat-toasts");
   const unitActionsGroupEl = document.getElementById("unit-actions-group");
   const cityOutputGroupEl = document.getElementById("city-output-group");
   const cityOutputEl = document.getElementById("city-output");
@@ -1124,6 +1125,42 @@
     return String(value);
   }
 
+  // Snapshot the human's forces so we can report what the enemy did on their turn.
+  function snapshotHumanForces() {
+    const units = {};
+    for (const u of Object.values(state.map.units)) {
+      if (u.ownerId === HUMAN_ID) units[u.id] = { type: u.type, hp: u.hp };
+    }
+    const cities = {};
+    for (const c of Object.values(state.map.cities)) {
+      if (c.ownerId === HUMAN_ID) cities[c.id] = { name: c.name || c.id, hp: c.hp };
+    }
+    return { units: units, cities: cities };
+  }
+
+  // After the AI phase, banner what the enemy did to your forces.
+  function reportEnemyCombat(before) {
+    if (!before) return;
+    let wounded = 0, besieged = 0, lostCities = 0;
+    const lostNames = [];
+    for (const id in before.units) {
+      const now = state.map.units[id];
+      if (!now || now.ownerId !== HUMAN_ID) lostNames.push(unitName(before.units[id].type));
+      else if (now.hp < before.units[id].hp) wounded += 1;
+    }
+    for (const id in before.cities) {
+      const now = state.map.cities[id];
+      if (!now || now.ownerId !== HUMAN_ID) lostCities += 1;
+      else if (now.hp < before.cities[id].hp) besieged += 1;
+    }
+    if (lostCities) showCombatToast("🏛️ You lost " + lostCities + " " + (lostCities === 1 ? "city" : "cities") + "!", "loss");
+    else if (besieged) showCombatToast("🏛️ " + besieged + " of your " + (besieged === 1 ? "city is" : "cities are") + " under assault", "loss");
+    if (lostNames.length) {
+      showCombatToast("🩸 Enemy attack: you lost " + (lostNames.length <= 2 ? lostNames.join(" & ") : lostNames.length + " units"), "loss");
+    }
+    if (wounded) showCombatToast("🛡️ " + wounded + " of your " + (wounded === 1 ? "unit" : "units") + " took damage", "loss");
+  }
+
   function apply(action) {
     try {
       const beforeSummary = action.type === "END_TURN" && action.playerId === HUMAN_ID ? snapshotHumanState() : null;
@@ -1141,7 +1178,10 @@
       else if (selectedCityId && !state.map.cities[selectedCityId]) clearSelection();
       logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
       render();
+      // Snapshot (post my action, pre-AI) so we can report enemy combat after.
+      const forcesBefore = snapshotHumanForces();
       runAiUntilHuman();
+      reportEnemyCombat(forcesBefore);
       saveGame();
 
       if (beforeSummary) {
@@ -1253,11 +1293,20 @@
         const tactic = (prev.modifiers || []).find(
           (m) => /vs |Combined|Supported|Flanking/.test(m)
         );
+        const aName = unitName(selected.type), dName = unitName(enemyUnit.type);
+        const killed = prev.defenderRemainingHp <= 0;
+        const died = prev.attackerRemainingHp <= 0;
         logAction(
           "⚔️ " + selected.type + " strikes " + enemyUnit.type + ": deals " + prev.damageToDefender +
-          (prev.defenderRemainingHp <= 0 ? " — destroyed!" : ", takes " + prev.damageToAttacker) +
+          (killed ? " — destroyed!" : ", takes " + prev.damageToAttacker) +
           (tactic ? " [" + tactic + "]" : "")
         );
+        // A banner over the board so the result is unmissable.
+        let msg = "⚔️ " + aName + " hit " + dName + " −" + prev.damageToDefender;
+        if (killed) msg += ' <span class="ct-kill">— destroyed!</span>';
+        else msg += " (took −" + prev.damageToAttacker + ")";
+        if (died) msg += ' <span class="ct-kill">· your ' + aName + " fell</span>";
+        showCombatToast(msg, killed && !died ? "win" : died ? "loss" : "");
       } catch (e) {}
       flashCombat([key, attackerKey]);
       apply({ type: "ATTACK", playerId: HUMAN_ID, attackerId: selected.id, defenderId: enemyUnit.id });
@@ -1269,9 +1318,19 @@
         hintLineEl.textContent = "That city is out of range.";
         return;
       }
+      const cityLabel = clickedCity.name || "the city";
+      const hpBefore = clickedCity.hp;
       logAction("🏛️ " + selected.type + " assaults " + clickedCity.id + " (HP " + clickedCity.hp + ")");
       flashCombat([key, attackerKey]);
       apply({ type: "ATTACK_CITY", playerId: HUMAN_ID, attackerId: selected.id, cityId: clickedCity.id });
+      const afterCity = state.map.cities[clickedCity.id];
+      if (afterCity && afterCity.ownerId === HUMAN_ID) {
+        showCombatToast("🏛️ You captured " + cityLabel + "!", "win");
+      } else if (afterCity) {
+        showCombatToast("🏛️ Assault on " + cityLabel + " −" + Math.max(0, hpBefore - afterCity.hp) + " (HP " + afterCity.hp + ")", "");
+      } else {
+        showCombatToast("🏛️ You captured " + cityLabel + "!", "win");
+      }
       return;
     }
 
@@ -1616,20 +1675,35 @@
         }
       }
     }
+    // Index units by tile so a city can show what it's garrisoning.
+    const unitsByTile = {};
+    for (const u of Object.values(state.map.units)) {
+      const k = u.position.q + "," + u.position.r;
+      (unitsByTile[k] || (unitsByTile[k] = [])).push(u);
+    }
     for (const city of Object.values(state.map.cities)) {
       const ck = city.position.q + "," + city.position.r;
       if (!visibility.visible.has(ck)) continue;
+      // Garrison: the units standing inside the city (drawn beside the walls, so
+      // you can see a city is defended without a separate stacked sprite).
+      const garr = (unitsByTile[ck] || []).filter((u) => u.ownerId === city.ownerId);
+      let gForm = null;
+      if (garr.length) {
+        const top = garr.slice().sort((a, b) => (engine.UNITS[b.type].attack || 0) - (engine.UNITS[a.type].attack || 0))[0];
+        gForm = unitForm(top.type);
+      }
       sprites.push({
         civ: city.ownerId, kind: "city", name: citySpriteName(city.ownerId, city) || "",
         color: CIV_COLORS[city.ownerId] || "#888", q: city.position.q, r: city.position.r,
         t: state.map.tiles[ck] ? state.map.tiles[ck].terrain : "plains",
-        pop: city.population || 1
+        pop: city.population || 1,
+        garrison: garr.length, gForm: gForm, gColor: CIV_COLORS[city.ownerId] || "#888"
       });
     }
     for (const unit of Object.values(state.map.units)) {
       const uk = unit.position.q + "," + unit.position.r;
       if (!visibility.visible.has(uk)) continue;
-      if (getCityAt(unit.position.q, unit.position.r)) continue; // shown as the city
+      if (getCityAt(unit.position.q, unit.position.r)) continue; // shown as the city's garrison
       const embarked = engine.isEmbarked && engine.isEmbarked(state, unit);
       sprites.push({
         civ: unit.ownerId, kind: "unit", name: unitSpriteName(unit.ownerId, unit) || "",
@@ -1715,6 +1789,23 @@
         if (el.classList) el.classList.remove("combat-flash");
       }
     }, 550);
+  }
+
+  // A readable unit name ("Legionary" not "legionary").
+  function unitName(type) {
+    return (UNIT_META && UNIT_META[type] && UNIT_META[type].name) || type;
+  }
+
+  // Pop a combat-result banner over the board (auto-dismisses).
+  function showCombatToast(html, cls) {
+    if (!combatToastsEl) return;
+    const el = document.createElement("div");
+    el.className = "combat-toast" + (cls ? " " + cls : "");
+    el.innerHTML = html;
+    combatToastsEl.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 4000);
+    // Keep at most a few on screen.
+    while (combatToastsEl.children.length > 4) combatToastsEl.removeChild(combatToastsEl.firstChild);
   }
 
   // Update only the path-preview highlight on hover — do NOT rebuild the board
