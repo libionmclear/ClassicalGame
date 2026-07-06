@@ -2502,11 +2502,11 @@ details.panel-collapse > summary {
 .unit-detail-toggle {
   position: absolute;
   z-index: 31;
-  width: 40px;
-  height: 40px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border-radius: 50%;
-  font-size: 1.2rem;
+  font-size: 0.85rem;
   line-height: 1;
   color: var(--ink);
   background: linear-gradient(180deg, #f2e6c4, var(--papyrus-2));

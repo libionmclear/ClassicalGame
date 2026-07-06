@@ -1009,14 +1009,20 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     return hit.length && hit[0].instanceId != null ? (hit[0].instanceId as number) : -1;
   }
 
+  let dX = 0, dY = 0, pointerDown = false;
+  // Suppress the browser context menu so a right-drag PAN isn't interrupted
+  // (an interrupted right-drag was leaving the camera controls stuck).
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener("mousemove", (e) => {
-    if (!hoverFn) return;
+    if (!hoverFn || pointerDown) return; // don't recompute hover mid-drag
     const id = pickIndex(e.clientX, e.clientY);
     hoverFn(id >= 0 ? keyByIndex[id] : null);
   });
-  let dX = 0, dY = 0;
-  canvas.addEventListener("mousedown", (e) => { dX = e.clientX; dY = e.clientY; });
+  canvas.addEventListener("mousedown", (e) => { dX = e.clientX; dY = e.clientY; pointerDown = true; });
+  canvas.addEventListener("mouseleave", () => { pointerDown = false; });
   canvas.addEventListener("mouseup", (e) => {
+    pointerDown = false;
+    if (e.button !== 0) return; // only the LEFT button selects (right-drag pans)
     if (!pickFn || Math.abs(e.clientX - dX) + Math.abs(e.clientY - dY) > 5) return;
     const id = pickIndex(e.clientX, e.clientY);
     pickFn(id >= 0 ? keyByIndex[id] : null);
