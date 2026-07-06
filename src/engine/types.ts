@@ -172,6 +172,8 @@ export interface GameState {
   actionLog: ActionLogEntry[];
   /** Tiles each player has ever seen (persists fog-of-war across reloads). */
   discovered?: Record<string, string[]>;
+  /** Research + build cost multiplier — bigger maps take longer to develop. */
+  costScale?: number;
 }
 
 export interface ActionLogEntry {

@@ -35,7 +35,7 @@ export function sprinkleResources(
   }
 }
 
-export type MapSize = "small" | "medium" | "large" | "xl";
+export type MapSize = "small" | "medium" | "large" | "xl" | "huge";
 
 interface SizeSpec {
   width: number;
@@ -51,7 +51,8 @@ export const MAP_SIZES: Record<MapSize, SizeSpec> = {
   small: { width: 15, height: 13, bands: 2, rivers: 2, label: "Small" },
   medium: { width: 21, height: 18, bands: 3, rivers: 3, label: "Medium" },
   large: { width: 27, height: 24, bands: 3, rivers: 5, label: "Large" },
-  xl: { width: 34, height: 30, bands: 4, rivers: 6, label: "XL" }
+  xl: { width: 34, height: 30, bands: 4, rivers: 6, label: "XL" },
+  huge: { width: 48, height: 38, bands: 5, rivers: 9, label: "Huge (ludicrous)" }
 };
 
 // Odd-r offset (pointy-top) <-> axial. Generation walks a rectangle in offset
@@ -97,7 +98,8 @@ export const DEFAULT_PLAYERS: Record<MapSize, number> = {
   small: 2,
   medium: 3,
   large: 4,
-  xl: 5
+  xl: 5,
+  huge: 6
 };
 
 // Land tiles a basic (unteched) land unit can traverse — used for connectivity so
@@ -457,7 +459,8 @@ export const TURN_LIMITS: Record<MapSize, number> = {
   small: 40,
   medium: 60,
   large: 80,
-  xl: 100
+  xl: 100,
+  huge: 140
 };
 
 // A guaranteed-valid map: all plains rectangle, two capitals on opposite sides.

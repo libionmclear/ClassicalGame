@@ -123,6 +123,8 @@
   let resultRecorded = false;
   // Civs already announced as destroyed, so we say it once each.
   let announcedDead = {};
+  // Admin testing: reveal the whole map (set when an admin signs in; toggle in menu).
+  let adminRevealMap = false;
   // Where the player last pressed on the board — the in-play menu opens there.
   let lastBoardPointer = null;
   // The selection the floating menu was last positioned for (so it only re-anchors
@@ -992,6 +994,11 @@
     const visibility = engine.computeVisibility(state, HUMAN_ID);
     const visible = new Set(visibility.visibleTiles);
     const discovered = new Set(visibility.discoveredTiles);
+    // Admin testing aid: reveal the entire map (toggle in the menu).
+    if (adminRevealMap) {
+      for (const key in state.map.tiles) { visible.add(key); discovered.add(key); }
+      return { visible: visible, discovered: discovered };
+    }
     // Your own realm is always watched — every tile inside your borders stays in
     // full view (and you can see who stands on it), not just what a unit sees.
     const territory = engine.computeTerritory ? engine.computeTerritory(state) : {};
@@ -2380,7 +2387,7 @@
           player.forkChoices[rule.forkGroup] &&
           player.forkChoices[rule.forkGroup] !== rule.forkBranch;
 
-        const cost = engine.researchCost ? engine.researchCost(id) : 0;
+        const cost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id) : (engine.researchCost ? engine.researchCost(id) : 0);
         const affordable = player.science >= cost;
 
         const item = document.createElement("button");
@@ -2417,7 +2424,8 @@
     "Labor/turn": "Labor — production made across all your cities each turn. It is NOT a shared pool: every city banks its OWN labor and builds only from that, so select a city to see what it has and how long its work will take.",
     Denarii: "Denarii — a shared treasury from markets and trade; pays upkeep and can rush-buy.",
     Scientia: "Scientia — learning. A shared pool that accrues each turn and buys techs.",
-    Doctrinae: "Doctrinae — technologies you have mastered."
+    Doctrinae: "Doctrinae — technologies you have mastered.",
+    Upkeep: "Upkeep — gold your standing army costs every turn (each unit has a maintenance cost). It is already subtracted from your Denarii income; a bigger army means a smaller treasury."
   };
 
   function renderHud() {
@@ -2428,6 +2436,13 @@
     // Net food per turn (after the army's food upkeep). Negative = a deficit that
     // stalls growth — flag it so the player can feed or shrink the army.
     const netFood = inc.food || 0;
+    // Gold spent maintaining the standing army each turn (each unit's upkeep).
+    let upkeep = 0;
+    for (const u of Object.values(state.map.units)) {
+      if (u.ownerId !== HUMAN_ID) continue;
+      const d = engine.UNITS && engine.UNITS[u.type];
+      if (d) upkeep += d.upkeep || 0;
+    }
     const resources = [
       { ico: "👥", val: pop, lbl: "Populus", delta: null },
       { ico: "🌾", val: (netFood >= 0 ? "+" : "") + netFood + "/t", lbl: "Food", delta: null, warn: netFood < 0 },
@@ -2435,6 +2450,7 @@
       // a banked total (which read as spendable and confused players).
       { ico: "⚒️", val: (inc.production || 0) + "/t", lbl: "Labor", delta: null },
       { ico: "🪙", val: rome.gold, lbl: "Denarii", delta: inc.gold },
+      { ico: "🛡️", val: "−" + upkeep + "/t", lbl: "Upkeep", delta: null, warn: upkeep > 0 && (inc.gold || 0) < 0, title: "Army upkeep — gold each unit costs to maintain per turn (" + upkeep + " total)." },
       { ico: "🧪", val: rome.science, lbl: "Scientia", delta: inc.science }
     ];
     resourceBarEl.innerHTML = resources
@@ -2901,7 +2917,7 @@
       const t = engine.TECHS[id];
       if (t.civ && !civMatches(player, t.civ)) continue;
       if (!canResearchSafe(player, id)) continue;
-      const cost = engine.researchCost ? engine.researchCost(id) : 0;
+      const cost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id) : (engine.researchCost ? engine.researchCost(id) : 0);
       if (player.science >= cost) ready += 1;
     }
     researchBtn.classList.toggle("glow", ready > 0 && isHumanTurn());
@@ -3297,6 +3313,7 @@
     }
     // Make sure the profile carries the account's display name.
     const p = loadProfile(); p.name = acct.name || acct.username; saveProfile(p);
+    adminRevealMap = !!acct.isAdmin; // admins start with the whole map revealed
     updateAccountLine();
   }
   async function doLogin(userOrEmail, pw) {
@@ -3338,10 +3355,15 @@
   }
   function updateAccountLine() {
     if (!accountLineEl) return;
-    accountLineEl.innerHTML = currentAccount
-      ? "Signed in as <b>" + (currentAccount.name || currentAccount.username) + "</b>" +
-        (currentAccount.email ? ' <span class="sel-sub">(' + currentAccount.email + ")</span>" : "")
-      : "Not signed in";
+    if (!currentAccount) { accountLineEl.innerHTML = "Not signed in"; return; }
+    let html = "Signed in as <b>" + (currentAccount.name || currentAccount.username) + "</b>" +
+      (currentAccount.email ? ' <span class="sel-sub">(' + currentAccount.email + ")</span>" : "");
+    if (currentAccount.isAdmin) {
+      html += '<div style="margin-top:6px"><button id="reveal-map-btn" class="ghost-btn">🗺️ Reveal map: ' + (adminRevealMap ? "ON" : "OFF") + "</button></div>";
+    }
+    accountLineEl.innerHTML = html;
+    const rb = document.getElementById("reveal-map-btn");
+    if (rb) rb.addEventListener("click", function () { adminRevealMap = !adminRevealMap; updateAccountLine(); if (state) render(); });
   }
 
   function renderProfile() {

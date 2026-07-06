@@ -550,7 +550,7 @@ function applyResearch(state: GameState, action: ResearchTechAction): void {
     throw new Error(`Cannot research tech ${action.techId}`);
   }
 
-  const cost = researchCost(action.techId);
+  const cost = scaledResearchCost(state, action.techId);
   if (player.science < cost) {
     throw new Error(`Insufficient science for ${action.techId}: needs ${cost}, has ${player.science}`);
   }
@@ -584,6 +584,19 @@ export function researchCost(techId: string): number {
   if (tech && typeof tech.cost === "number") return tech.cost;
   const age = tech ? tech.age : 1;
   return age === 1 ? 18 : age === 2 ? 36 : 60;
+}
+
+// Bigger maps take proportionally longer to develop: research + build costs scale
+// with the map's area (dampened by a square root, relative to a Medium map, and
+// capped so the ludicrous Oikoumene doesn't become impossible).
+const REFERENCE_AREA = 21 * 18; // a Medium map = scale 1.0
+export function mapCostScale(width: number, height: number): number {
+  const area = Math.max(1, (width || 0) * (height || 0));
+  return Math.min(3, Math.max(1, Math.round(Math.sqrt(area / REFERENCE_AREA) * 100) / 100));
+}
+// Research cost after the map-size scaling.
+export function scaledResearchCost(state: GameState, techId: string): number {
+  return Math.max(1, Math.round(researchCost(techId) * (state.costScale || 1)));
 }
 
 export function computeCityYield(
@@ -711,7 +724,7 @@ export function buildDiscount(state: GameState, ownerId: string, id: string): nu
 export function effectiveItemCost(state: GameState, ownerId: string, id: string): number {
   const base = productionItemCost(id);
   if (!Number.isFinite(base)) return base;
-  return Math.max(1, Math.round(base * buildDiscount(state, ownerId, id)));
+  return Math.max(1, Math.round(base * buildDiscount(state, ownerId, id) * (state.costScale || 1)));
 }
 
 // Food eaten by an empire's standing army each turn: 1 per non-civilian unit,
@@ -1328,7 +1341,8 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
     map,
     weather: { current: {}, forecast: {} },
     tradeRoutes: [],
-    actionLog: []
+    actionLog: [],
+    costScale: mapCostScale(map.width, map.height)
   };
 
   syncOwnershipIndexes(state);
