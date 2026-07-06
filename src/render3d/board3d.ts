@@ -381,6 +381,21 @@ function buildTree(): THREE.Group {
 function buildRock(): THREE.Mesh {
   return meshOf(GEO.rock, 0x7d746a);
 }
+function buildAnimal(color: number): THREE.Group {
+  const g = new THREE.Group();
+  const body = meshOf(GEO.horse, color); body.scale.set(0.5, 0.7, 0.7); body.position.y = 0.12; g.add(body);
+  for (const [lx, lz] of [[0.08, 0.05], [0.08, -0.05], [-0.08, 0.05], [-0.08, -0.05]]) {
+    const leg = meshOf(GEO.leg, color, false); leg.scale.set(0.6, 0.5, 0.6); leg.position.set(lx, 0.05, lz); g.add(leg);
+  }
+  const head = meshOf(GEO.head, color); head.scale.setScalar(0.7); head.position.set(0.14, 0.17, 0); g.add(head);
+  return g;
+}
+// A small coloured cone prop (wheat sheaf, vine bush, …).
+function buildTuft(color: number, h: number): THREE.Mesh {
+  const m = meshOf(GEO.treeCone, color, false);
+  m.scale.set(0.5, h, 0.5);
+  return m;
+}
 // Stable pseudo-random in [0,1) from tile coords + a salt, so scatter never jumps.
 function rnd(q: number, r: number, i: number): number {
   const s = Math.sin(q * 127.1 + r * 311.7 + i * 74.7) * 43758.5453;
@@ -485,6 +500,19 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         rk.scale.setScalar(s);
         rk.position.set(w.x + Math.cos(a) * d, top + 0.04 * s, w.z + Math.sin(a) * d);
         scatterGroup.add(rk);
+      }
+      // Resource-specific props: grain sheaves, grazing animals, vine bushes.
+      let props: THREE.Object3D[] = [];
+      if (tv.res === "grain") props = [buildTuft(0xd9c05a, 0.5), buildTuft(0xd9c05a, 0.45), buildTuft(0xcdb44a, 0.5)];
+      else if (tv.res === "horses") props = [buildAnimal(0x8a6a44), buildAnimal(0x6b4a2b)];
+      else if (tv.res === "wine") props = [buildTuft(0x3f6b3a, 0.4), buildTuft(0x315a2e, 0.4)];
+      else if (tv.res === "fish" && tv.t !== "coast" && tv.t !== "sea") props = [];
+      for (let i = 0; i < props.length; i += 1) {
+        const a = rnd(tv.q, tv.r, i + 60) * Math.PI * 2;
+        const d = 0.18 + rnd(tv.q, tv.r, i + 70) * 0.45;
+        props[i].position.set(w.x + Math.cos(a) * d, top, w.z + Math.sin(a) * d);
+        props[i].rotation.y = rnd(tv.q, tv.r, i + 80) * Math.PI * 2;
+        scatterGroup.add(props[i]);
       }
     }
   }
