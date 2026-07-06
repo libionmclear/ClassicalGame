@@ -2323,6 +2323,16 @@ details.panel-collapse > summary {
   padding: 9px 10px;
 }
 
+.menu-actions a.ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  text-align: center;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
 .menu-actions .ghost-btn:hover:not(:disabled) {
   color: var(--ink);
   filter: brightness(1.04);
