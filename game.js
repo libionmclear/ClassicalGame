@@ -2570,6 +2570,43 @@
     }
   }
 
+  // One-time repair for saves made before the water-placement fixes: nudge any
+  // city stranded on water onto the nearest land, and any ship beached on land
+  // onto the nearest water. Returns true if anything moved.
+  function healLoadedState(st) {
+    if (!st || !st.map || !st.map.tiles) return false;
+    const tiles = st.map.tiles;
+    const isWater = function (t) { return t && (t.terrain === "sea" || t.terrain === "coast"); };
+    const keyOfCity = function (c) { return c.position.q + "," + c.position.r; };
+    const cityKeys = new Set(Object.values(st.map.cities).map(keyOfCity));
+    let changed = false;
+    function nearestTile(pos, pred) {
+      let best = null, bestD = Infinity;
+      for (const key in tiles) {
+        const parts = key.split(","); const q = +parts[0], r = +parts[1];
+        if (!pred(tiles[key], key)) continue;
+        const d = engine.distance(pos, { q: q, r: r });
+        if (d < bestD) { bestD = d; best = { q: q, r: r }; }
+      }
+      return best;
+    }
+    for (const c of Object.values(st.map.cities)) {
+      if (!isWater(tiles[keyOfCity(c)])) continue;
+      const dest = nearestTile(c.position, function (t, key) {
+        return t && !isWater(t) && t.terrain !== "mountains" && !cityKeys.has(key);
+      });
+      if (dest) { cityKeys.delete(keyOfCity(c)); c.position = dest; cityKeys.add(dest.q + "," + dest.r); changed = true; }
+    }
+    for (const u of Object.values(st.map.units)) {
+      const def = engine.UNITS && engine.UNITS[u.type];
+      if (!def || def.domain !== "naval") continue;
+      if (isWater(tiles[u.position.q + "," + u.position.r])) continue;
+      const dest = nearestTile(u.position, function (t) { return isWater(t); });
+      if (dest) { u.position = dest; changed = true; }
+    }
+    return changed;
+  }
+
   // Resume a saved game if one exists; otherwise start fresh.
   function resumeOrNew() {
     const saved = loadGame();
@@ -2578,6 +2615,9 @@
       return;
     }
     state = saved;
+    let repaired = false;
+    try { repaired = healLoadedState(state); } catch (e) { console.error("Save repair skipped:", e); }
+    if (repaired) saveGame();
     // Restore which civ the human was playing (older saves default to Rome).
     if (state.humanPlayerId && state.playersById[state.humanPlayerId]) {
       HUMAN_ID = state.humanPlayerId;
@@ -2585,6 +2625,7 @@
     resultRecorded = false; // let a resumed game record its result when it ends
     clearSelection();
     actionLog = ["Resumed your saved game — turn " + state.turn];
+    if (repaired) actionLog.push("Repaired a stranded city/ship from an older save.");
     hintLineEl.textContent = defaultHintText;
     pendingRecenter = true;
     render();
