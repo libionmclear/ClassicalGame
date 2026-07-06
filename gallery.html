@@ -34,7 +34,7 @@
     <div class="rows" id="civ-rows"></div>
     <div class="cols">
       <p style="margin:8px 0 3px"><b>Unit columns →</b><br/>
-        <span class="tag">Warrior</span><span class="tag">Spearman</span><span class="tag">Archer</span><span class="tag">Horseman</span><span class="tag">Elephant</span><span class="tag">Siege</span><span class="tag">Trireme</span><span class="tag">Settler</span></p>
+        <span class="tag">Warrior</span><span class="tag">Spearman</span><span class="tag">Archer</span><span class="tag">Horseman</span><span class="tag">Elephant</span><span class="tag">Siege</span><span class="tag">Trireme</span><span class="tag">Settler</span> · then each civ's <b>★ special unit</b> (Legionary, Hoplite, War Chariot, War Elephant, Gaesatae, Cataphract).</p>
       <p style="margin:3px 0"><b>City stages →</b><br/>
         <span class="tag">0 huts</span><span class="tag">1 hamlet</span><span class="tag">2 village</span><span class="tag">3 town</span><span class="tag">4 city</span><span class="tag">5 metro</span></p>
     </div>
@@ -59,6 +59,15 @@
         { form: "mounted", badge: "🐎" }, { form: "elephant", badge: "🐘" }, { form: "siege", badge: "🎯" },
         { form: "naval", badge: "⛵" }, { form: "civilian", badge: "⚒" }
       ];
+      // Each civ's signature (special) unit, shown after the generic line.
+      var SPECIAL = {
+        rome: { form: "infantry", utype: "legionary", badge: "🦅" },
+        greece: { form: "spear", utype: "hoplite", badge: "🛡️" },
+        egypt: { form: "mounted", utype: "war-chariot", badge: "🏇" },
+        carthage: { form: "elephant", utype: "war-elephant", badge: "🐘" },
+        gaul: { form: "infantry", utype: "gaesatae", badge: "🗡️" },
+        parthia: { form: "mounted", utype: "cataphract", badge: "🏹" }
+      };
       var POPS = [1, 2, 3, 5, 8, 12]; // stages 0..5
       var CITY_GAP = 1; // blank column between units and cities
 
@@ -74,7 +83,8 @@
       var seen = {};
       function addTile(q, r, t) { var k = q + "," + r; if (seen[k]) return; seen[k] = 1; tiles.push({ q: q, r: r, t: t || "plains", v: 2, o: null, h: 0, res: null, imp: null, wx: "clear" }); }
 
-      var cityStartCol = UNITS.length + CITY_GAP;
+      var specialCol = UNITS.length + 1; // one gap after the generic line
+      var cityStartCol = specialCol + 1 + CITY_GAP;
       var totalCols = cityStartCol + POPS.length;
       CIVS.forEach(function (c, i) {
         var r = i * 2;
@@ -83,6 +93,12 @@
           addTile(j, r);
           sprites.push({ civ: c.id, kind: "unit", name: "", color: c.color, q: j, r: r, t: "plains", form: u.form, hpFrac: 1, badge: u.badge });
         });
+        // The civ's signature unit
+        var sp = SPECIAL[c.id];
+        if (sp) {
+          addTile(specialCol, r);
+          sprites.push({ civ: c.id, kind: "unit", name: "", color: c.color, q: specialCol, r: r, t: "plains", form: sp.form, utype: sp.utype, hpFrac: 1, badge: sp.badge });
+        }
         // Cities (six stages)
         POPS.forEach(function (pop, k) {
           var q = cityStartCol + k;

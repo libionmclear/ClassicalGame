@@ -475,12 +475,13 @@ function addLandmark(g: THREE.Group, s: CivStyle, tier: number): void {
     if (tier >= 5) {
       const ty = ph + colH + 0.02 * k;
       const temple = new THREE.Group();
-      addColonnadeTemple(temple, s, 0.5 * k, 0, 0);
-      temple.position.set(-pw * 0.02, ty, 0);
+      addColonnadeTemple(temple, s, 0.9 * k, 0, 0); // a proper big temple crowns the forum
+      temple.position.set(0, ty, 0);
       g.add(temple);
     }
   } else if (L === "pyramid") {
-    const p = meshOf(GEO.pyramid, s.wall); p.scale.setScalar(k * 0.85); p.position.y = 0.5 * k * 0.85 * 0.5; g.add(p);
+    const ps = k * 1.2; // Egypt's pyramid grows grander at the higher stages
+    const p = meshOf(GEO.pyramid, s.wall); p.scale.setScalar(ps); p.position.y = 0.5 * ps * 0.5; g.add(p);
   } else if (L === "columns") {
     const bh = 0.42 * k;
     const base = meshOf(GEO.building, s.wall); base.scale.set(1.5 * k, bh / 0.4, 1.2 * k); base.position.y = bh * 0.5; g.add(base);
@@ -591,7 +592,8 @@ function buildCity(pop: number, civ: string, color?: string): THREE.Group {
   if (tier >= 3) addLandmark(g, s, tier);                          // town+: the civ landmark
   if (civ === "rome" && tier < 3) addColonnadeTemple(g, s, 0.65 + tier * 0.12);
   if (tier >= 4) addWalls(g, s, tier, banner);                     // city+: walls + towers (+banners at 5)
-  if (tier >= 5) addMonument(g, s, -0.24, -0.24);                  // metropolis: victory column
+  // Metropolis victory column — Rome's grandeur is its forum temple instead.
+  if (tier >= 5 && civ !== "rome") addMonument(g, s, -0.24, -0.24);
 
   const houses = tier === 1 ? 3 : tier === 2 ? 5 : 2 + tier * 2;   // 3 / 5 / 8 / 10 / 12
   const rad = tier <= 1 ? 0.34 : tier === 2 ? 0.42 : 0.56;
