@@ -78,6 +78,10 @@
   const accountLineEl = document.getElementById("account-line");
   const changePwBtn = document.getElementById("change-pw-btn");
   const logoutBtn = document.getElementById("logout-btn");
+  const handBtn = document.getElementById("hand-btn");
+  const handModalEl = document.getElementById("hand-modal");
+  const handBodyEl = document.getElementById("hand-body");
+  const handCloseBtn = document.getElementById("hand-close-btn");
   const fullscreenBtn = document.getElementById("fullscreen-btn");
   const turnIndicatorEl = document.getElementById("turn-indicator");
   const standingsBtn = document.getElementById("standings-btn");
@@ -2480,6 +2484,7 @@
     resultModalEl.classList.add("hidden");
     if (menuOverlayEl) menuOverlayEl.classList.add("hidden");
     announcedDead = {};
+    // playedEvents reset on the new state below
 
     const choice = (mapSizeSelectEl && mapSizeSelectEl.value) || "medium";
     const chosenCiv = (civSelectEl && civSelectEl.value) || "rome";
@@ -2548,6 +2553,7 @@
     }
 
     state = engine.createInitialGameState(config);
+    state.playedEvents = {}; // one-use event cards refresh each campaign
     resultRecorded = false; // a fresh game's result hasn't been counted yet
     clearSelection();
     // Start with nothing selected — the in-play menu opens where you click.
@@ -2571,6 +2577,9 @@
     } catch (e) {
       console.error("Briefing failed:", e);
     }
+    // Show the player their campaign cards (generals/wonders in play + one-use
+    // events) at the start, so they can open with a card if they wish.
+    if (handHasCards()) setTimeout(openHand, 120);
   }
 
   // One-time repair for saves made before the water-placement fixes: nudge any
@@ -2618,6 +2627,7 @@
       return;
     }
     state = saved;
+    if (!state.playedEvents) state.playedEvents = {};
     let repaired = false;
     try { repaired = healLoadedState(state); } catch (e) { console.error("Save repair skipped:", e); }
     if (repaired) saveGame();
@@ -2848,6 +2858,11 @@
     });
   }
 
+  // ===== Campaign hand (cards in play + events) =====
+  if (handBtn) handBtn.addEventListener("click", openHand);
+  if (handCloseBtn) handCloseBtn.addEventListener("click", function () { handModalEl.classList.add("hidden"); });
+  if (handModalEl) handModalEl.addEventListener("click", function (e) { if (e.target === handModalEl) handModalEl.classList.add("hidden"); });
+
   // ===== Menu overlay (setup + profile + deck) =====
   function openMenu() { if (menuOverlayEl) menuOverlayEl.classList.remove("hidden"); }
   function closeMenu() { if (menuOverlayEl) menuOverlayEl.classList.add("hidden"); }
@@ -2950,11 +2965,25 @@
     { id: "gen-cleopatra", type: "general", rarity: "epic", name: "Cleopatra", icon: "🐍", perk: { gold: 2, science: 1 }, blurb: "Egypt's last pharaoh — wealth and guile. +2 gold, +1 science/turn." },
     { id: "gen-hannibal", type: "general", rarity: "epic", name: "Hannibal", icon: "🗻", perk: { production: 2 }, blurb: "Carthage's scourge of Rome. +2 labour/turn." },
     { id: "gen-alexander", type: "general", rarity: "legendary", name: "Alexander", icon: "🌏", perk: { production: 1, science: 1, gold: 1 }, blurb: "Conqueror to the Indus. +1 labour, +1 science, +1 gold/turn." },
-    // Event cards — played once per match (effects come later).
-    { id: "ev-vesuvius", type: "event", rarity: "epic", name: "Vesuvius Eruption", icon: "🌋", blurb: "Once per match: devastate the land around a volcano — but leave it rich in ore. (effect coming soon)" },
-    { id: "ev-nile", type: "event", rarity: "rare", name: "Nile Flood", icon: "🌊", blurb: "Once: the Nile floods — ruin, then fertility. (coming soon)" },
-    { id: "ev-plague", type: "event", rarity: "rare", name: "Plague", icon: "☠️", blurb: "Once: a pestilence strikes an enemy city. (coming soon)" },
-    { id: "ev-goldenage", type: "event", rarity: "epic", name: "Golden Age", icon: "✨", blurb: "Once: a burst of prosperity across your realm. (coming soon)" },
+    // More figures of the age — philosophers, conquerors, statesmen.
+    { id: "gen-aristotle", type: "general", rarity: "rare", name: "Aristotle", icon: "📜", perk: { science: 2 }, blurb: "The Lyceum — the systematic study of everything. +2 science/turn." },
+    { id: "gen-archimedes", type: "general", rarity: "epic", name: "Archimedes", icon: "⚙️", perk: { production: 1, science: 1 }, blurb: "Syracuse's genius of machines. +1 labour, +1 science/turn." },
+    { id: "gen-solon", type: "general", rarity: "rare", name: "Solon", icon: "⚖️", perk: { gold: 1, science: 1 }, blurb: "The Athenian lawgiver. +1 gold, +1 science/turn." },
+    { id: "gen-leonidas", type: "general", rarity: "epic", name: "Leonidas", icon: "🛡️", perk: { production: 2 }, blurb: "The Spartan king at Thermopylae. +2 labour/turn." },
+    { id: "gen-scipio", type: "general", rarity: "epic", name: "Scipio Africanus", icon: "🦅", perk: { production: 1, gold: 1 }, blurb: "Rome's answer to Hannibal. +1 labour, +1 gold/turn." },
+    { id: "gen-cyrus", type: "general", rarity: "epic", name: "Cyrus the Great", icon: "👑", perk: { gold: 1, food: 1 }, blurb: "Founder of the Persian empire. +1 gold, +1 food/turn." },
+    { id: "gen-hammurabi", type: "general", rarity: "rare", name: "Hammurabi", icon: "🏛️", perk: { gold: 2 }, blurb: "The code and the marketplace. +2 gold/turn." },
+    // Event cards — played once per match, for an immediate effect.
+    { id: "ev-goldenage", type: "event", rarity: "epic", name: "Golden Age", icon: "✨", blurb: "Once: a burst of prosperity — +60 gold and +40 science, right now." },
+    { id: "ev-nile", type: "event", rarity: "rare", name: "Nile Flood", icon: "🌊", blurb: "Once: the flood enriches your fields — every city banks growth toward its next citizen." },
+    { id: "ev-levy", type: "event", rarity: "rare", name: "Fresh Levies", icon: "🎖️", blurb: "Once: reinforcements muster — all your units heal to full." },
+    { id: "ev-plague", type: "event", rarity: "rare", name: "Plague", icon: "☠️", blurb: "Once: a pestilence strikes the enemy's largest city, shrinking it." },
+    { id: "ev-vesuvius", type: "event", rarity: "epic", name: "Vesuvius Eruption", icon: "🌋", blurb: "Once: fire and ash batter every enemy city near a mountain." },
+    // Wonders — collect one, then build it on a city tile for a lasting bonus.
+    { id: "won-colosseum", type: "wonder", rarity: "epic", name: "Colosseum", icon: "🏟️", perk: { gold: 2 }, blurb: "Games that bind a people. Build in a city: +2 gold/turn." },
+    { id: "won-library", type: "wonder", rarity: "epic", name: "Library of Alexandria", icon: "📚", perk: { science: 3 }, blurb: "The sum of ancient knowledge. Build in a city: +3 science/turn." },
+    { id: "won-pyramids", type: "wonder", rarity: "legendary", name: "Great Pyramids", icon: "🔺", perk: { production: 2, gold: 1 }, blurb: "Monuments for the ages. Build in a city: +2 labour, +1 gold/turn." },
+    { id: "won-hanging", type: "wonder", rarity: "epic", name: "Hanging Gardens", icon: "🌿", perk: { food: 2 }, blurb: "A paradise of terraces. Build in a city: +2 food/turn." },
     // Enhancer cards — small heads-up edges (effects come later).
     { id: "en-scouts", type: "enhance", rarity: "common", name: "Scouts", icon: "🔭", blurb: "A small heads-up edge. (effect coming soon)" },
     { id: "en-omen", type: "enhance", rarity: "common", name: "Favourable Omen", icon: "🔮", blurb: "(coming soon)" },
@@ -3047,9 +3076,83 @@
     saveProfile(p);
   }
   // Toggle a General in/out of your match loadout (max 3, must own it).
+  // ===== The campaign hand: cards in play + one-use events =====
+  function handCardHtml(c, action) {
+    let btn = "";
+    if (action === "play") btn = '<button class="hand-play" data-play="' + c.id + '">Play now</button>';
+    else if (action === "played") btn = '<span class="hand-done">Played this campaign</span>';
+    return '<div class="hand-card-item rar-' + c.rarity + '"><div class="hand-ico">' + c.icon + "</div><div class=\"hand-name\">" +
+      c.name + '</div><div class="hand-blurb">' + (c.blurb || "") + "</div>" + btn + "</div>";
+  }
+  function renderHand() {
+    if (!handBodyEl) return;
+    const p = loadProfile();
+    const parts = [];
+    const loadout = (p.loadout || []).map((id) => CARDS_BY_ID[id]).filter(Boolean);
+    parts.push('<h3 class="hand-h">In play every turn</h3>');
+    if (loadout.length) {
+      parts.push('<div class="hand-grid">');
+      for (const c of loadout) parts.push(handCardHtml(c, null));
+      parts.push("</div>");
+    } else parts.push('<div class="hand-empty">No generals or wonders equipped — open 🃏 My Deck to equip up to 3.</div>');
+    const events = CARDS.filter((c) => c.type === "event" && p.cards[c.id]);
+    parts.push('<h3 class="hand-h">Play once this campaign</h3>');
+    if (events.length) {
+      parts.push('<div class="hand-grid">');
+      for (const c of events) parts.push(handCardHtml(c, (state.playedEvents&&state.playedEvents[c.id]) ? "played" : "play"));
+      parts.push("</div>");
+    } else parts.push('<div class="hand-empty">No event cards yet — find them in card packs.</div>');
+    handBodyEl.innerHTML = parts.join("");
+    const btns = handBodyEl.querySelectorAll("[data-play]");
+    for (const b of btns) b.addEventListener("click", function () { playEvent(b.getAttribute("data-play")); });
+  }
+  function openHand() { if (handModalEl) { renderHand(); handModalEl.classList.remove("hidden"); } }
+  function handHasCards() {
+    const p = loadProfile();
+    if ((p.loadout || []).length) return true;
+    return CARDS.some((c) => c.type === "event" && p.cards[c.id]);
+  }
+  // Apply a one-use event card's effect to the current game.
+  function playEvent(id) {
+    if (!state) return; if ((state.playedEvents||{})[id]) return;
+    const p = loadProfile();
+    if (!p.cards[id]) return; // must own it
+    const me = human();
+    let msg = "";
+    if (id === "ev-goldenage") { me.gold += 60; me.science += 40; msg = "✨ Golden Age — +60 gold, +40 science."; }
+    else if (id === "ev-nile") {
+      let n = 0;
+      for (const c of Object.values(state.map.cities)) if (c.ownerId === HUMAN_ID) { const need = 8 + c.population * 6; c.food = (c.food || 0) + Math.ceil(need * 0.5); n += 1; }
+      msg = "🌊 The Nile floods — " + n + " of your cities surge toward growth.";
+    } else if (id === "ev-levy") {
+      let n = 0;
+      for (const u of Object.values(state.map.units)) if (u.ownerId === HUMAN_ID && u.hp < u.maxHp) { u.hp = u.maxHp; n += 1; }
+      msg = "🎖️ Fresh levies — " + n + " of your units restored to full.";
+    } else if (id === "ev-plague") {
+      let target = null;
+      for (const c of Object.values(state.map.cities)) if (c.ownerId !== HUMAN_ID) { if (!target || c.population > target.population) target = c; }
+      if (target) { target.population = Math.max(1, target.population - 1); target.hp = Math.max(1, Math.floor(target.hp * 0.55)); msg = "☠️ Plague ravages " + cityDisplayName(target) + "!"; }
+      else msg = "☠️ No enemy city to strike.";
+    } else if (id === "ev-vesuvius") {
+      let n = 0;
+      for (const c of Object.values(state.map.cities)) {
+        if (c.ownerId === HUMAN_ID) continue;
+        const near = AXIAL_DIRS.some((d) => { const t = state.map.tiles[(c.position.q + d[0]) + "," + (c.position.r + d[1])]; return t && t.terrain === "mountains"; });
+        if (near) { c.hp = Math.max(1, Math.floor(c.hp * 0.5)); n += 1; }
+      }
+      msg = n ? "🌋 Vesuvius erupts — " + n + " enemy cities scorched." : "🌋 No enemy city lies near a mountain.";
+    } else return;
+    state.playedEvents = state.playedEvents || {}; state.playedEvents[id] = 1;
+    logAction(msg);
+    showCombatToast(msg, id === "ev-plague" || id === "ev-vesuvius" ? "win" : "");
+    render();
+    saveGame();
+    renderHand();
+  }
+
   function equipGeneral(id) {
     const card = CARDS_BY_ID[id];
-    if (!card || card.type !== "general") return;
+    if (!card || (card.type !== "general" && card.type !== "wonder")) return;
     const p = loadProfile();
     if (!p.cards[id]) return;
     const i = p.loadout.indexOf(id);
@@ -3057,13 +3160,13 @@
     else if (p.loadout.length < 3) p.loadout.push(id);
     saveProfile(p);
   }
-  // Sum the equipped generals' perks into a { food, production, gold, science }.
+  // Sum the equipped generals'/wonders' perks into { food, production, gold, science }.
   function loadoutPerks() {
     const p = loadProfile();
     const perks = {};
     for (const id of p.loadout || []) {
       const g = CARDS_BY_ID[id];
-      if (g && g.type === "general" && p.cards[id] && g.perk) {
+      if (g && (g.type === "general" || g.type === "wonder") && p.cards[id] && g.perk) {
         for (const k of Object.keys(g.perk)) perks[k] = (perks[k] || 0) + g.perk[k];
       }
     }

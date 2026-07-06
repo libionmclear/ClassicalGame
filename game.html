@@ -167,6 +167,7 @@
           <button id="standings-btn" class="hud-icon" title="Standings" aria-label="Standings">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><rect x="3" y="13" width="4.4" height="8" rx="1"/><rect x="9.8" y="8" width="4.4" height="13" rx="1"/><rect x="16.6" y="3" width="4.4" height="18" rx="1"/></svg>
           </button>
+          <button id="hand-btn" class="hud-icon" title="Your campaign cards">🎴</button>
         </div>
         <div id="standings-panel" class="standings-panel hidden"><div id="ranking" class="ranking"></div></div>
       </div>
@@ -227,6 +228,17 @@
       <h2 id="result-title">Victory</h2>
       <p id="result-body"></p>
       <button id="result-new-game-btn">Start New Scenario</button>
+    </div>
+  </div>
+
+  <div id="hand-modal" class="result-modal hidden">
+    <div class="result-card hand-card">
+      <div class="codex-header">
+        <h2>🎴 Your Campaign Cards</h2>
+        <button id="hand-close-btn" class="codex-close" title="Close">×</button>
+      </div>
+      <p class="event-situation" id="hand-intro">Generals &amp; wonders in play give a small bonus every turn. Event cards can be played once each — for an immediate effect.</p>
+      <div id="hand-body" class="hand-body"></div>
     </div>
   </div>
 

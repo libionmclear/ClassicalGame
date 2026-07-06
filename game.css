@@ -2344,6 +2344,68 @@ details.panel-collapse > summary {
   color: var(--text);
 }
 
+/* ===== Campaign cards (hand) ===== */
+.hand-card {
+  width: min(560px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.hand-h {
+  margin: 14px 0 8px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 4px;
+}
+
+.hand-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.hand-empty {
+  color: var(--muted);
+  font-size: 0.86rem;
+  padding: 4px 0 6px;
+}
+
+.hand-card-item {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.hand-card-item.rar-legendary { border-left-color: #f2cc69; }
+.hand-card-item.rar-epic { border-left-color: #b06bd0; }
+.hand-card-item.rar-rare { border-left-color: #56a8e6; }
+.hand-card-item.rar-common { border-left-color: #8aa0b8; }
+
+.hand-ico { font-size: 1.5rem; }
+.hand-name { font-weight: 700; margin: 2px 0; }
+.hand-blurb { font-size: 0.82rem; color: var(--muted); }
+
+.hand-play {
+  margin-top: 7px;
+  background: var(--accent);
+  color: #f4f9ff;
+  padding: 5px 12px;
+}
+
+.hand-done {
+  display: inline-block;
+  margin-top: 7px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* ===== Login / registration gate ===== */
 .auth-overlay {
   position: fixed;
