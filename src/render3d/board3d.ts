@@ -807,13 +807,16 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const roadGeo = new THREE.BoxGeometry(1, 0.05, 0.16);
   const roadMat = new THREE.MeshStandardMaterial({ color: 0xa07d4c, roughness: 0.95 });
   let roadMesh: THREE.InstancedMesh | null = null;
+  const _xAxis = new THREE.Vector3(1, 0, 0);
+  const _up = new THREE.Vector3(0, 1, 0);
+  const _dir = new THREE.Vector3();
   function drawEdges(
-    kind: "river" | "road",
     segments: EdgeView[] | undefined,
     geo: THREE.BoxGeometry,
     mat: THREE.Material,
-    y: number,
+    off: number,
     along: boolean,
+    heightOf: (q: number, r: number) => number,
     prev: THREE.InstancedMesh | null
   ): THREE.InstancedMesh | null {
     if (prev) { borderGroup.remove(prev); prev.dispose(); }
@@ -823,17 +826,31 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     const p = new THREE.Vector3();
     const s = new THREE.Vector3(1, 1, 1);
     const qt = new THREE.Quaternion();
-    const up = new THREE.Vector3(0, 1, 0);
     segments.forEach((seg, i) => {
       const a = axialToWorld(seg.q, seg.r);
       const c = axialToWorld(seg.nq, seg.nr);
-      const mx = (a.x + c.x) / 2, mz = (a.z + c.z) / 2;
-      const dx = c.x - a.x, dz = c.z - a.z;
-      const ang = Math.atan2(dz, dx);
-      // Roads run ALONG the centre line; rivers run perpendicular (the shared edge).
-      qt.setFromAxisAngle(up, along ? -ang : -ang - Math.PI / 2);
-      s.set(along ? Math.hypot(dx, dz) : 1, 1, 1);
-      p.set(mx, y, mz);
+      const ha = heightOf(seg.q, seg.r);
+      const hb = heightOf(seg.nq, seg.nr);
+      if (along) {
+        // Road: a ribbon spanning the two tile centres AT THEIR SURFACE HEIGHTS,
+        // so it climbs and drops with the terrain instead of sinking through it.
+        const sx = a.x, sy = ha + off, sz = a.z;
+        const ex = c.x, ey = hb + off, ez = c.z;
+        _dir.set(ex - sx, ey - sy, ez - sz);
+        const len = _dir.length() || 1;
+        _dir.divideScalar(len);
+        qt.setFromUnitVectors(_xAxis, _dir);
+        s.set(len, 1, 1);
+        p.set((sx + ex) / 2, (sy + ey) / 2, (sz + ez) / 2);
+      } else {
+        // River: perpendicular ribbon along the shared edge, sitting on the lower
+        // of the two banks (water runs in the channel between them).
+        const dx = c.x - a.x, dz = c.z - a.z;
+        const ang = Math.atan2(dz, dx);
+        qt.setFromAxisAngle(_up, -ang - Math.PI / 2);
+        s.set(1, 1, 1);
+        p.set((a.x + c.x) / 2, Math.min(ha, hb) + off, (a.z + c.z) / 2);
+      }
       m.compose(p, qt, s);
       mesh.setMatrixAt(i, m);
     });
@@ -842,8 +859,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     return mesh;
   }
   function drawWaterways(view: BoardView): void {
-    roadMesh = drawEdges("road", view.roads, roadGeo, roadMat, 0.11, true, roadMesh);
-    riverMesh = drawEdges("river", view.rivers, riverGeo, riverMat, 0.14, false, riverMesh);
+    const terrainByKey: Record<string, string> = {};
+    for (const tv of view.tiles) terrainByKey[tv.q + "," + tv.r] = tv.t;
+    const heightOf = (q: number, r: number): number => topOf(terrainByKey[q + "," + r] || "plains");
+    roadMesh = drawEdges(view.roads, roadGeo, roadMat, 0.05, true, heightOf, roadMesh);
+    riverMesh = drawEdges(view.rivers, riverGeo, riverMat, 0.04, false, heightOf, riverMesh);
   }
 
   function pickIndex(cx: number, cy: number): number {
