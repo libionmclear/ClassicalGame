@@ -186,7 +186,9 @@ const GEO = {
   thatch: new THREE.ConeGeometry(0.22, 0.32, 7),
   wallSeg: new THREE.BoxGeometry(0.42, 0.2, 0.08),
   slab: new THREE.BoxGeometry(0.34, 0.05, 0.34),
-  pyramid: new THREE.ConeGeometry(0.34, 0.5, 4)
+  pyramid: new THREE.ConeGeometry(0.34, 0.5, 4),
+  arch: new THREE.TorusGeometry(0.11, 0.03, 5, 10, Math.PI), // aqueduct arch (semicircle)
+  beam: new THREE.BoxGeometry(1, 0.06, 0.14)
 };
 const SKIN = 0xe0b088, WOOD = 0x6b4a2b, DARKWOOD = 0x4a331f, STEEL = 0x9aa3ad, STONE = 0xcdbb91, GREY = 0x8a8a86, IVORY = 0xeee6d0;
 const matCache = new Map<string, THREE.MeshStandardMaterial>();
@@ -322,7 +324,7 @@ function buildUnit(form: string, color: string, hpFrac: number, q: number, r: nu
 // signature central landmark.
 interface CivStyle { wall: number; roof: "pitch" | "flat" | "dome" | "cone"; roofColor: number; landmark: string; }
 const CIV_STYLE: Record<string, CivStyle> = {
-  rome: { wall: 0xd8cba0, roof: "pitch", roofColor: 0xb0392b, landmark: "dome" }, // red tiles, domed temple
+  rome: { wall: 0xd8cba0, roof: "pitch", roofColor: 0xb0392b, landmark: "forum" }, // red tiles, forum + aqueduct
   greece: { wall: 0xeae3d0, roof: "flat", roofColor: 0xdfe6ee, landmark: "columns" }, // white marble, colonnade
   egypt: { wall: 0xd9c07a, roof: "flat", roofColor: 0xcaa85a, landmark: "pyramid" }, // sandstone, pyramid
   carthage: { wall: 0xcbb98f, roof: "flat", roofColor: 0x9b6bd0, landmark: "obelisk" }, // Punic, obelisk
@@ -344,10 +346,53 @@ function addBuilding(g: THREE.Group, s: CivStyle, x: number, z: number, w: numbe
     const slab = meshOf(GEO.slab, s.roofColor); slab.scale.set(w / 0.34, 1, w / 0.34); slab.position.set(x, h + 0.02, z); g.add(slab);
   }
 }
+// A Roman aqueduct arcade: a row of piers linked by arches, carrying a channel.
+function addAqueduct(g: THREE.Group, s: CivStyle, cx: number, cz: number, k: number): void {
+  const bays = 4;
+  const bw = 0.19 * k;          // bay spacing
+  const pierH = 0.34 * k;
+  const startX = cx - (bays * bw) / 2;
+  for (let i = 0; i <= bays; i += 1) {
+    const px = startX + i * bw;
+    const pier = meshOf(GEO.building, s.wall);
+    pier.scale.set(0.05 * k / 0.28, pierH / 0.4, 0.13 / 0.28);
+    pier.position.set(px, pierH * 0.5, cz);
+    g.add(pier);
+  }
+  const springs = pierH * 0.62;
+  for (let i = 0; i < bays; i += 1) {
+    const ax = startX + (i + 0.5) * bw;
+    const a = meshOf(GEO.arch, s.wall, false);
+    a.scale.set(bw / (2 * 0.11), (pierH - springs) / 0.11, 1); // span the bay, reach the top
+    a.position.set(ax, springs, cz);
+    g.add(a);
+  }
+  const channel = meshOf(GEO.beam, s.wall);
+  channel.scale.set(bays * bw + 0.06 * k, 1, 1);
+  channel.position.set(cx, pierH + 0.03 * k, cz);
+  g.add(channel);
+}
 function addLandmark(g: THREE.Group, s: CivStyle, tier: number): void {
   const k = 0.7 + tier * 0.12;
   const L = s.landmark;
-  if (L === "pyramid") {
+  if (L === "forum") {
+    // A forum: a low paved podium ringed by columns carrying a flat entablature
+    // (which rests ON the columns), a pedimented temple at one end, and an
+    // aqueduct arcade behind. Nothing overhangs its base.
+    const pw = 1.02 * k, pd = 0.6 * k, ph = 0.07 * k;
+    const podium = meshOf(GEO.building, s.wall); podium.scale.set(pw / 0.28, ph / 0.4, pd / 0.28); podium.position.y = ph * 0.5; g.add(podium);
+    const colH = 0.28 * k;
+    for (let i = 0; i < 4; i += 1) {
+      const tx = (i / 3 - 0.5) * pw * 0.82;
+      for (const zz of [pd * 0.42, -pd * 0.42]) {
+        const col = meshOf(GEO.column, s.wall); col.scale.set(1, colH / 0.34, 1); col.position.set(tx, ph + colH * 0.5, zz); g.add(col);
+      }
+    }
+    const entab = meshOf(GEO.beam, s.roofColor); entab.scale.set(pw * 0.9, 1, pd * 1.02 / 0.14); entab.position.y = ph + colH; g.add(entab);
+    // Temple at one end (walls + pitched roof rest flush) and the aqueduct behind.
+    addBuilding(g, s, pw * 0.34, 0, 0.34 * k, 0.34 * k);
+    addAqueduct(g, s, -pw * 0.05, -pd * 0.85, k);
+  } else if (L === "pyramid") {
     const p = meshOf(GEO.pyramid, s.wall); p.scale.setScalar(k * 0.85); p.position.y = 0.5 * k * 0.85 * 0.5; g.add(p);
   } else if (L === "columns") {
     const bh = 0.42 * k;
@@ -357,7 +402,9 @@ function addLandmark(g: THREE.Group, s: CivStyle, tier: number): void {
   } else if (L === "dome" || L === "iwan") {
     const hh = 0.5 * k;
     const hall = meshOf(GEO.building, s.wall); hall.scale.set(1.3 * k, hh / 0.4, 1.2 * k); hall.position.y = hh * 0.5; g.add(hall);
-    const dm = meshOf(GEO.dome, s.roofColor); dm.scale.set((L === "iwan" ? 1.0 : 1.6) * k, (L === "iwan" ? 1.4 : 1.2) * k, (L === "iwan" ? 1.0 : 1.6) * k); dm.position.y = hh; g.add(dm);
+    // Dome rests ON the hall — its footprint matches the walls (no mushroom cap).
+    const dw = (L === "iwan" ? 0.62 : 0.9) * k;
+    const dm = meshOf(GEO.dome, s.roofColor); dm.scale.set(dw, (L === "iwan" ? 1.5 : 1.0) * k, dw); dm.position.y = hh; g.add(dm);
   } else if (L === "obelisk") {
     const oh = 0.72 * k;
     const ob = meshOf(GEO.pole, s.wall); ob.scale.set(2.4, oh / 0.72, 2.4); ob.position.y = oh * 0.5; g.add(ob);
@@ -376,7 +423,7 @@ function buildCity(pop: number, civ: string): THREE.Group {
   if (tier >= 2) addLandmark(g, s, tier);
 
   const houses = tier === 1 ? 3 : 2 + tier * 2; // 3 / 6 / 8 / 10
-  const rad = tier === 1 ? 0.26 : 0.42;
+  const rad = tier === 1 ? 0.26 : 0.52; // ring the houses OUTSIDE the central landmark
   for (let i = 0; i < houses; i += 1) {
     const a = (i / houses) * Math.PI * 2 + 0.35;
     const h = 0.22 + (i % 3) * 0.06 + tier * 0.02;
@@ -386,7 +433,7 @@ function buildCity(pop: number, civ: string): THREE.Group {
 
   // City walls appear once it's a proper city.
   if (tier >= 3) {
-    const wr = 0.64;
+    const wr = 0.72;
     for (let i = 0; i < 6; i += 1) {
       const a = (i / 6) * Math.PI * 2;
       const seg = meshOf(GEO.wallSeg, shade("#" + s.wall.toString(16).padStart(6, "0"), -0.12));
