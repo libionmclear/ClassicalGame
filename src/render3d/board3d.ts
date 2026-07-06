@@ -411,11 +411,19 @@ function buildAnimal(color: number): THREE.Group {
   const head = meshOf(GEO.head, color); head.scale.setScalar(0.7); head.position.set(0.14, 0.17, 0); g.add(head);
   return g;
 }
-// A small coloured cone prop (wheat sheaf, vine bush, …).
-function buildTuft(color: number, h: number): THREE.Mesh {
+// A small coloured cone prop (wheat sheaf, vine bush, reed, …).
+function buildTuft(color: number, h: number, wide = 0.5): THREE.Mesh {
   const m = meshOf(GEO.treeCone, color, false);
-  m.scale.set(0.5, h, 0.5);
+  m.scale.set(wide, h, wide);
   return m;
+}
+// A little fish breaking the surface (body + tail fin), tilted as if leaping.
+function buildFish(color: number): THREE.Group {
+  const g = new THREE.Group();
+  const body = meshOf(GEO.head, color); body.scale.set(1.15, 0.55, 0.5); body.position.y = 0.09; g.add(body);
+  const tail = meshOf(GEO.treeCone, color, false); tail.scale.set(0.42, 0.5, 0.42); tail.rotation.z = -Math.PI / 2; tail.position.set(-0.13, 0.09, 0); g.add(tail);
+  g.rotation.z = 0.55; // arc up out of the water
+  return g;
 }
 // Stable pseudo-random in [0,1) from tile coords + a salt, so scatter never jumps.
 function rnd(q: number, r: number, i: number): number {
@@ -522,12 +530,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         rk.position.set(w.x + Math.cos(a) * d, top + 0.04 * s, w.z + Math.sin(a) * d);
         scatterGroup.add(rk);
       }
-      // Resource-specific props: grain sheaves, grazing animals, vine bushes.
+      // Resource-specific props: grain sheaves, grazing animals, vine bushes,
+      // leaping fish. Plus a little terrain flavour (reeds on coast, desert scrub).
       let props: THREE.Object3D[] = [];
       if (tv.res === "grain") props = [buildTuft(0xd9c05a, 0.5), buildTuft(0xd9c05a, 0.45), buildTuft(0xcdb44a, 0.5)];
       else if (tv.res === "horses") props = [buildAnimal(0x8a6a44), buildAnimal(0x6b4a2b)];
       else if (tv.res === "wine") props = [buildTuft(0x3f6b3a, 0.4), buildTuft(0x315a2e, 0.4)];
-      else if (tv.res === "fish" && tv.t !== "coast" && tv.t !== "sea") props = [];
+      else if (tv.res === "fish") props = [buildFish(0x9fb8c8), buildFish(0x8fa8bc), buildFish(0x9fb8c8)];
+      if (tv.t === "coast" && rnd(tv.q, tv.r, 3) < 0.5) props.push(buildTuft(0x5f8f4a, 0.85, 0.16), buildTuft(0x568345, 0.7, 0.16));
+      else if (tv.t === "desert" && rnd(tv.q, tv.r, 3) < 0.4) props.push(buildTuft(0x9a8a4a, 0.35, 0.4));
       for (let i = 0; i < props.length; i += 1) {
         const a = rnd(tv.q, tv.r, i + 60) * Math.PI * 2;
         const d = 0.18 + rnd(tv.q, tv.r, i + 70) * 0.45;
