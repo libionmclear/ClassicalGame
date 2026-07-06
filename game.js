@@ -59,6 +59,23 @@
   const menuBtn = document.getElementById("menu-btn");
   const menuOverlayEl = document.getElementById("menu-overlay");
   const menuCloseBtn = document.getElementById("menu-close");
+  const authOverlayEl = document.getElementById("auth-overlay");
+  const authLoginPane = document.getElementById("auth-login-pane");
+  const authRegisterPane = document.getElementById("auth-register-pane");
+  const authLoginUser = document.getElementById("auth-login-user");
+  const authLoginPass = document.getElementById("auth-login-pass");
+  const authLoginBtn = document.getElementById("auth-login-btn");
+  const authLoginErr = document.getElementById("auth-login-err");
+  const authRegName = document.getElementById("auth-reg-name");
+  const authRegEmail = document.getElementById("auth-reg-email");
+  const authRegPass = document.getElementById("auth-reg-pass");
+  const authRegisterBtn = document.getElementById("auth-register-btn");
+  const authRegErr = document.getElementById("auth-reg-err");
+  const authShowRegister = document.getElementById("auth-show-register");
+  const authShowLogin = document.getElementById("auth-show-login");
+  const accountLineEl = document.getElementById("account-line");
+  const changePwBtn = document.getElementById("change-pw-btn");
+  const logoutBtn = document.getElementById("logout-btn");
   const fullscreenBtn = document.getElementById("fullscreen-btn");
   const turnIndicatorEl = document.getElementById("turn-indicator");
   const standingsBtn = document.getElementById("standings-btn");
@@ -2885,7 +2902,9 @@
   }
 
   // ===== Player profile, stats & badges (local, localStorage) =====
-  const PROFILE_KEY = "hegemon_profile";
+  // Per-account once signed in (hegemon_profile__<user>); the legacy single-profile
+  // key is the default and migrates into the first account that signs in.
+  let PROFILE_KEY = "hegemon_profile";
   const BADGES = [
     { id: "first-blood", icon: "⚔️", name: "First Blood", desc: "Play your first campaign.", test: (p) => p.games >= 1 },
     { id: "first-win", icon: "🏅", name: "First Victory", desc: "Win a campaign.", test: (p) => p.wins >= 1 },
@@ -3113,6 +3132,116 @@
     for (const b of BADGES) if (!p.badges.includes(b.id) && b.test(p)) p.badges.push(b.id);
     saveProfile(p);
     return p;
+  }
+
+  // ===== Accounts / login (client-side, localStorage) =====
+  // NOTE: this is a local-first placeholder — credentials live in the browser and
+  // are NOT secure against someone with device access. A real backend (accounts +
+  // server-side auth) comes with the online/app build; the storage shape here is
+  // designed to migrate to it. Passwords are salted + SHA-256 hashed so plaintext
+  // is never stored.
+  const ACCOUNTS_KEY = "hegemon_accounts";
+  const SESSION_KEY = "hegemon_session";
+  let currentAccount = null;
+
+  function loadAccounts() {
+    try { return JSON.parse(window.localStorage.getItem(ACCOUNTS_KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function saveAccounts(a) {
+    try { window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); } catch (e) {}
+  }
+  function randSalt() {
+    if (window.crypto && window.crypto.getRandomValues) {
+      const b = new Uint8Array(16); window.crypto.getRandomValues(b);
+      return Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
+    }
+    return String(Date.now()) + Math.floor(Math.random() * 1e9).toString(16);
+  }
+  async function hashPw(pw, salt) {
+    const text = salt + "::" + pw;
+    if (window.crypto && window.crypto.subtle) {
+      const data = new TextEncoder().encode(text);
+      const buf = await window.crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(buf)).map((x) => x.toString(16).padStart(2, "0")).join("");
+    }
+    // Fallback (older browsers): a simple non-crypto hash. Still no plaintext.
+    let h = 5381; for (let i = 0; i < text.length; i += 1) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+    return "x" + (h >>> 0).toString(16);
+  }
+  function findAccount(userOrEmail) {
+    const accts = loadAccounts();
+    const key = String(userOrEmail || "").trim().toLowerCase();
+    if (accts[key]) return accts[key];
+    for (const k in accts) if ((accts[k].email || "").toLowerCase() === key) return accts[k];
+    return null;
+  }
+  async function seedAdmin() {
+    const accts = loadAccounts();
+    if (accts.admin) return;
+    const salt = randSalt();
+    accts.admin = {
+      username: "admin", name: "admin", email: "mclear@gmail.com",
+      salt: salt, hash: await hashPw("1234567", salt), isAdmin: true, createdAt: Date.now()
+    };
+    saveAccounts(accts);
+  }
+  // Point the profile at this account, migrating the legacy single profile the
+  // first time an account claims it.
+  function activateAccount(acct) {
+    currentAccount = acct;
+    try { window.localStorage.setItem(SESSION_KEY, acct.username); } catch (e) {}
+    PROFILE_KEY = "hegemon_profile__" + acct.username;
+    const legacy = window.localStorage.getItem("hegemon_profile");
+    if (legacy && !window.localStorage.getItem(PROFILE_KEY)) {
+      try { window.localStorage.setItem(PROFILE_KEY, legacy); } catch (e) {}
+    }
+    // Make sure the profile carries the account's display name.
+    const p = loadProfile(); p.name = acct.name || acct.username; saveProfile(p);
+    updateAccountLine();
+  }
+  async function doLogin(userOrEmail, pw) {
+    const acct = findAccount(userOrEmail);
+    if (!acct) return { ok: false, error: "No such account." };
+    const h = await hashPw(pw, acct.salt);
+    if (h !== acct.hash) return { ok: false, error: "Wrong password." };
+    activateAccount(acct);
+    return { ok: true };
+  }
+  async function doRegister(name, email, pw) {
+    name = String(name || "").trim();
+    email = String(email || "").trim();
+    if (name.length < 2) return { ok: false, error: "Name must be at least 2 characters." };
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a valid email." };
+    if (String(pw || "").length < 6) return { ok: false, error: "Password must be at least 6 characters." };
+    const accts = loadAccounts();
+    const key = name.toLowerCase();
+    if (accts[key]) return { ok: false, error: "That name is taken." };
+    for (const k in accts) if ((accts[k].email || "").toLowerCase() === email.toLowerCase()) return { ok: false, error: "That email is already registered." };
+    const salt = randSalt();
+    accts[key] = { username: key, name: name, email: email, salt: salt, hash: await hashPw(pw, salt), isAdmin: false, createdAt: Date.now() };
+    saveAccounts(accts);
+    activateAccount(accts[key]);
+    return { ok: true };
+  }
+  async function changePassword(oldPw, newPw) {
+    if (!currentAccount) return { ok: false, error: "Not signed in." };
+    const accts = loadAccounts();
+    const acct = accts[currentAccount.username];
+    if (!acct) return { ok: false, error: "Account missing." };
+    if ((await hashPw(oldPw, acct.salt)) !== acct.hash) return { ok: false, error: "Current password is wrong." };
+    if (String(newPw || "").length < 6) return { ok: false, error: "New password must be at least 6 characters." };
+    acct.salt = randSalt();
+    acct.hash = await hashPw(newPw, acct.salt);
+    saveAccounts(accts);
+    currentAccount = acct;
+    return { ok: true };
+  }
+  function updateAccountLine() {
+    if (!accountLineEl) return;
+    accountLineEl.innerHTML = currentAccount
+      ? "Signed in as <b>" + (currentAccount.name || currentAccount.username) + "</b>" +
+        (currentAccount.email ? ' <span class="sel-sub">(' + currentAccount.email + ")</span>" : "")
+      : "Not signed in";
   }
 
   function renderProfile() {
@@ -3514,6 +3643,67 @@
       if (state) render();
     }, 120);
   });
+
+  // ===== Auth UI wiring =====
+  function showAuth() { if (authOverlayEl) authOverlayEl.classList.remove("hidden"); showLoginPane(); }
+  function hideAuth() { if (authOverlayEl) authOverlayEl.classList.add("hidden"); }
+  function showLoginPane() {
+    if (authLoginPane) authLoginPane.classList.remove("hidden");
+    if (authRegisterPane) authRegisterPane.classList.add("hidden");
+    if (authLoginErr) authLoginErr.textContent = "";
+  }
+  function showRegisterPane() {
+    if (authRegisterPane) authRegisterPane.classList.remove("hidden");
+    if (authLoginPane) authLoginPane.classList.add("hidden");
+    if (authRegErr) authRegErr.textContent = "";
+  }
+  function afterSignIn() {
+    updateAccountLine();
+    if (typeof refreshCivPicker === "function") refreshCivPicker();
+    if (state) render();
+  }
+  if (authShowRegister) authShowRegister.addEventListener("click", showRegisterPane);
+  if (authShowLogin) authShowLogin.addEventListener("click", showLoginPane);
+  if (authLoginBtn) authLoginBtn.addEventListener("click", async function () {
+    authLoginErr.textContent = "…";
+    const res = await doLogin(authLoginUser.value, authLoginPass.value);
+    if (res.ok) { authLoginPass.value = ""; hideAuth(); afterSignIn(); }
+    else authLoginErr.textContent = res.error;
+  });
+  if (authRegisterBtn) authRegisterBtn.addEventListener("click", async function () {
+    authRegErr.textContent = "…";
+    const res = await doRegister(authRegName.value, authRegEmail.value, authRegPass.value);
+    if (res.ok) { authRegPass.value = ""; hideAuth(); afterSignIn(); }
+    else authRegErr.textContent = res.error;
+  });
+  if (authLoginPass) authLoginPass.addEventListener("keydown", function (e) { if (e.key === "Enter") authLoginBtn.click(); });
+  if (authRegPass) authRegPass.addEventListener("keydown", function (e) { if (e.key === "Enter") authRegisterBtn.click(); });
+  if (changePwBtn) changePwBtn.addEventListener("click", async function () {
+    if (!currentAccount) { window.alert("Sign in first."); return; }
+    const oldPw = window.prompt("Current password:"); if (oldPw == null) return;
+    const newPw = window.prompt("New password (at least 6 characters):"); if (newPw == null) return;
+    const res = await changePassword(oldPw, newPw);
+    window.alert(res.ok ? "Password changed." : res.error);
+  });
+  if (logoutBtn) logoutBtn.addEventListener("click", function () {
+    try { window.localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    currentAccount = null;
+    PROFILE_KEY = "hegemon_profile";
+    updateAccountLine();
+    if (menuOverlayEl) menuOverlayEl.classList.add("hidden");
+    showAuth();
+  });
+
+  // Seed the admin account, then gate on the saved session.
+  (async function initAuth() {
+    try {
+      await seedAdmin();
+      const sess = window.localStorage.getItem(SESSION_KEY);
+      const acct = sess ? loadAccounts()[sess] : null;
+      if (acct) { activateAccount(acct); hideAuth(); }
+      else { showAuth(); }
+    } catch (e) { console.error("Auth init failed:", e); showAuth(); }
+  })();
 
   resumeOrNew();
 })();

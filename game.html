@@ -98,6 +98,47 @@
           <button id="profile-btn" class="ghost-btn" title="Your profile, stats & badges">👤 Profile &amp; Stats</button>
           <button id="cards-btn" class="ghost-btn" title="Card collection & packs">🃏 My Deck</button>
         </div>
+        <div class="menu-section menu-account">
+          <h3>Account</h3>
+          <div id="account-line" class="account-line">Not signed in</div>
+          <div class="menu-actions">
+            <button id="change-pw-btn" class="ghost-btn">Change password</button>
+            <button id="logout-btn" class="ghost-btn">Log out</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Login / registration gate -->
+    <div id="auth-overlay" class="auth-overlay hidden">
+      <div class="auth-card">
+        <div class="auth-brand">HEGEMON</div>
+        <div class="auth-sub">Sign in to save your record</div>
+        <div id="auth-login-pane">
+          <label class="auth-field">Username or email
+            <input id="auth-login-user" type="text" autocomplete="username" />
+          </label>
+          <label class="auth-field">Password
+            <input id="auth-login-pass" type="password" autocomplete="current-password" />
+          </label>
+          <div id="auth-login-err" class="auth-err"></div>
+          <button id="auth-login-btn" class="primary-btn menu-wide">Sign in</button>
+          <div class="auth-switch">No account? <button id="auth-show-register" class="auth-link">Create one</button></div>
+        </div>
+        <div id="auth-register-pane" class="hidden">
+          <label class="auth-field">Display name
+            <input id="auth-reg-name" type="text" autocomplete="nickname" />
+          </label>
+          <label class="auth-field">Email
+            <input id="auth-reg-email" type="email" autocomplete="email" />
+          </label>
+          <label class="auth-field">Password
+            <input id="auth-reg-pass" type="password" autocomplete="new-password" />
+          </label>
+          <div id="auth-reg-err" class="auth-err"></div>
+          <button id="auth-register-btn" class="primary-btn menu-wide">Create account</button>
+          <div class="auth-switch">Have an account? <button id="auth-show-login" class="auth-link">Sign in</button></div>
+        </div>
       </div>
     </div>
 
