@@ -39,7 +39,7 @@ const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; }
-export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; badge?: string; color?: string; t?: string; form?: string; utype?: string; pop?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
+export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; id?: string; badge?: string; color?: string; t?: string; form?: string; utype?: string; pop?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 // A segment between two tiles: rivers run along the shared edge, roads along the
 // centre line (from tile q,r to neighbour nq,nr).
@@ -58,6 +58,7 @@ export interface BoardController {
   render(view: BoardView): void;
   onPick(fn: (key: string | null) => void): void;
   onHover(fn: (key: string | null) => void): void;
+  strike(q: number, r: number): void;
   resize(): void;
   dispose(): void;
 }
@@ -991,15 +992,23 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
 
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
+  // Movement gliding: each sprite lives in a holder at its tile; when the same id
+  // reappears at a new tile we start it at the OLD spot and tween it across.
+  let spritePrevPos: Record<string, { x: number; z: number }> = {};
+  interface MoveTween { holder: THREE.Object3D; model: THREE.Object3D; baseY: number; fx: number; fz: number; tx: number; tz: number; t: number; dur: number; }
+  let moveTweens: MoveTween[] = [];
   function placeSprites(view: BoardView): void {
     spriteGroup.clear();
     mixers = [];
+    moveTweens = [];
+    const newPos: Record<string, { x: number; z: number }> = {};
     for (const sv of view.sprites) {
       const w = axialToWorld(sv.q, sv.r);
       const top = topOf(sv.t || "plains"); // the tile's real surface height
       const color = sv.color || "#cccccc";
       const isCity = sv.kind === "city";
       const frac = sv.hpFrac == null ? 1 : sv.hpFrac;
+      const holder = new THREE.Group(); // moves as one; model pieces are LOCAL to it
 
       // Prefer real glTF art if the conventional file exists; else the procedural
       // low-poly placeholder. Either way it sits ON the tile and casts a shadow.
@@ -1013,7 +1022,6 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         const form = sv.form || "infantry";
         const glb = getGLB("assets/models/units/" + form + ".glb");
         if (glb) {
-          // Clone the one soldier into a squad — count still shows strength.
           const single = form === "siege" || form === "naval";
           const base = form === "elephant" ? 2 : form === "mounted" ? 3 : form === "civilian" ? 3 : 6;
           const count = single ? 1 : Math.max(1, Math.round(base * Math.max(0.05, Math.min(1, frac))));
@@ -1028,44 +1036,67 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         } else { model = buildUnit(form, color, frac, sv.q, sv.r, sv.civ, sv.utype); scale = 1.35; }
       }
       model.scale.setScalar(scale);
-      model.position.set(w.x, top + 0.01, w.z);
-      spriteGroup.add(model);
+      model.position.set(0, top + 0.01, 0);
+      holder.add(model);
 
-      // A faint contact shadow disc under the model for extra grounding.
       const shadow = new THREE.Mesh(shadowGeo, shadowMat);
       shadow.rotation.x = -Math.PI / 2;
-      shadow.position.set(w.x, top + 0.02, w.z);
+      shadow.position.set(0, top + 0.02, 0);
       const sh = isCity ? 1.7 : 1.0;
       shadow.scale.set(sh, sh, 1);
-      spriteGroup.add(shadow);
+      holder.add(shadow);
 
-      // Garrison: a small soldier standing at the city gate, so a defended city
-      // reads at a glance; a count chip shows how many are inside.
       if (isCity && sv.garrison && sv.garrison > 0) {
         const gfig = buildFigure(sv.gForm || "infantry", sv.gColor || color, sv.civ);
         gfig.scale.setScalar(0.85);
-        gfig.position.set(w.x + SIZE * 0.34, top + 0.01, w.z + SIZE * 0.5);
-        spriteGroup.add(gfig);
+        gfig.position.set(SIZE * 0.34, top + 0.01, SIZE * 0.5);
+        holder.add(gfig);
         if (sv.garrison > 1) {
           const gb = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture("×" + sv.garrison), transparent: true, depthWrite: false, depthTest: false }));
-          gb.center.set(0.5, 0);
-          gb.scale.set(0.5, 0.5, 0.5);
-          gb.position.set(w.x + SIZE * 0.34, top + 0.62, w.z + SIZE * 0.5);
-          gb.renderOrder = 999;
-          spriteGroup.add(gb);
+          gb.center.set(0.5, 0); gb.scale.set(0.5, 0.5, 0.5); gb.position.set(SIZE * 0.34, top + 0.62, SIZE * 0.5); gb.renderOrder = 999;
+          holder.add(gb);
         }
       }
 
-      // Type glyph badge floating above so units stay identifiable.
       if (sv.badge) {
         const b = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(sv.badge), transparent: true, depthWrite: false, depthTest: false }));
-        b.center.set(0.5, 0);
-        b.scale.set(0.5, 0.5, 0.5);
-        b.position.set(w.x, top + (isCity ? 1.5 : 1.05), w.z);
-        b.renderOrder = 999;
-        spriteGroup.add(b);
+        b.center.set(0.5, 0); b.scale.set(0.5, 0.5, 0.5); b.position.set(0, top + (isCity ? 1.5 : 1.05), 0); b.renderOrder = 999;
+        holder.add(b);
       }
+
+      // Position the holder, gliding from its previous tile if it just moved.
+      const id = sv.id || (sv.kind.charAt(0) + ":" + sv.q + "," + sv.r);
+      const prev = spritePrevPos[id];
+      if (!isCity && prev && (Math.abs(prev.x - w.x) > 0.02 || Math.abs(prev.z - w.z) > 0.02)) {
+        holder.position.set(prev.x, 0, prev.z);
+        const dist = Math.hypot(w.x - prev.x, w.z - prev.z);
+        moveTweens.push({ holder, model, baseY: model.position.y, fx: prev.x, fz: prev.z, tx: w.x, tz: w.z, t: 0, dur: Math.min(0.7, 0.14 + dist * 0.05) });
+      } else {
+        holder.position.set(w.x, 0, w.z);
+      }
+      newPos[id] = { x: w.x, z: w.z };
+      spriteGroup.add(holder);
     }
+    spritePrevPos = newPos;
+  }
+
+  // ---- Combat strike effect: an expanding ring + flash at the target tile ----
+  const fxGroup = new THREE.Group();
+  scene.add(fxGroup);
+  const strikeRingGeo = new THREE.TorusGeometry(0.4, 0.09, 6, 20);
+  const strikeCoreGeo = new THREE.IcosahedronGeometry(0.34, 0);
+  interface Strike { objs: THREE.Object3D[]; mats: THREE.MeshBasicMaterial[]; t: number; dur: number; }
+  let strikes: Strike[] = [];
+  function strike(q: number, r: number): void {
+    let top = 0.1;
+    if (lastView) { const tv = lastView.tiles.find((t) => t.q === q && t.r === r); if (tv) top = topOf(tv.t); }
+    const w = axialToWorld(q, r);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffc247, transparent: true, opacity: 0.95, depthWrite: false, depthTest: false });
+    const ring = new THREE.Mesh(strikeRingGeo, ringMat); ring.rotation.x = -Math.PI / 2; ring.position.set(w.x, top + 0.45, w.z); ring.scale.setScalar(0.4); ring.renderOrder = 998;
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 1, depthWrite: false, depthTest: false });
+    const core = new THREE.Mesh(strikeCoreGeo, coreMat); core.position.set(w.x, top + 0.5, w.z); core.renderOrder = 998;
+    fxGroup.add(ring, core);
+    strikes.push({ objs: [ring, core], mats: [ringMat, coreMat], t: 0, dur: 0.5 });
   }
 
   const borderGeo = new THREE.BoxGeometry(SIZE * 1.03, 0.1, 0.14);
@@ -1227,6 +1258,28 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     controls.update();
     const dt = animClock.getDelta();
     for (const m of mixers) m.update(dt);
+    // Glide moving units between tiles (ease + a little marching bounce).
+    for (let i = moveTweens.length - 1; i >= 0; i -= 1) {
+      const tw = moveTweens[i];
+      tw.t += dt / tw.dur;
+      const k = tw.t < 1 ? tw.t : 1;
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      tw.holder.position.x = tw.fx + (tw.tx - tw.fx) * e;
+      tw.holder.position.z = tw.fz + (tw.tz - tw.fz) * e;
+      tw.model.position.y = tw.baseY + Math.abs(Math.sin(k * Math.PI * 3)) * 0.05;
+      if (k >= 1) { tw.model.position.y = tw.baseY; moveTweens.splice(i, 1); }
+    }
+    // Combat strikes: the ring expands and everything fades out, then is disposed.
+    for (let i = strikes.length - 1; i >= 0; i -= 1) {
+      const s = strikes[i];
+      s.t += dt / s.dur;
+      const k = s.t < 1 ? s.t : 1;
+      s.objs[0].scale.setScalar(0.4 + k * 2.2);
+      s.objs[1].scale.setScalar(Math.max(0.05, 1 - k * 0.9));
+      s.objs[1].position.y += dt * 0.5;
+      for (const m of s.mats) m.opacity = 0.95 * (1 - k);
+      if (k >= 1) { for (const o of s.objs) fxGroup.remove(o); for (const m of s.mats) m.dispose(); strikes.splice(i, 1); }
+    }
     if (rainOn) {
       // Rain falls ONLY over the wet region's footprint (not the whole board).
       rain.position.set(rainCX, 0, rainCZ);
@@ -1282,6 +1335,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     },
     onPick(fn) { pickFn = fn; },
     onHover(fn) { hoverFn = fn; },
+    strike,
     resize,
     dispose() { running = false; renderer.dispose(); }
   };

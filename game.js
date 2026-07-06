@@ -1370,6 +1370,7 @@
         showCombatToast(msg, killed && !died ? "win" : died ? "loss" : "");
       } catch (e) {}
       flashCombat([key, attackerKey]);
+      if (USE_3D && board3d && board3d.strike) board3d.strike(q, r);
       apply({ type: "ATTACK", playerId: HUMAN_ID, attackerId: selected.id, defenderId: enemyUnit.id });
       return;
     }
@@ -1383,6 +1384,7 @@
       const hpBefore = clickedCity.hp;
       logAction("🏛️ " + selected.type + " assaults " + clickedCity.id + " (HP " + clickedCity.hp + ")");
       flashCombat([key, attackerKey]);
+      if (USE_3D && board3d && board3d.strike) board3d.strike(q, r);
       apply({ type: "ATTACK_CITY", playerId: HUMAN_ID, attackerId: selected.id, cityId: clickedCity.id });
       const afterCity = state.map.cities[clickedCity.id];
       if (afterCity && afterCity.ownerId === HUMAN_ID) {
@@ -1757,7 +1759,7 @@
         gForm = unitForm(top.type);
       }
       sprites.push({
-        civ: city.ownerId, kind: "city", name: citySpriteName(city.ownerId, city) || "",
+        civ: city.ownerId, kind: "city", id: city.id, name: citySpriteName(city.ownerId, city) || "",
         color: CIV_COLORS[city.ownerId] || "#888", q: city.position.q, r: city.position.r,
         t: state.map.tiles[ck] ? state.map.tiles[ck].terrain : "plains",
         pop: city.population || 1,
@@ -1770,7 +1772,7 @@
       if (getCityAt(unit.position.q, unit.position.r)) continue; // shown as the city's garrison
       const embarked = engine.isEmbarked && engine.isEmbarked(state, unit);
       sprites.push({
-        civ: unit.ownerId, kind: "unit", name: unitSpriteName(unit.ownerId, unit) || "",
+        civ: unit.ownerId, kind: "unit", id: unit.id, name: unitSpriteName(unit.ownerId, unit) || "",
         color: CIV_COLORS[unit.ownerId] || "#888", q: unit.position.q, r: unit.position.r,
         t: state.map.tiles[uk] ? state.map.tiles[uk].terrain : "plains",
         form: embarked ? "naval" : unitForm(unit.type),
