@@ -151,8 +151,12 @@ const shadowGeo = new THREE.PlaneGeometry(1, 1);
 // ---- Procedural low-poly models (placeholders until real glTF art arrives) ----
 // Shared geometries (created once) — meshes are cheap, geometries/materials reused.
 const GEO = {
-  torso: new THREE.CylinderGeometry(0.11, 0.16, 0.34, 6),
-  head: new THREE.IcosahedronGeometry(0.1, 0),
+  torso: new THREE.CylinderGeometry(0.1, 0.13, 0.24, 6),
+  legThin: new THREE.CylinderGeometry(0.036, 0.03, 0.18, 5),
+  arm: new THREE.CylinderGeometry(0.028, 0.024, 0.22, 5),
+  helmet: new THREE.SphereGeometry(0.082, 6, 4, 0, Math.PI * 2, 0, Math.PI * 0.62),
+  crest: new THREE.BoxGeometry(0.02, 0.075, 0.12),
+  head: new THREE.IcosahedronGeometry(0.09, 0),
   shield: new THREE.BoxGeometry(0.04, 0.22, 0.18),
   pole: new THREE.CylinderGeometry(0.016, 0.016, 0.72, 5),
   bow: new THREE.TorusGeometry(0.13, 0.016, 4, 8, Math.PI),
@@ -202,20 +206,37 @@ function meshOf(geo: THREE.BufferGeometry, color: number, cast = true): THREE.Me
   m.castShadow = cast;
   return m;
 }
-function buildFigure(form: string, color: string): THREE.Group {
+// Per-civ helmet crest colour + metal, so soldiers read differently by people.
+const CREST: Record<string, number> = {
+  rome: 0xb0392b, greece: 0xdfe6ee, egypt: 0x2f6ea5, carthage: 0x9b6bd0, gaul: 0x7fa23a, parthia: 0xd98a3a
+};
+function addHelmet(g: THREE.Group, y: number, civ?: string): void {
+  const c = civ || "rome";
+  const helmCol = c === "gaul" ? 0xc0894a : c === "egypt" ? 0xcaa85a : STEEL; // bronze Gaul, gilt Egypt, else steel
+  const helm = meshOf(GEO.helmet, helmCol); helm.position.set(0, y, 0); g.add(helm);
+  const crest = meshOf(GEO.crest, CREST[c] ?? 0xb0392b, false); crest.position.set(0, y + 0.05, 0);
+  if (c === "rome") crest.rotation.y = Math.PI / 2; // transverse Roman crest
+  g.add(crest);
+}
+function buildFigure(form: string, color: string, civ?: string): THREE.Group {
   const g = new THREE.Group();
   const armor = shade(color, 0);
-  const figure = (lift = 0) => {
-    const t = meshOf(GEO.torso, armor); t.position.set(0, 0.2 + lift, 0); g.add(t);
-    const h = meshOf(GEO.head, SKIN); h.position.set(0, 0.44 + lift, 0); g.add(h);
+  const legCol = shade(color, -0.3);
+  // A little person: two legs, a torso, two arms, a head — helmeted for soldiers.
+  const figure = (lift = 0, helmeted = true) => {
+    for (const lx of [0.05, -0.05]) { const leg = meshOf(GEO.legThin, legCol); leg.position.set(lx, 0.09 + lift, 0); g.add(leg); }
+    const t = meshOf(GEO.torso, armor); t.position.set(0, 0.3 + lift, 0); g.add(t);
+    for (const ax of [0.13, -0.13]) { const a = meshOf(GEO.arm, armor); a.position.set(ax, 0.3 + lift, 0); g.add(a); }
+    const h = meshOf(GEO.head, SKIN); h.position.set(0, 0.47 + lift, 0); g.add(h);
+    if (helmeted) addHelmet(g, 0.5 + lift, civ);
   };
   if (form === "spear") {
     figure();
-    const spear = meshOf(GEO.pole, WOOD); spear.position.set(0.13, 0.32, 0.02); g.add(spear);
-    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.12, 0.22, 0.03); g.add(sh);
+    const spear = meshOf(GEO.pole, WOOD); spear.position.set(0.16, 0.34, 0.02); g.add(spear);
+    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.15, 0.26, 0.03); g.add(sh);
   } else if (form === "ranged") {
     figure();
-    const bow = meshOf(GEO.bow, WOOD); bow.position.set(0.13, 0.28, 0); bow.rotation.z = Math.PI / 2; g.add(bow);
+    const bow = meshOf(GEO.bow, WOOD); bow.position.set(0.16, 0.3, 0); bow.rotation.z = Math.PI / 2; g.add(bow);
   } else if (form === "mounted") {
     const horse = meshOf(GEO.horse, WOOD); horse.position.set(0, 0.24, 0); g.add(horse);
     for (const [lx, lz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) {
@@ -241,13 +262,13 @@ function buildFigure(form: string, color: string): THREE.Group {
     const mast = meshOf(GEO.mast, DARKWOOD); mast.position.set(0, 0.36, 0); g.add(mast);
     const sail = meshOf(GEO.sail, shade(color, 0.12)); sail.position.set(0, 0.34, 0); g.add(sail);
   } else if (form === "civilian") {
-    figure();
-    const pack = meshOf(GEO.building, WOOD); pack.scale.set(0.5, 0.4, 0.45); pack.position.set(-0.13, 0.24, 0); g.add(pack);
+    figure(0, false); // bare-headed worker
+    const pack = meshOf(GEO.building, WOOD); pack.scale.set(0.5, 0.4, 0.45); pack.position.set(-0.15, 0.28, 0); g.add(pack);
   } else {
     // infantry / heavy
     figure();
-    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.12, 0.22, 0.04); g.add(sh);
-    const sword = meshOf(GEO.pole, STEEL); sword.scale.set(1, 0.42, 1); sword.position.set(0.13, 0.26, 0); g.add(sword);
+    const sh = meshOf(GEO.shield, shade(color, -0.15)); sh.position.set(-0.15, 0.26, 0.04); g.add(sh);
+    const sword = meshOf(GEO.pole, STEEL); sword.scale.set(1, 0.42, 1); sword.position.set(0.16, 0.3, 0); g.add(sword);
   }
   return g;
 }
@@ -270,13 +291,13 @@ function squadPositions(n: number): Array<[number, number]> {
 // A unit is drawn as a SQUAD of small figures — the count shows its strength, so
 // a wounded unit fields fewer and a healed one more. Big single things (elephant,
 // siege, ship) stay as one, scaled a touch by health.
-function buildUnit(form: string, color: string, hpFrac: number, q: number, r: number): THREE.Group {
+function buildUnit(form: string, color: string, hpFrac: number, q: number, r: number, civ?: string): THREE.Group {
   const frac = hpFrac == null ? 1 : Math.max(0.05, Math.min(1, hpFrac));
   const single = form === "siege" || form === "naval";
   const base = form === "elephant" ? 2 : form === "mounted" ? 3 : form === "civilian" ? 3 : 6;
   const g = new THREE.Group();
   if (single) {
-    const fig = buildFigure(form, color);
+    const fig = buildFigure(form, color, civ);
     fig.scale.setScalar(0.9 + 0.1 * frac);
     g.add(fig);
     return g;
@@ -284,7 +305,7 @@ function buildUnit(form: string, color: string, hpFrac: number, q: number, r: nu
   const count = Math.max(1, Math.round(base * frac));
   const pos = squadPositions(count);
   for (let i = 0; i < count; i += 1) {
-    const fig = buildFigure(form, color);
+    const fig = buildFigure(form, color, civ);
     fig.scale.setScalar(0.6);
     fig.position.set(pos[i][0], 0, pos[i][1]);
     fig.rotation.y = (rnd(q, r, i) - 0.5) * 0.6; // slight facing variation
@@ -683,7 +704,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
             grp.add(f);
           }
           model = grp; scale = 1;
-        } else { model = buildUnit(form, color, frac, sv.q, sv.r); scale = 1.35; }
+        } else { model = buildUnit(form, color, frac, sv.q, sv.r, sv.civ); scale = 1.35; }
       }
       model.scale.setScalar(scale);
       model.position.set(w.x, top + 0.01, w.z);

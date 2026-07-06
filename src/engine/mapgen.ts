@@ -45,12 +45,13 @@ interface SizeSpec {
   label: string;
 }
 
-// width = offset columns, height = offset rows (the board renders as a rectangle).
+// width = offset columns, height = offset rows. Bigger and much squarer than
+// before (near-equal cols/rows read as a square board, not a wide strip).
 export const MAP_SIZES: Record<MapSize, SizeSpec> = {
-  small: { width: 14, height: 9, bands: 2, rivers: 2, label: "Small" },
-  medium: { width: 20, height: 13, bands: 3, rivers: 3, label: "Medium" },
-  large: { width: 28, height: 18, bands: 3, rivers: 4, label: "Large" },
-  xl: { width: 34, height: 22, bands: 3, rivers: 5, label: "XL" }
+  small: { width: 15, height: 13, bands: 2, rivers: 2, label: "Small" },
+  medium: { width: 21, height: 18, bands: 3, rivers: 3, label: "Medium" },
+  large: { width: 27, height: 24, bands: 3, rivers: 5, label: "Large" },
+  xl: { width: 34, height: 30, bands: 4, rivers: 6, label: "XL" }
 };
 
 // Odd-r offset (pointy-top) <-> axial. Generation walks a rectangle in offset
