@@ -729,7 +729,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
   const ambLight = new THREE.AmbientLight(0xbfd4ff, 0.62);
-  const hemiLight = new THREE.HemisphereLight(0xcfe4ff, 0x3a3326, 0.5);
+  const hemiLight = new THREE.HemisphereLight(0xcfe4ff, 0x36342f, 0.5);
   scene.add(ambLight, hemiLight);
   const sun = new THREE.DirectionalLight(0xfff0d4, 1.15);
   sun.position.set(-26, 44, 20);
@@ -1015,7 +1015,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     const c = new THREE.Color(TERRAIN_COLOR[tv.t] ?? 0x808080).offsetHSL(0, 0, jitter);
     if (tv.o && civColors[tv.o]) c.lerp(new THREE.Color(civColors[tv.o]), 0.17);
     // Seen-but-not-visible keeps its DISCOVERED terrain colour, only dimmed.
-    if (tv.v === 1) c.multiplyScalar(0.6);
+    // Water dims toward a deep BLUE (multiplying it toward black went muddy-purple
+    // once the warm ground-light hit the hex sides); land keeps the plain dim.
+    if (tv.v === 1) {
+      if (tv.t === "sea" || tv.t === "coast") c.lerp(new THREE.Color(0x16324f), 0.5);
+      else c.multiplyScalar(0.62);
+    }
     if (tv.h === 3) c.lerp(GOLD, 0.55);
     else if (tv.h === 4) c.lerp(SELGREEN, 0.5);
     else if (tv.h === 2) c.lerp(RED, 0.5);
