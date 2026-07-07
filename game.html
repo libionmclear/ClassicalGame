@@ -110,6 +110,25 @@
       </div>
     </div>
 
+    <!-- Admin map editor toolbar -->
+    <div id="map-editor" class="map-editor hidden">
+      <span class="me-title">🖉 Map Editor — click a tile to paint</span>
+      <div class="me-palette" id="me-palette"></div>
+      <button id="me-export" class="ghost-btn">Export atlas</button>
+      <button id="me-done" class="primary-btn">Done</button>
+    </div>
+
+    <div id="me-export-modal" class="result-modal hidden">
+      <div class="result-card codex-card">
+        <div class="codex-header">
+          <h2>Map atlas (ASCII)</h2>
+          <button id="me-export-close" class="codex-close" title="Close">×</button>
+        </div>
+        <p class="event-situation">Copy this grid into a scenario file (see <code>src/engine/scenarios/oikoumene.ts</code>). <code>@</code> marks a capital tile — replace with 1–6.</p>
+        <textarea id="me-export-text" class="me-export-text" readonly></textarea>
+      </div>
+    </div>
+
     <!-- Login / registration gate -->
     <div id="auth-overlay" class="auth-overlay hidden">
       <div class="auth-card">

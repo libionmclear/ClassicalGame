@@ -2519,6 +2519,74 @@ details.panel-collapse > summary {
   font-style: italic;
 }
 
+/* ===== Admin map editor ===== */
+.admin-tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.map-editor {
+  position: fixed;
+  z-index: 210;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 96vw;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--papyrus), var(--papyrus-2));
+  border: 1px solid var(--papyrus-edge);
+  color: var(--ink);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+}
+
+.map-editor.hidden { display: none; }
+
+.me-title { font-weight: 700; font-size: 0.86rem; }
+
+.me-palette { display: flex; gap: 5px; flex-wrap: wrap; }
+
+.me-swatch {
+  padding: 5px 9px;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+.me-swatch.active { border-color: var(--ink); box-shadow: 0 0 0 2px rgba(255,255,255,0.6); }
+.me-sea { background: #2f5177; }
+.me-coast { background: #3f7f9c; }
+.me-plains { background: #7c8a4f; }
+.me-valley { background: #8aa354; }
+.me-forest { background: #33553a; }
+.me-hills { background: #86744f; }
+.me-mountains { background: #746a5b; }
+.me-desert { background: #c6a86a; color: #3a2a15; }
+
+.me-export-text {
+  width: 100%;
+  height: 56vh;
+  font-family: "Consolas", monospace;
+  font-size: 10px;
+  line-height: 1.05;
+  white-space: pre;
+  overflow: auto;
+  background: #0d1a2c;
+  color: #cfe0f0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+
 /* ===== Login / registration gate ===== */
 .auth-overlay {
   position: fixed;

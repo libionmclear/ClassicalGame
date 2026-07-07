@@ -125,6 +125,9 @@
   let announcedDead = {};
   // Admin testing: reveal the whole map (set when an admin signs in; toggle in menu).
   let adminRevealMap = false;
+  // Admin map editor: paint terrain onto the live map, then export it as an atlas.
+  let mapEditMode = false;
+  let editBrush = "plains";
   // Where the player last pressed on the board — the in-play menu opens there.
   let lastBoardPointer = null;
   // The selection the floating menu was last positioned for (so it only re-anchors
@@ -2915,6 +2918,20 @@
     });
   }
 
+  // ===== Map editor toolbar =====
+  const meDoneBtn = document.getElementById("me-done");
+  const meExportBtn = document.getElementById("me-export");
+  const meExportModal = document.getElementById("me-export-modal");
+  const meExportText = document.getElementById("me-export-text");
+  const meExportClose = document.getElementById("me-export-close");
+  if (meDoneBtn) meDoneBtn.addEventListener("click", closeMapEditor);
+  if (meExportBtn) meExportBtn.addEventListener("click", function () {
+    if (meExportText) meExportText.value = exportMapAscii();
+    if (meExportModal) meExportModal.classList.remove("hidden");
+    if (meExportText) { meExportText.focus(); meExportText.select(); }
+  });
+  if (meExportClose) meExportClose.addEventListener("click", function () { if (meExportModal) meExportModal.classList.add("hidden"); });
+
   // ===== Campaign hand (cards in play + events) =====
   if (handBtn) handBtn.addEventListener("click", openHand);
   if (handCloseBtn) handCloseBtn.addEventListener("click", function () { handModalEl.classList.add("hidden"); });
@@ -3399,11 +3416,81 @@
     let html = "Signed in as <b>" + (currentAccount.name || currentAccount.username) + "</b>" +
       (currentAccount.email ? ' <span class="sel-sub">(' + currentAccount.email + ")</span>" : "");
     if (currentAccount.isAdmin) {
-      html += '<div style="margin-top:6px"><button id="reveal-map-btn" class="ghost-btn">🗺️ Reveal map: ' + (adminRevealMap ? "ON" : "OFF") + "</button></div>";
+      html += '<div class="admin-tools"><button id="reveal-map-btn" class="ghost-btn">🗺️ Reveal map: ' + (adminRevealMap ? "ON" : "OFF") +
+        '</button><button id="edit-map-btn" class="ghost-btn">🖉 Map editor</button></div>';
     }
     accountLineEl.innerHTML = html;
     const rb = document.getElementById("reveal-map-btn");
     if (rb) rb.addEventListener("click", function () { adminRevealMap = !adminRevealMap; updateAccountLine(); if (state) render(); });
+    const eb = document.getElementById("edit-map-btn");
+    if (eb) eb.addEventListener("click", function () { openMapEditor(); });
+  }
+
+  // ===== Admin map editor: paint terrain on the live map + export an atlas =====
+  const EDIT_TERRAINS = [
+    { t: "sea", label: "Sea", ch: "~" }, { t: "coast", label: "Coast", ch: ":" },
+    { t: "plains", label: "Plains", ch: "." }, { t: "valley", label: "Valley", ch: "," },
+    { t: "forest", label: "Forest", ch: "f" }, { t: "hills", label: "Hills", ch: "h" },
+    { t: "mountains", label: "Mountains", ch: "^" }, { t: "desert", label: "Desert", ch: "d" }
+  ];
+  const TERRAIN_TO_CHAR = {};
+  for (const e of EDIT_TERRAINS) TERRAIN_TO_CHAR[e.t] = e.ch;
+
+  function paintTile(q, r) {
+    if (!state) return;
+    const key = q + "," + r;
+    const tile = state.map.tiles[key];
+    if (!tile) return;
+    tile.terrain = editBrush;
+    render();
+  }
+  function openMapEditor() {
+    mapEditMode = true;
+    adminRevealMap = true; // see the whole canvas while editing
+    if (menuOverlayEl) menuOverlayEl.classList.add("hidden");
+    const ed = document.getElementById("map-editor");
+    if (ed) ed.classList.remove("hidden");
+    buildEditorPalette();
+    updateAccountLine();
+    if (state) render();
+  }
+  function closeMapEditor() {
+    mapEditMode = false;
+    const ed = document.getElementById("map-editor");
+    if (ed) ed.classList.add("hidden");
+  }
+  function buildEditorPalette() {
+    const pal = document.getElementById("me-palette");
+    if (!pal) return;
+    pal.innerHTML = "";
+    for (const e of EDIT_TERRAINS) {
+      const b = document.createElement("button");
+      b.className = "me-swatch me-" + e.t + (e.t === editBrush ? " active" : "");
+      b.textContent = e.label;
+      b.addEventListener("click", function () { editBrush = e.t; buildEditorPalette(); });
+      pal.appendChild(b);
+    }
+  }
+  // The current map as an atlas (offset rows), ready to paste into a scenario.
+  function exportMapAscii() {
+    if (!state) return "";
+    const W = state.map.width, Hh = state.map.height;
+    const capChar = {};
+    for (const c of Object.values(state.map.cities)) {
+      if (!c.isCapital) continue;
+      capChar[c.position.q + "," + c.position.r] = "@"; // marks a city; capitals are 1-9 in atlas
+    }
+    const lines = [];
+    for (let row = 0; row < Hh; row += 1) {
+      let line = "";
+      for (let col = 0; col < W; col += 1) {
+        const q = col - ((row - (row & 1)) >> 1);
+        const tile = state.map.tiles[q + "," + row];
+        line += capChar[q + "," + row] || (tile ? (TERRAIN_TO_CHAR[tile.terrain] || "~") : "~");
+      }
+      lines.push(line);
+    }
+    return lines.join("\n");
   }
 
   function renderProfile() {
@@ -3773,6 +3860,7 @@
       board3d.onPick(function (key) {
         if (!key) return;
         const c = key.split(",");
+        if (mapEditMode) { paintTile(+c[0], +c[1]); return; }
         onTileClick(+c[0], +c[1]);
       });
       board3d.onHover(handle3DHover);
