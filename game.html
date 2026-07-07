@@ -31,7 +31,6 @@
     <header class="topbar">
       <button id="menu-btn" class="ghost-btn menu-btn" title="Menu — new game, profile, deck">☰ Menu</button>
       <span class="topbar-brand">HEGEMON</span>
-      <button id="end-turn-btn" class="primary-btn">End Turn</button>
       <div class="topbar-gap"></div>
       <button id="codex-btn" class="ghost-btn" title="Historical encyclopedia">📖</button>
       <button id="colors-btn" class="ghost-btn" title="Civilization colours">🎨</button>
@@ -162,14 +161,6 @@
       </div>
     </div>
 
-    <section class="status-panel">
-      <div class="status-main">
-        <div id="status-line"></div>
-        <div id="weather-bar" class="weather-bar"></div>
-        <div id="hint-line">Your turn — click your city to build, or a unit to move it. Then End Turn.</div>
-      </div>
-    </section>
-
     <section class="play-area">
       <div class="board-wrap">
         <canvas id="board3d-canvas"></canvas>
@@ -180,9 +171,15 @@
       <!-- Compact resource readout, top-left over the board -->
       <div id="resource-bar" class="res-bar hud-tl"></div>
 
+      <!-- Slim guidance caption over the board (no box) -->
+      <div id="hint-line" class="hint-caption"></div>
+      <!-- status-line kept hidden for the turn label logic -->
+      <div id="status-line" class="hidden"></div>
+
       <!-- Top-right: whose turn it is, plus Research + Standings icons -->
       <div class="hud-tr hud-tr-stack">
         <div id="turn-indicator" class="turn-indicator"></div>
+        <button id="end-turn-btn" class="primary-btn end-turn-hud">End Turn ▸</button>
         <div class="hud-tr-icons">
           <button id="research-btn" class="hud-icon flask-btn" title="Research — open the tech tree (glows when a discovery is ready)">🧪<span class="flask-badge"></span></button>
           <button id="standings-btn" class="hud-icon" title="Standings" aria-label="Standings">

@@ -52,6 +52,7 @@ export interface BoardView {
   rivers?: EdgeView[];
   roads?: EdgeView[];
   focus?: { q: number; r: number };
+  weather?: string; // overall sky mood: clear | rain | storm | fog | heat
 }
 
 export interface BoardController {
@@ -721,14 +722,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // fully flat.
   controls.enableRotate = true;
   controls.minPolarAngle = 0.12; // near top-down
-  controls.maxPolarAngle = 1.32; // near horizon
+  controls.maxPolarAngle = 1.46; // low, near the horizon — lets the weather sky show
   controls.minDistance = 5;
   controls.maxDistance = 200;
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
-  scene.add(new THREE.AmbientLight(0xbfd4ff, 0.62));
-  scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x3a3326, 0.5));
+  const ambLight = new THREE.AmbientLight(0xbfd4ff, 0.62);
+  const hemiLight = new THREE.HemisphereLight(0xcfe4ff, 0x3a3326, 0.5);
+  scene.add(ambLight, hemiLight);
   const sun = new THREE.DirectionalLight(0xfff0d4, 1.15);
   sun.position.set(-26, 44, 20);
   sun.castShadow = true;
@@ -747,6 +749,62 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   seaMesh.position.y = -0.3;
   seaMesh.receiveShadow = true;
   scene.add(seaMesh);
+  const seaMat = seaMesh.material as THREE.MeshStandardMaterial;
+
+  // ---- Sky weather: a soft radial texture reused for the sun disc and clouds ---
+  function radialTexture(r: number, g: number, b: number, softness: number): THREE.CanvasTexture {
+    const S = 128, cv = document.createElement("canvas"); cv.width = cv.height = S;
+    const cx = cv.getContext("2d")!;
+    const grad = cx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    grad.addColorStop(0, `rgba(${r},${g},${b},1)`);
+    grad.addColorStop(softness, `rgba(${r},${g},${b},0.85)`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    cx.fillStyle = grad; cx.fillRect(0, 0, S, S);
+    const tex = new THREE.CanvasTexture(cv); tex.needsUpdate = true; return tex;
+  }
+  // The sun: a small bright disc inside a big soft warm glow, parked over the
+  // northern horizon (positioned/sized to the board in buildTiles).
+  const sunDisc = new THREE.Group();
+  const sunGlowMat = new THREE.SpriteMaterial({ map: radialTexture(255, 234, 184, 0.12), transparent: true, opacity: 0, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending });
+  const sunGlow = new THREE.Sprite(sunGlowMat); sunGlow.scale.set(2.8, 2.8, 1);
+  const sunCoreMat = new THREE.SpriteMaterial({ map: radialTexture(255, 252, 235, 0.78), transparent: true, opacity: 0, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending });
+  const sunCore = new THREE.Sprite(sunCoreMat); sunCore.scale.set(1.15, 1.15, 1);
+  sunDisc.add(sunGlow, sunCore);
+  sunDisc.position.set(-150, 150, -180);
+  scene.add(sunDisc);
+  // An overcast cloud deck: soft puffs drifting high over the board, faded in for
+  // rain / storm / fog and hidden when it's clear.
+  const cloudTex = radialTexture(240, 240, 244, 0.35);
+  const cloudDeck = new THREE.Group();
+  for (let i = 0; i < 14; i += 1) {
+    const c = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0, depthWrite: false, color: 0xdfe4ea }));
+    const a = (i / 14) * Math.PI * 2;
+    c.position.set(Math.cos(a) * (40 + (i % 5) * 14), 60 + (i % 3) * 8, Math.sin(a) * (40 + (i % 4) * 16));
+    const s = 42 + (i % 4) * 12; c.scale.set(s, s * 0.6, 1);
+    cloudDeck.add(c);
+  }
+  scene.add(cloudDeck);
+
+  // Per-weather scene mood. Colours are lerped toward these each frame so weather
+  // transitions glide rather than snap.
+  interface SkyMood { top: number; bottom: number; fog: number; fogNear: number; fogFar: number; sun: number; sunI: number; ambI: number; hemiI: number; sea: number; disc: number; cloud: number; }
+  const WEATHER_SKY: Record<string, SkyMood> = {
+    clear: { top: 0x8ec9f0, bottom: 0x0a1626, fog: 0x9ec6e8, fogNear: 150, fogFar: 440, sun: 0xfff0d4, sunI: 1.3, ambI: 0.66, hemiI: 0.55, sea: 0x2b6aa0, disc: 0.95, cloud: 0.0 },
+    heat:  { top: 0xcdb98a, bottom: 0x2a2415, fog: 0xd8c79a, fogNear: 120, fogFar: 380, sun: 0xffe1ad, sunI: 1.45, ambI: 0.72, hemiI: 0.5, sea: 0x2f6a8f, disc: 0.8, cloud: 0.12 },
+    fog:   { top: 0xaeb8bd, bottom: 0x4b535a, fog: 0xb4bdc2, fogNear: 40, fogFar: 190, sun: 0xd6dce0, sunI: 0.65, ambI: 0.78, hemiI: 0.6, sea: 0x46545e, disc: 0.0, cloud: 0.55 },
+    rain:  { top: 0x5c6b79, bottom: 0x272f38, fog: 0x59636e, fogNear: 90, fogFar: 300, sun: 0xb9c4cf, sunI: 0.5, ambI: 0.55, hemiI: 0.5, sea: 0x2c4150, disc: 0.0, cloud: 0.85 },
+    storm: { top: 0x3d4650, bottom: 0x1a1f26, fog: 0x39424c, fogNear: 70, fogFar: 250, sun: 0x9aa6b2, sunI: 0.34, ambI: 0.46, hemiI: 0.42, sea: 0x233040, disc: 0.0, cloud: 1.0 }
+  };
+  // Live colour objects we lerp; start at "clear".
+  const skyTopC = new THREE.Color(WEATHER_SKY.clear.top);
+  const skyBotC = new THREE.Color(WEATHER_SKY.clear.bottom);
+  const fogC = new THREE.Color(WEATHER_SKY.clear.fog);
+  const sunC = new THREE.Color(WEATHER_SKY.clear.sun);
+  const seaC = new THREE.Color(WEATHER_SKY.clear.sea);
+  let curSunI = WEATHER_SKY.clear.sunI, curAmbI = WEATHER_SKY.clear.ambI, curHemiI = WEATHER_SKY.clear.hemiI;
+  let curFogNear = WEATHER_SKY.clear.fogNear, curFogFar = WEATHER_SKY.clear.fogFar;
+  let curDisc = WEATHER_SKY.clear.disc, curCloud = 0;
+  let moodTarget: SkyMood = WEATHER_SKY.clear;
 
   // Rain/storm: a volume of falling streaks that follows the view, shown only when
   // a visible region is wet. Storm makes it heavier + darker.
@@ -944,6 +1002,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     controls.target.set(cx, 0, cz);
     camera.position.set(cx, span * 0.8, cz + span * 0.62);
     sun.target.position.set(cx, 0, cz);
+    // Park the sun disc just above the northern horizon (the default view looks
+    // north), sized to the board, so it sits in the visible sky band when clear.
+    sunDisc.position.set(cx - span * 0.15, span * 0.5, cz - span * 3.0);
+    sunDisc.scale.setScalar(Math.max(12, span * 0.6));
     controls.update();
   }
 
@@ -992,16 +1054,37 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
 
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
-  // Movement gliding: each sprite lives in a holder at its tile; when the same id
-  // reappears at a new tile we start it at the OLD spot and tween it across.
-  let spritePrevPos: Record<string, { x: number; z: number }> = {};
-  interface MoveTween { holder: THREE.Object3D; model: THREE.Object3D; baseY: number; fx: number; fz: number; tx: number; tz: number; t: number; dur: number; }
-  let moveTweens: MoveTween[] = [];
+  // A slim floating health bar (two camera-facing sprites) above a unit or city.
+  function makeHpBar(frac: number, width: number, y: number): THREE.Group {
+    const g = new THREE.Group();
+    const h = 0.14;
+    const bgMat = new THREE.SpriteMaterial({ color: 0x120d04, transparent: true, opacity: 0.82, depthWrite: false, depthTest: false });
+    const bg = new THREE.Sprite(bgMat); bg.scale.set(width + 0.07, h + 0.06, 1); bg.position.set(0, y, 0); bg.renderOrder = 996;
+    const col = frac > 0.6 ? 0x5cc94f : frac > 0.3 ? 0xe3a12b : 0xd23f2c;
+    const fillMat = new THREE.SpriteMaterial({ color: col, depthWrite: false, depthTest: false });
+    const fill = new THREE.Sprite(fillMat);
+    fill.center.set(0, 0.5);
+    fill.scale.set(Math.max(0.001, width * Math.max(0, Math.min(1, frac))), h, 1);
+    fill.position.set(-width / 2, y, 0); fill.renderOrder = 997;
+    g.add(bg, fill);
+    return g;
+  }
+
+  // Movement gliding that survives back-to-back re-renders. render() often runs
+  // twice in a row (the human's move, then the AI turn) with no frame in between,
+  // which used to wipe the tween before it drew. So motion lives in a PERSISTENT
+  // per-unit record: each render just re-points it at the freshly rebuilt holder
+  // and updates the target tile, and the loop keeps chasing the target each frame.
+  interface Motion { cx: number; cz: number; tx: number; tz: number; holder: THREE.Object3D; model: THREE.Object3D; baseY: number; }
+  let unitMotion: Record<string, Motion> = {};
   function placeSprites(view: BoardView): void {
     spriteGroup.clear();
     mixers = [];
-    moveTweens = [];
-    const newPos: Record<string, { x: number; z: number }> = {};
+    const liveIds = new Set<string>();
+    // Fan out units that share a tile so a stacked "army" reads as a cluster.
+    const tileUnitCount: Record<string, number> = {};
+    for (const s of view.sprites) if (s.kind !== "city") { const tk = s.q + "," + s.r; tileUnitCount[tk] = (tileUnitCount[tk] || 0) + 1; }
+    const tileUnitOrd: Record<string, number> = {};
     for (const sv of view.sprites) {
       const w = axialToWorld(sv.q, sv.r);
       const top = topOf(sv.t || "plains"); // the tile's real surface height
@@ -1009,6 +1092,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const isCity = sv.kind === "city";
       const frac = sv.hpFrac == null ? 1 : sv.hpFrac;
       const holder = new THREE.Group(); // moves as one; model pieces are LOCAL to it
+      // Where this unit sits within its tile (fanned out if it shares an army).
+      let ox = 0, oz = 0, stackN = 1;
+      if (!isCity) {
+        const tk = sv.q + "," + sv.r;
+        stackN = tileUnitCount[tk] || 1;
+        const ord = tileUnitOrd[tk] = (tileUnitOrd[tk] || 0);
+        tileUnitOrd[tk] = ord + 1;
+        if (stackN > 1) { const p = squadPositions(stackN)[ord] || [0, 0]; ox = p[0] * 2.4; oz = p[1] * 2.4; }
+      }
 
       // Prefer real glTF art if the conventional file exists; else the procedural
       // low-poly placeholder. Either way it sits ON the tile and casts a shadow.
@@ -1036,12 +1128,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         } else { model = buildUnit(form, color, frac, sv.q, sv.r, sv.civ, sv.utype); scale = 1.35; }
       }
       model.scale.setScalar(scale);
-      model.position.set(0, top + 0.01, 0);
+      model.position.set(ox, top + 0.01, oz);
       holder.add(model);
 
       const shadow = new THREE.Mesh(shadowGeo, shadowMat);
       shadow.rotation.x = -Math.PI / 2;
-      shadow.position.set(0, top + 0.02, 0);
+      shadow.position.set(ox, top + 0.02, oz);
       const sh = isCity ? 1.7 : 1.0;
       shadow.scale.set(sh, sh, 1);
       holder.add(shadow);
@@ -1060,24 +1152,40 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
       if (sv.badge) {
         const b = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(sv.badge), transparent: true, depthWrite: false, depthTest: false }));
-        b.center.set(0.5, 0); b.scale.set(0.5, 0.5, 0.5); b.position.set(0, top + (isCity ? 1.5 : 1.05), 0); b.renderOrder = 999;
+        b.center.set(0.5, 0); b.scale.set(0.5, 0.5, 0.5); b.position.set(ox, top + (isCity ? 1.5 : 1.05), oz); b.renderOrder = 999;
         holder.add(b);
       }
 
-      // Position the holder, gliding from its previous tile if it just moved.
+      // Health bar over every unit and city (sits over each unit in a stack).
+      if (sv.hpFrac != null) {
+        const bar = makeHpBar(sv.hpFrac, isCity ? 1.5 : 0.95, top + (isCity ? 1.28 : 0.86));
+        bar.position.set(ox, 0, oz);
+        holder.add(bar);
+      }
+
+      // Army count over a stacked tile (once, on the first unit, at tile centre).
+      if (stackN > 1 && (tileUnitOrd[sv.q + "," + sv.r] === 1)) {
+        const cb = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture("⚔" + stackN), transparent: true, depthWrite: false, depthTest: false }));
+        cb.center.set(0.5, 0); cb.scale.set(0.6, 0.6, 0.6); cb.position.set(0, top + 1.5, 0); cb.renderOrder = 999;
+        holder.add(cb);
+      }
+
+      // Position the holder, gliding from wherever it currently sits toward its new
+      // tile (cities never glide — they don't move).
       const id = sv.id || (sv.kind.charAt(0) + ":" + sv.q + "," + sv.r);
-      const prev = spritePrevPos[id];
-      if (!isCity && prev && (Math.abs(prev.x - w.x) > 0.02 || Math.abs(prev.z - w.z) > 0.02)) {
-        holder.position.set(prev.x, 0, prev.z);
-        const dist = Math.hypot(w.x - prev.x, w.z - prev.z);
-        moveTweens.push({ holder, model, baseY: model.position.y, fx: prev.x, fz: prev.z, tx: w.x, tz: w.z, t: 0, dur: Math.min(0.7, 0.14 + dist * 0.05) });
+      liveIds.add(id);
+      const m = unitMotion[id];
+      if (!isCity && m) {
+        m.tx = w.x; m.tz = w.z; m.holder = holder; m.model = model; m.baseY = model.position.y;
+        holder.position.set(m.cx, 0, m.cz);
       } else {
         holder.position.set(w.x, 0, w.z);
+        if (!isCity) unitMotion[id] = { cx: w.x, cz: w.z, tx: w.x, tz: w.z, holder, model, baseY: model.position.y };
       }
-      newPos[id] = { x: w.x, z: w.z };
       spriteGroup.add(holder);
     }
-    spritePrevPos = newPos;
+    // Drop motion records for units that died or left view (keep the map bounded).
+    for (const id in unitMotion) if (!liveIds.has(id)) delete unitMotion[id];
   }
 
   // ---- Combat strike effect: an expanding ring + flash at the target tile ----
@@ -1258,16 +1366,25 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     controls.update();
     const dt = animClock.getDelta();
     for (const m of mixers) m.update(dt);
-    // Glide moving units between tiles (ease + a little marching bounce).
-    for (let i = moveTweens.length - 1; i >= 0; i -= 1) {
-      const tw = moveTweens[i];
-      tw.t += dt / tw.dur;
-      const k = tw.t < 1 ? tw.t : 1;
-      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-      tw.holder.position.x = tw.fx + (tw.tx - tw.fx) * e;
-      tw.holder.position.z = tw.fz + (tw.tz - tw.fz) * e;
-      tw.model.position.y = tw.baseY + Math.abs(Math.sin(k * Math.PI * 3)) * 0.05;
-      if (k >= 1) { tw.model.position.y = tw.baseY; moveTweens.splice(i, 1); }
+    // Glide moving units toward their target tile at a steady march pace, with a
+    // little up-down bounce. Chasing a persistent target (not a one-shot tween)
+    // means the glide survives the double render() that a turn triggers.
+    const MARCH = 7.0; // world units / second
+    for (const id in unitMotion) {
+      const mo = unitMotion[id];
+      const dx = mo.tx - mo.cx, dz = mo.tz - mo.cz;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.002) {
+        if (mo.cx !== mo.tx || mo.cz !== mo.tz) { mo.cx = mo.tx; mo.cz = mo.tz; mo.holder.position.set(mo.cx, 0, mo.cz); }
+        if (mo.model.position.y !== mo.baseY) mo.model.position.y = mo.baseY;
+        continue;
+      }
+      const step = Math.min(d, MARCH * dt);
+      mo.cx += (dx / d) * step;
+      mo.cz += (dz / d) * step;
+      mo.holder.position.x = mo.cx;
+      mo.holder.position.z = mo.cz;
+      mo.model.position.y = mo.baseY + Math.abs(Math.sin((mo.cx + mo.cz) * 2.6)) * 0.06;
     }
     // Combat strikes: the ring expands and everything fades out, then is disposed.
     for (let i = strikes.length - 1; i >= 0; i -= 1) {
@@ -1292,6 +1409,34 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         if (arr[i] < 0) arr[i] = RAIN_TOP;
       }
       pos.needsUpdate = true;
+    }
+    // Ease the whole scene toward the current weather mood (sky, sun, sea, fog).
+    const kw = Math.min(1, dt * 1.4);
+    skyTopC.lerp(new THREE.Color(moodTarget.top), kw);
+    skyBotC.lerp(new THREE.Color(moodTarget.bottom), kw);
+    fogC.lerp(new THREE.Color(moodTarget.fog), kw);
+    sunC.lerp(new THREE.Color(moodTarget.sun), kw);
+    seaC.lerp(new THREE.Color(moodTarget.sea), kw);
+    curSunI += (moodTarget.sunI - curSunI) * kw;
+    curAmbI += (moodTarget.ambI - curAmbI) * kw;
+    curHemiI += (moodTarget.hemiI - curHemiI) * kw;
+    curFogNear += (moodTarget.fogNear - curFogNear) * kw;
+    curFogFar += (moodTarget.fogFar - curFogFar) * kw;
+    curDisc += (moodTarget.disc - curDisc) * kw;
+    curCloud += (moodTarget.cloud - curCloud) * kw;
+    skyMat.uniforms.topColor.value.copy(skyTopC);
+    skyMat.uniforms.bottomColor.value.copy(skyBotC);
+    if (scene.fog) { (scene.fog as THREE.Fog).color.copy(fogC); (scene.fog as THREE.Fog).near = curFogNear; (scene.fog as THREE.Fog).far = curFogFar; }
+    sun.color.copy(sunC); sun.intensity = curSunI;
+    ambLight.intensity = curAmbI; hemiLight.intensity = curHemiI;
+    seaMat.color.copy(seaC);
+    sunGlowMat.opacity = curDisc * 0.85; sunCoreMat.opacity = curDisc;
+    sunDisc.visible = curDisc > 0.02;
+    cloudDeck.visible = curCloud > 0.02;
+    for (const c of cloudDeck.children) {
+      (c as THREE.Sprite).position.x += dt * 1.2; // slow drift
+      if ((c as THREE.Sprite).position.x > 110) (c as THREE.Sprite).position.x -= 220;
+      ((c as THREE.Sprite).material as THREE.SpriteMaterial).opacity = curCloud * 0.75;
     }
     composer.render();
     requestAnimationFrame(loop);
@@ -1328,6 +1473,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       }
       rainMat.opacity = stormy ? 0.75 : 0.5;
       rainMat.color.set(stormy ? 0x8fa4bc : 0xaec4dc);
+      // Overall sky mood — sunny is bright with a sun disc; overcast greys it out.
+      moodTarget = WEATHER_SKY[view.weather || "clear"] || WEATHER_SKY.clear;
       if (view.focus) {
         const w = axialToWorld(view.focus.q, view.focus.r);
         controls.target.set(w.x, 0, w.z);

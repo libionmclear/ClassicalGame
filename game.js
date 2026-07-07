@@ -1091,9 +1091,11 @@
           );
         }
 
+        // Friendly-occupied tiles ARE reachable now — moving there stacks the
+        // units into one army (the engine already fights them as a combined
+        // force). Only enemy-occupied tiles are blocked (those are attacks).
         const occupiedByEnemyUnit = getUnitsAt(q, r).some((u) => u.ownerId !== unit.ownerId);
-        const occupiedByFriendlyUnit = getUnitsAt(q, r).some((u) => u.ownerId === unit.ownerId);
-        if (totalCost <= unit.movementRemaining && !occupiedByEnemyUnit && !occupiedByFriendlyUnit) {
+        if (totalCost <= unit.movementRemaining && !occupiedByEnemyUnit) {
           hints.reachable.add(key);
         }
       }
@@ -1309,9 +1311,10 @@
     const clickedCity = getCityAt(q, r);
 
     if (!selectedUnitId) {
-      const ownUnit = clickedUnits.find((u) => u.ownerId === HUMAN_ID);
-      if (ownUnit) {
-        selectedUnitId = ownUnit.id;
+      const ownHere = clickedUnits.filter((u) => u.ownerId === HUMAN_ID);
+      if (ownHere.length) {
+        // A stack (army): pick the first; clicking the tile again cycles to the next.
+        selectedUnitId = ownHere[0].id;
         selectedCityId = null;
         selectedTileKey = null;
         render();
@@ -1347,8 +1350,16 @@
       return;
     }
 
-    // Clicking the selected unit itself deselects it.
+    // Clicking the selected unit's tile: if more of your units share it (an army),
+    // cycle to the next one; otherwise deselect.
     if (selected.position.q === q && selected.position.r === r) {
+      const ownHere = clickedUnits.filter((u) => u.ownerId === HUMAN_ID);
+      if (ownHere.length > 1) {
+        const idx = ownHere.findIndex((u) => u.id === selectedUnitId);
+        selectedUnitId = ownHere[(idx + 1) % ownHere.length].id;
+        render();
+        return;
+      }
       clearSelection();
       render();
       return;
@@ -1779,6 +1790,7 @@
         color: CIV_COLORS[city.ownerId] || "#888", q: city.position.q, r: city.position.r,
         t: state.map.tiles[ck] ? state.map.tiles[ck].terrain : "plains",
         pop: city.population || 1,
+        hpFrac: city.maxHp ? Math.max(0, Math.min(1, (city.hp == null ? city.maxHp : city.hp) / city.maxHp)) : 1,
         garrison: garr.length, gForm: gForm, gColor: CIV_COLORS[city.ownerId] || "#888"
       });
     }
@@ -1827,7 +1839,17 @@
         roads.push({ q: q, r: r, nq: nq, nr: nr });
       }
     }
-    const view = { tiles: tiles, sprites: sprites, borders: borders, civColors: CIV_COLORS, rivers: rivers, roads: roads };
+    // Overall sky mood follows the weather over the human's home region, so the
+    // blue around the map, the sun and the light shift with the forecast.
+    let skyWx = "clear";
+    if (state.weather && state.weather.current) {
+      const cap = Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
+        Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
+      const capTile = cap && state.map.tiles[cap.position.q + "," + cap.position.r];
+      const region = capTile ? capTile.region : (state.map.regions && state.map.regions[0]);
+      skyWx = (region && state.weather.current[region]) || "clear";
+    }
+    const view = { tiles: tiles, sprites: sprites, borders: borders, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx };
     if (pendingRecenter) {
       const home =
         Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
@@ -2250,16 +2272,22 @@
       const turnLabel = state.turnLimit
         ? "Turn " + state.turn + " / " + state.turnLimit
         : "Turn " + state.turn;
-      statusEl.innerHTML =
-        turnLabel + " — " +
-        '<span style="color:' + activeColor + ';font-weight:700">' + (current.civ || current.id) + "</span>" +
-        (current.id === HUMAN_ID ? " (your move)" : " is moving…");
+      if (statusEl) {
+        statusEl.innerHTML =
+          turnLabel + " — " +
+          '<span style="color:' + activeColor + ';font-weight:700">' + (current.civ || current.id) + "</span>" +
+          (current.id === HUMAN_ID ? " (your move)" : " is moving…");
+      }
 
-      // Top-right corner: "Rome · Turn 1/60".
+      // Top-right corner: "Rome · Turn 1/60" plus who's moving.
       if (turnIndicatorEl) {
         const nOf = state.turnLimit ? state.turn + "/" + state.turnLimit : String(state.turn);
+        const move = current.id === HUMAN_ID
+          ? '<span class="ti-move ti-you">your move</span>'
+          : '<span class="ti-move">' + (current.civ || current.id) + " moving…</span>";
         turnIndicatorEl.innerHTML =
-          '<span class="ti-civ" style="color:' + activeColor + '">' + (current.civ || current.id) + "</span> · Turn " + nOf;
+          '<span class="ti-civ" style="color:' + activeColor + '">' + (current.civ || current.id) +
+          "</span> · Turn " + nOf + move;
       }
 
       const visibility = getHumanVisibility();
@@ -2510,19 +2538,8 @@
       })
       .join("");
 
-    // Weather is the game's only luck — surface current + forecast per region.
-    const regions = state.map.regions || [];
-    weatherBarEl.innerHTML = regions
-      .map((region) => {
-        const now = WEATHER_INFO[state.weather.current[region]] || WEATHER_INFO.clear;
-        const next = WEATHER_INFO[state.weather.forecast[region]] || WEATHER_INFO.clear;
-        return (
-          '<span class="weather-chip"><span class="wx-region">' + region +
-          "</span> " + now.icon + " " + now.label +
-          ' <span class="wx-next">→ ' + next.icon + "</span></span>"
-        );
-      })
-      .join("");
+    // Weather is no longer shown as a text bar — it now drives the sky, water and
+    // light of the 3D board itself (see the weather push into the board view).
   }
 
   function renderLegend() {
