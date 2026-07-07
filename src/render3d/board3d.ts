@@ -696,7 +696,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const scene = new THREE.Scene();
   // A sky-dome gradient: light blue overhead fading to a deep-blue horizon (the
   // "not played" floor stays dark). Fog blends distant terrain into the horizon.
-  scene.fog = new THREE.Fog(0x3f6fa3, 70, 180);
+  scene.fog = new THREE.Fog(0x3f6fa3, 130, 420); // gentle — big maps shouldn't wash out
   const skyMat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
