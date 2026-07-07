@@ -1054,20 +1054,31 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
 
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
-  // A slim floating health bar (two camera-facing sprites) above a unit or city.
-  function makeHpBar(frac: number, width: number, y: number): THREE.Group {
-    const g = new THREE.Group();
-    const h = 0.14;
-    const bgMat = new THREE.SpriteMaterial({ color: 0x120d04, transparent: true, opacity: 0.82, depthWrite: false, depthTest: false });
-    const bg = new THREE.Sprite(bgMat); bg.scale.set(width + 0.07, h + 0.06, 1); bg.position.set(0, y, 0); bg.renderOrder = 996;
-    const col = frac > 0.6 ? 0x5cc94f : frac > 0.3 ? 0xe3a12b : 0xd23f2c;
-    const fillMat = new THREE.SpriteMaterial({ color: col, depthWrite: false, depthTest: false });
-    const fill = new THREE.Sprite(fillMat);
-    fill.center.set(0, 0.5);
-    fill.scale.set(Math.max(0.001, width * Math.max(0, Math.min(1, frac))), h, 1);
-    fill.position.set(-width / 2, y, 0); fill.renderOrder = 997;
-    g.add(bg, fill);
-    return g;
+  // A slim floating health bar drawn as ONE camera-facing sprite: the whole bar
+  // (dark backing + coloured fill) is painted on a cached canvas texture, so the
+  // backing and the fill can never drift apart into two separate lines. Textures
+  // and materials are cached per ~5% HP bucket to avoid per-frame allocation.
+  const hpBarMatCache: Record<number, THREE.SpriteMaterial> = {};
+  function hpBarMaterial(frac: number): THREE.SpriteMaterial {
+    const bucket = Math.round(Math.max(0, Math.min(1, frac)) * 20);
+    if (hpBarMatCache[bucket]) return hpBarMatCache[bucket];
+    const W = 64, H = 12, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const cx = cv.getContext("2d")!;
+    cx.fillStyle = "rgba(8,6,2,0.92)"; cx.fillRect(0, 0, W, H); // dark backing + border
+    const f = bucket / 20;
+    cx.fillStyle = f > 0.6 ? "#5cc94f" : f > 0.3 ? "#e3a12b" : "#d23f2c";
+    const pad = 2;
+    cx.fillRect(pad, pad, Math.max(0, (W - pad * 2) * f), H - pad * 2); // fill
+    const tex = new THREE.CanvasTexture(cv); tex.needsUpdate = true;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false });
+    hpBarMatCache[bucket] = mat;
+    return mat;
+  }
+  function makeHpBar(frac: number, width: number): THREE.Sprite {
+    const spr = new THREE.Sprite(hpBarMaterial(frac));
+    spr.scale.set(width, width * (12 / 64), 1);
+    spr.renderOrder = 997;
+    return spr;
   }
 
   // Movement gliding that survives back-to-back re-renders. render() often runs
@@ -1158,8 +1169,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
       // Health bar over every unit and city (sits over each unit in a stack).
       if (sv.hpFrac != null) {
-        const bar = makeHpBar(sv.hpFrac, isCity ? 1.5 : 0.95, top + (isCity ? 1.28 : 0.86));
-        bar.position.set(ox, 0, oz);
+        const bar = makeHpBar(sv.hpFrac, isCity ? 1.5 : 0.95);
+        bar.position.set(ox, top + (isCity ? 1.28 : 0.86), oz);
         holder.add(bar);
       }
 
