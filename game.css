@@ -1969,110 +1969,158 @@ details.panel-collapse > summary {
 
 /* ===== Research tree (columns by age, icons, prereq chain) ===== */
 .research-card {
-  width: min(960px, 96vw);
+  width: min(1120px, 96vw);
   max-width: 96vw;
 }
 
-.tech-tree-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  max-height: 64vh;
+/* ===== Phase 7 tech tree (docs/HEGEMON-TECHTREE-UI-SPEC.md) ===== */
+.tt {
+  position: relative;
+  max-height: 66vh;
   overflow: auto;
-  padding: 2px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 20px 22px;
 }
 
-.tech-col {
+/* Connector layer — absolutely covers the scroll content, under the nodes. */
+.tt-links {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.tt-link { fill: none; stroke: var(--line); stroke-width: 1; transition: stroke 0.15s, opacity 0.15s; }
+.tt-link.done { stroke: #3f7a5f; stroke-width: 1.4; }
+.tt-link.next { stroke: var(--gold); stroke-width: 1.6; }
+.tt-link.branch { stroke: var(--civ, #c0392b); opacity: 0.6; }
+.tt-link.lit { stroke: var(--gold); stroke-width: 2; opacity: 1; }
+
+.tt-eras {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(190px, 1fr));
+  gap: 12px 26px;
+  align-items: start;
+}
+.tt-era { display: flex; flex-direction: column; gap: 8px; }
+.tt-era > h3 {
+  margin: 0 0 2px;
+  font-family: var(--display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  border-bottom: 1px solid var(--gold-dim);
+  padding-bottom: 8px;
+}
+
+.tt-node {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.tech-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 3px;
+  min-width: 148px;
   text-align: left;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: #16283f;
-  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--parchment);
   cursor: pointer;
+  transition: border-color 0.15s ease-out, transform 0.15s ease-out, opacity 0.15s ease-out;
 }
-
-.tech-card .tech-ico {
-  font-size: 1.2rem;
-  line-height: 1;
-  flex: none;
-  filter: grayscale(0.4);
-}
-
-.tech-card .tech-body {
+.tt-node:hover:not(:disabled) { border-color: var(--gold); transform: translateY(-1px); }
+.tt-node-top { display: flex; align-items: center; gap: 7px; }
+.tt-ico { font-size: 1.05rem; line-height: 1; flex: none; filter: grayscale(0.35); }
+.tt-name {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.tech-card .tech-name {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.tech-card .tech-needs {
-  font-size: 0.66rem;
-  color: var(--muted);
-}
-
-.tech-needs .pr-have { color: #7ed957; }
-.tech-needs .pr-miss { color: #e0a05a; }
-
-.tech-card .tech-state {
+.tt-crown { margin-left: 4px; }
+.fx { font-size: 0.68rem; line-height: 1.25; color: var(--muted); }
+.tt-pill {
   flex: none;
   font-size: 0.66rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1px 7px;
+  white-space: nowrap;
 }
+.tt-pill.done { color: #7ed957; border-color: #3f7a5f55; }
+.tt-pill.avail { color: #1a1408; background: var(--gold); border-color: #a9863a; }
+.tt-pill.wait { color: var(--gold); }
 
-.tech-card.is-fork { border-left: 3px solid #b98bd8; }
-/* v2: civ-unique branch techs carry a coloured left edge (inline colour = civ),
-   and the branch capstone gets a gold glow. Full tech-tree UI is Phase 7. */
-.tech-card.is-branch { border-left-width: 3px; border-left-style: solid; }
-.tech-card.is-capstone { box-shadow: 0 0 0 1px rgba(242, 160, 61, 0.55), 0 0 10px rgba(242, 160, 61, 0.3); }
-.tech-card.is-capstone .tech-name { color: #f2cc69; }
+/* Four states (UI-SPEC §2) */
+.tt-node[data-state="researched"] { border-color: #3f7a5f; background: #14231d; }
+.tt-node[data-state="researched"] .tt-ico { filter: none; }
+.tt-node[data-state="available"] { border-color: var(--gold); }
+.tt-node[data-state="available"] .tt-ico { filter: none; }
+.tt-node[data-state="locked"] { opacity: 0.5; filter: grayscale(0.4); }
+.tt-node[data-fork-closed] .tt-name { text-decoration: line-through; }
+.tt-node:disabled { cursor: default; }
+.tt-node[data-unique] { border-color: var(--civ, #c0392b); }
+.tt-node[data-capstone] { box-shadow: 0 0 0 1px var(--civ, #c0392b) inset, 0 0 10px rgba(201, 168, 76, 0.18); }
 
-.tech-card.done { background: #22331f; }
-.tech-card.done .tech-ico { filter: none; }
-.tech-card.done .tech-name { color: #a9d69a; }
-.tech-card.done .tech-state { color: #7ed957; }
+/* Hover-lit chain: dim everything not on the path (UI-SPEC §4) */
+.tt.tt-dim .tt-node:not(.lit) { opacity: 0.32; }
+.tt.tt-dim .tt-link:not(.lit) { opacity: 0.12; }
+.tt-node.lit { border-color: var(--gold); opacity: 1; }
 
-.tech-card.avail {
-  border-color: var(--accent);
-  background: #1a3252;
+/* Civ-unique branch band */
+.tt-band {
+  position: relative;
+  z-index: 1;
+  margin-top: 18px;
+  border: 1px dashed var(--civ, #c0392b);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--civ, #c0392b) 8%, transparent);
+  padding: 14px 16px;
 }
-.tech-card.avail .tech-ico { filter: none; }
-.tech-card.avail .tech-name { color: #f3d59a; }
-.tech-card.avail:hover:not(:disabled) { filter: brightness(1.12); }
-
-.tech-card.locked,
-.tech-card.closed { opacity: 0.62; cursor: not-allowed; }
-.tech-card.closed .tech-name { text-decoration: line-through; }
-.tech-card:disabled { cursor: default; }
-
-/* Hovering a tech lights up the whole path you'd research to reach it. */
-.tech-card.pr-chain {
-  outline: 2px solid var(--gold);
-  outline-offset: -1px;
-  background: #2a3a24;
+.tt-band-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
+.tt-band-title {
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--civ, #c0392b);
+}
+.tt-band-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tt-band-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(190px, 1fr));
+  gap: 10px 26px;
+  align-items: start;
+}
+.tt-band-col { display: flex; flex-direction: column; gap: 8px; }
 
 @media (max-width: 720px) {
-  .tech-tree-grid { grid-template-columns: 1fr; }
+  .tt-eras, .tt-band-grid { grid-template-columns: 1fr; }
 }
 
 .action-log {

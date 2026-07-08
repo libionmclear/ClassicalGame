@@ -2523,18 +2523,32 @@
 
   // Highlight (or clear) the whole prerequisite chain of a tech — "what to
   // research to get here".
-  function highlightTechChain(id, techs, cardById, on) {
-    const seen = {};
+  // Tech-tree UI state (Phase 7): the current node elements and connector paths,
+  // so hovering a node can light its whole prerequisite chain (nodes + links).
+  const TT_SVGNS = "http://www.w3.org/2000/svg";
+  let ttNodeById = {};
+  let ttLinkPaths = [];
+
+  // Hover a node -> light every tech on the path you'd research to reach it, plus
+  // the connectors between them; everything else dims (UI-SPEC §4).
+  function highlightTechChain(id, on) {
+    const techs = engine.TECHS || {};
+    const chain = {};
+    chain[id] = 1;
     (function walk(t) {
       const rule = techs[t];
       if (!rule) return;
       for (const p of rule.prerequisites || []) {
-        if (seen[p]) continue;
-        seen[p] = 1;
-        if (cardById[p]) cardById[p].classList.toggle("pr-chain", on);
+        if (chain[p]) continue;
+        chain[p] = 1;
         walk(p);
       }
     })(id);
+    if (techTreeEl) techTreeEl.classList.toggle("tt-dim", on);
+    for (const nid in ttNodeById) ttNodeById[nid].classList.toggle("lit", on && !!chain[nid]);
+    for (const path of ttLinkPaths) {
+      path.classList.toggle("lit", on && !!(chain[path.dataset.from] && chain[path.dataset.to]));
+    }
   }
 
   // Name/note for a tech: the curated TECH_INFO entry, else the engine's merged
@@ -2545,79 +2559,197 @@
     return { name: (t && t.name) || id, note: (t && t.note) || "" };
   }
 
+  // Pull a one-line effect out of a tech's history note (the "EFFECT:" tail), so a
+  // node can show what it does without the full paragraph.
+  function techEffectLine(note) {
+    if (!note) return "";
+    const m = /(?:EFFECT|Effect):\s*(.+)$/.exec(note);
+    let s = m ? m[1] : note;
+    s = s.split(/[.;]\s/)[0].trim();
+    if (s.length > 72) s = s.slice(0, 69).trim() + "…";
+    return s;
+  }
+
+  // Phase 7 tech tree: 3 era columns of shared-trunk techs + a civ-unique branch
+  // band, with a bezier connector layer and hover-lit prerequisite chains
+  // (docs/HEGEMON-TECHTREE-UI-SPEC.md). Rival branches are simply not rendered.
   function renderTechTree(victory) {
     if (!techTreeEl) return;
     const techs = engine.TECHS || {};
+    const BR = (engine.BRANCHES) || {};
     const player = human();
     const canAct = isHumanTurn() && !victory.winnerId;
+    const myCiv = String(player.civ || HUMAN_ID || "").toLowerCase();
+
+    techTreeEl.className = "tt";
     techTreeEl.innerHTML = "";
-    techTreeEl.className = "tech-tree-grid";
-    const cardById = {};
+    ttNodeById = {};
+    ttLinkPaths = [];
 
-    for (const age of [1, 2, 3]) {
-      // Show shared techs plus only this player's own civ-unique techs.
-      const ids = Object.keys(techs).filter(
-        (id) => techs[id].age === age && (!techs[id].civ || civMatches(player, techs[id].civ))
-      );
-      if (!ids.length) continue;
-      // Roots first, so a column reads top-to-bottom like a tree.
-      ids.sort((a, b) => (techs[a].prerequisites || []).length - (techs[b].prerequisites || []).length);
+    // Connector layer — one SVG covering the scroll content (drawn after layout).
+    const svg = document.createElementNS(TT_SVGNS, "svg");
+    svg.setAttribute("class", "tt-links");
+    techTreeEl.appendChild(svg);
 
-      const col = document.createElement("div");
-      col.className = "tech-col";
-      const title = document.createElement("div");
-      title.className = "tech-age-title";
-      title.textContent = AGE_LABELS[age] || "Age " + age;
-      col.appendChild(title);
-
-      for (const id of ids) {
-        const rule = techs[id];
-        const info = techMeta(id);
-        const researched = player.techs.includes(id);
-        const available = !researched && canResearchSafe(player, id);
-        const forkClosed =
-          !researched && !available && rule.forkGroup &&
-          player.forkChoices[rule.forkGroup] && player.forkChoices[rule.forkGroup] !== rule.forkBranch;
-        const cost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id, HUMAN_ID) : (engine.researchCost ? engine.researchCost(id) : 0);
-        const affordable = player.science >= cost;
-
-        const prereqs = (rule.prerequisites || []).map(function (p) {
-          return { name: techMeta(p).name, have: player.techs.includes(p) };
-        });
-        const needsHtml = prereqs.length && !researched && !available
-          ? '<span class="tech-needs">needs ' + prereqs.map(function (p) {
-              return '<span class="' + (p.have ? "pr-have" : "pr-miss") + '">' + p.name + "</span>";
-            }).join(" + ") + "</span>"
-          : "";
-
-        const card = document.createElement("button");
-        card.className = "tech-card " + (researched ? "done" : available ? "avail" : forkClosed ? "closed" : "locked") +
-          (rule.forkGroup ? " is-fork" : "") + (rule.civ ? " is-branch" : "") + (rule.capstone ? " is-capstone" : "");
-        // v2: tint a civ-unique branch tech with its people's colour (a light-touch
-        // preview of the branch band; the full tech-tree UI is Phase 7).
-        if (rule.civ && CIV_COLORS[rule.civ]) card.style.borderLeftColor = CIV_COLORS[rule.civ];
-        card.disabled = !(available && affordable && canAct);
-        card.dataset.tech = id;
-        card.title = info.name + " — " + info.note +
-          (researched ? "\n✓ Researched." : available ? "\nCost: " + cost + " science" : prereqs.length ? "\nRequires: " + prereqs.map(function (p) { return p.name; }).join(", ") : "");
-
-        const badge = researched ? "✓" : available ? (cost + " 🧪" + (affordable ? (rule.forkGroup ? " ⑂" : "") : " ⏳")) : forkClosed ? "closed" : "🔒";
-        card.innerHTML =
-          '<span class="tech-ico">' + (TECH_ICONS[id] || (rule.capstone ? "👑" : "🔬")) + "</span>" +
-          '<span class="tech-body"><span class="tech-name">' + info.name + "</span>" + needsHtml + "</span>" +
-          '<span class="tech-state">' + badge + "</span>";
-
-        card.addEventListener("click", function () {
-          if (card.disabled) return;
-          apply({ type: "RESEARCH_TECH", playerId: HUMAN_ID, techId: id });
-        });
-        card.addEventListener("mouseenter", function () { highlightTechChain(id, techs, cardById, true); });
-        card.addEventListener("mouseleave", function () { highlightTechChain(id, techs, cardById, false); });
-        col.appendChild(card);
-        cardById[id] = card;
-      }
-      techTreeEl.appendChild(col);
+    // Order a column so a tech tends to sit below its prerequisites (longest
+    // prereq-chain depth), which makes the connectors read top-left to bottom-right.
+    const depthCache = {};
+    function depth(id) {
+      if (depthCache[id] != null) return depthCache[id];
+      const r = techs[id];
+      const pre = (r && r.prerequisites) || [];
+      depthCache[id] = pre.length ? 1 + Math.max.apply(null, pre.map(depth)) : 0;
+      return depthCache[id];
     }
+
+    function makeNode(id) {
+      const rule = techs[id];
+      const info = techMeta(id);
+      const researched = player.techs.includes(id);
+      const available = !researched && canResearchSafe(player, id);
+      const forkClosed = !researched && !available && rule.forkGroup &&
+        player.forkChoices[rule.forkGroup] && player.forkChoices[rule.forkGroup] !== rule.forkBranch;
+      const nodeState = researched ? "researched" : available ? "available" : "locked";
+      const realCost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id, HUMAN_ID) : (engine.researchCost ? engine.researchCost(id) : 0);
+      const affordable = player.science >= realCost;
+
+      const prereqs = (rule.prerequisites || []).map(function (p) {
+        return { name: techMeta(p).name, have: player.techs.includes(p) };
+      });
+
+      const node = document.createElement("button");
+      node.className = "tt-node";
+      node.dataset.tech = id;
+      node.dataset.state = nodeState;
+      if (forkClosed) node.dataset.forkClosed = "1";
+      if (rule.civ) node.dataset.unique = "1";
+      if (rule.capstone) node.dataset.capstone = "1";
+      node.disabled = !(available && affordable && canAct);
+      node.title = info.name + " — " + info.note +
+        (researched ? "\n✓ Researched." : available ? "\nCost: " + realCost + " science" : prereqs.length ? "\nRequires: " + prereqs.map(function (p) { return p.name; }).join(", ") : "");
+
+      const pill = researched
+        ? '<span class="tt-pill done">✓</span>'
+        : available
+          ? '<span class="tt-pill' + (affordable ? " avail" : " wait") + '">' + realCost + " 🧪</span>"
+          : forkClosed
+            ? '<span class="tt-pill">✕</span>'
+            : '<span class="tt-pill">🔒</span>';
+      const crown = rule.capstone ? '<span class="tt-crown" title="Branch capstone">👑</span>' : "";
+      node.innerHTML =
+        '<span class="tt-node-top">' +
+          '<span class="tt-ico">' + (TECH_ICONS[id] || (rule.capstone ? "👑" : "🔬")) + "</span>" +
+          '<span class="tt-name">' + info.name + crown + "</span>" +
+          pill +
+        "</span>" +
+        '<span class="fx">' + techEffectLine(info.note) + "</span>";
+
+      node.addEventListener("click", function () {
+        if (node.disabled) return;
+        apply({ type: "RESEARCH_TECH", playerId: HUMAN_ID, techId: id });
+      });
+      node.addEventListener("mouseenter", function () { highlightTechChain(id, true); });
+      node.addEventListener("mouseleave", function () { highlightTechChain(id, false); });
+      ttNodeById[id] = node;
+      return node;
+    }
+
+    // ===== Shared trunk: three era columns =====
+    const eras = document.createElement("div");
+    eras.className = "tt-eras";
+    for (const age of [1, 2, 3]) {
+      const ids = Object.keys(techs)
+        .filter((id) => techs[id].age === age && !techs[id].civ)
+        .sort((a, b) => depth(a) - depth(b) || (techs[a].prerequisites || []).length - (techs[b].prerequisites || []).length);
+      const col = document.createElement("div");
+      col.className = "tt-era";
+      col.dataset.age = age;
+      const h = document.createElement("h3");
+      h.textContent = AGE_LABELS[age] || "Age " + age;
+      col.appendChild(h);
+      for (const id of ids) col.appendChild(makeNode(id));
+      eras.appendChild(col);
+    }
+    techTreeEl.appendChild(eras);
+
+    // ===== Civ-unique branch band =====
+    const branchIds = Object.keys(techs).filter((id) => techs[id].civ && civMatches(player, techs[id].civ));
+    if (branchIds.length) {
+      const band = document.createElement("div");
+      band.className = "tt-band";
+      const color = CIV_COLORS[myCiv] || (BR[myCiv] && BR[myCiv].color) || "#c0392b";
+      band.style.setProperty("--civ", color);
+      const done = branchIds.filter((id) => player.techs.includes(id)).length;
+      const head = document.createElement("div");
+      head.className = "tt-band-head";
+      head.innerHTML =
+        '<span class="tt-band-title">' + ((BR[myCiv] && BR[myCiv].name) || "Unique Branch") + "</span>" +
+        '<span class="tt-band-count">' + done + " / " + branchIds.length + "</span>";
+      band.appendChild(head);
+      const grid = document.createElement("div");
+      grid.className = "tt-band-grid";
+      for (const age of [1, 2, 3]) {
+        const ids = branchIds
+          .filter((id) => techs[id].age === age)
+          .sort((a, b) => depth(a) - depth(b));
+        const sub = document.createElement("div");
+        sub.className = "tt-band-col";
+        for (const id of ids) sub.appendChild(makeNode(id));
+        grid.appendChild(sub);
+      }
+      band.appendChild(grid);
+      techTreeEl.appendChild(band);
+    }
+
+    requestAnimationFrame(drawTechLinks);
+  }
+
+  // Draw the prerequisite connectors as bezier curves over the whole scroll area.
+  function drawTechLinks() {
+    if (!techTreeEl) return;
+    if (researchModalEl && researchModalEl.classList.contains("hidden")) return;
+    const svg = techTreeEl.querySelector(".tt-links");
+    if (!svg) return;
+    const techs = engine.TECHS || {};
+    const player = human();
+    const W = techTreeEl.scrollWidth, H = techTreeEl.scrollHeight;
+    svg.setAttribute("width", W);
+    svg.setAttribute("height", H);
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    const cRect = techTreeEl.getBoundingClientRect();
+    let paths = "";
+    ttLinkPaths = [];
+    const frag = [];
+    for (const id in ttNodeById) {
+      const rule = techs[id];
+      if (!rule) continue;
+      const bEl = ttNodeById[id];
+      for (const p of rule.prerequisites || []) {
+        const aEl = ttNodeById[p];
+        if (!aEl) continue;
+        const a = aEl.getBoundingClientRect(), b = bEl.getBoundingClientRect();
+        const x1 = a.right - cRect.left + techTreeEl.scrollLeft;
+        const y1 = a.top + a.height / 2 - cRect.top + techTreeEl.scrollTop;
+        const x2 = b.left - cRect.left + techTreeEl.scrollLeft;
+        const y2 = b.top + b.height / 2 - cRect.top + techTreeEl.scrollTop;
+        const mid = (x1 + x2) / 2;
+        const pDone = player.techs.includes(p), tDone = player.techs.includes(id);
+        const tAvail = !tDone && canResearchSafe(player, id);
+        let cls = "tt-link";
+        if (pDone && tDone) cls += " done";
+        else if (tAvail && pDone) cls += " next";
+        if (rule.civ || techs[p].civ) cls += " branch";
+        const path = document.createElementNS(TT_SVGNS, "path");
+        path.setAttribute("class", cls);
+        path.setAttribute("d", "M" + x1 + " " + y1 + " C " + mid + " " + y1 + ", " + mid + " " + y2 + ", " + x2 + " " + y2);
+        path.dataset.from = p;
+        path.dataset.to = id;
+        frag.push(path);
+      }
+    }
+    svg.innerHTML = "";
+    for (const pth of frag) svg.appendChild(pth);
+    ttLinkPaths = frag;
   }
 
   const RES_TITLES = {
@@ -3066,13 +3198,18 @@
   // ===== Research (the glowing tech button opens the tree) =====
   if (researchBtn && researchModalEl) {
     researchBtn.addEventListener("click", function () {
-      renderTechTree(engine.getVictoryStatus(state));
+      // Unhide FIRST so the tree lays out visible — the connector layer measures
+      // node rects, which are zero while display:none.
       researchModalEl.classList.remove("hidden");
+      renderTechTree(engine.getVictoryStatus(state));
     });
     if (researchCloseBtn) researchCloseBtn.addEventListener("click", function () { researchModalEl.classList.add("hidden"); });
     researchModalEl.addEventListener("click", function (e) {
       if (e.target === researchModalEl) researchModalEl.classList.add("hidden");
     });
+    // Redraw connectors when the tree scrolls or the window resizes.
+    if (techTreeEl) techTreeEl.addEventListener("scroll", function () { requestAnimationFrame(drawTechLinks); });
+    window.addEventListener("resize", function () { requestAnimationFrame(drawTechLinks); });
   }
 
   // ===== Standings (openable from the bottom-right) =====

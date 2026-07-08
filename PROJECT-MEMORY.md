@@ -283,6 +283,24 @@ Signed in as admin: **☰ Menu → account → 🖉 Map editor** — a terrain p
 click‑paint tiles on the live map, and **Export atlas** to dump the map as an
 offset ASCII grid to paste into a scenario file.
 
+### Tech‑tree UI (`docs/HEGEMON-TECHTREE-UI-SPEC.md`, Phase 7)
+The research modal (`renderTechTree` in `game.js`, `.tt*` classes in `game.css`)
+is the approved layout: **three era columns** of shared‑trunk techs (no `civ`) +
+a **civ‑unique branch band** at the bottom (dashed `--civ` border, branch name
+from `engine.BRANCHES[civ].name` + a `done / total` progress counter, capstone
+crowned with a `--civ` inset). Nodes are `.tt-node` buttons carrying
+`data-state` (researched/available/locked), `data-unique`, `data-capstone`,
+`data-fork-closed`; each shows icon, name, a one‑line effect (parsed from the
+`EFFECT:` tail of the note) and a cost pill. A single absolute **`<svg.tt-links>`**
+draws **bezier connectors** for every visible prereq edge (`drawTechLinks`,
+measured from `getBoundingClientRect` + scroll offsets; classes `done`/`next`/
+`branch`). **Hover a node** → `highlightTechChain` walks its prereqs and adds
+`.lit` to those nodes + connecting paths while `.tt-dim` fades the rest (the
+"how do I get there" feature). Rival branches are simply not rendered
+(`civMatches` filter). `engine.BRANCHES` (name+color per civ) is re‑exported via
+`browser-entry`. Open the modal **before** rendering so the connector layer can
+measure visible rects; links redraw on tree scroll + window resize.
+
 ### UI design system (`docs/HEGEMON-UI-SPEC.md`, Phase 6)
 The DOM client (`game.html`/`game.css`/`game.js`) uses one design language:
 **carved stone, bronze, gold, civ colour** on an ink ground — the old "aged
@@ -365,6 +383,16 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **HEGEMON v2 — PHASE 7 (Tech‑tree UI).** Per `docs/HEGEMON-TECHTREE-UI-SPEC.md`,
+  rebuilt the research modal into the approved layout: **3 era columns** of shared
+  trunk + a **civ‑unique branch band** ("Via Romana" etc. from `engine.BRANCHES`,
+  now re‑exported), four node states, a one‑line effect per node, cost pills, a
+  **capstone** crown, and a **bezier connector layer** (`<svg.tt-links>`,
+  `drawTechLinks`) with done/next/branch link colours. **Hover‑lights the full
+  prereq chain** (nodes + links) and dims the rest; rival branches aren't rendered.
+  Smoke on a fresh Rome game: 38 trunk + 11 unique nodes, 1 capstone, 43 connector
+  paths, band "Via Romana 0 / 11", 0 rival nodes, 0 page errors. typecheck clean,
+  123/123 tests. See §5 "Tech‑tree UI".
 - **HEGEMON v2 — PHASE 6 (Menu/HUD restyle).** Per `docs/HEGEMON-UI-SPEC.md`,
   migrated the whole DOM client to one **carved‑stone / bronze / gold / civ‑colour**
   design language (was "aged papyrus"): added the §1 token system to `:root`,
