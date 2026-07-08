@@ -3282,14 +3282,37 @@
     else p.equipped[card.slot] = cardId;
     saveProfile(p);
   }
+  // ===== Playing-card face, shared by the hand and the collection =====
+  const CARD_TYPE_LABEL = { civ: "Civilization", general: "General", event: "Event", wonder: "Wonder", enhance: "Enhancer", cosmetic: "Cosmetic" };
+  function cardBenefit(c) {
+    if (c.blurb) return c.blurb;
+    if (c.type === "civ") return "Take the field as the " + c.name + " this age.";
+    if (c.type === "cosmetic") {
+      const where = c.slot === "title" ? "a title after your name" : c.slot === "crown" ? "a crown before your name" : "your profile emblem";
+      return "Cosmetic — worn as " + where + ".";
+    }
+    return "";
+  }
+  // The card "face": a rarity/type banner, an art panel (space for real art — the
+  // emoji stands in for now), the name, and the benefit text.
+  function cardFaceHtml(c, locked) {
+    const rar = (RARITY[c.rarity] && RARITY[c.rarity].name) || c.rarity;
+    return (
+      '<div class="pcard-banner"><span>' + (CARD_TYPE_LABEL[c.type] || c.type) + "</span><span>" + rar + "</span></div>" +
+      '<div class="pcard-art"><span class="pcard-emoji">' + (locked ? "🔒" : c.icon) + "</span></div>" +
+      '<div class="pcard-name">' + c.name + "</div>" +
+      '<div class="pcard-desc">' + (cardBenefit(c) || "&nbsp;") + "</div>"
+    );
+  }
+
   // Toggle a General in/out of your match loadout (max 3, must own it).
   // ===== The campaign hand: cards in play + one-use events =====
   function handCardHtml(c, action) {
-    let btn = "";
-    if (action === "play") btn = '<button class="hand-play" data-play="' + c.id + '">Play now</button>';
-    else if (action === "played") btn = '<span class="hand-done">Played this campaign</span>';
-    return '<div class="hand-card-item rar-' + c.rarity + '"><div class="hand-ico">' + c.icon + "</div><div class=\"hand-name\">" +
-      c.name + '</div><div class="hand-blurb">' + (c.blurb || "") + "</div>" + btn + "</div>";
+    let foot = "";
+    if (action === "play") foot = '<button class="hand-play" data-play="' + c.id + '">Play now</button>';
+    else if (action === "played") foot = '<span class="hand-done">✓ Played this campaign</span>';
+    return '<div class="pcard rar-' + c.rarity + " type-" + c.type + '">' + cardFaceHtml(c, false) +
+      '<div class="pcard-foot">' + foot + "</div></div>";
   }
   function renderHand() {
     if (!handBodyEl) return;
@@ -3759,16 +3782,17 @@
       const r = RARITY[card.rarity];
       const inLoadout = card.type === "general" && (p.loadout || []).indexOf(card.id) !== -1;
       const equipped = (card.type === "cosmetic" && p.equipped && p.equipped[card.slot] === card.id) || inLoadout;
-      const tip =
-        card.name + " — " + r.name +
-        (card.type === "civ" ? " · unlocks " + card.name : "") +
-        (card.type === "general" && card.blurb ? " · " + card.blurb : "");
+      const foot = inLoadout
+        ? '<span class="pcard-eq">✓ in loadout</span>'
+        : equipped
+          ? '<span class="pcard-eq">✓ equipped</span>'
+          : has
+            ? '<span class="pcard-owned">Owned' + (count > 1 ? " ×" + count : "") + "</span>"
+            : '<span class="pcard-locked-tag">Locked</span>';
       parts.push(
-        '<div class="cd-card ' + card.rarity + (has ? "" : " locked") + (equipped ? " equipped" : "") + '" data-id="' + card.id + '" title="' + tip + '">' +
-        '<span class="cd-ico">' + (has ? card.icon : "🔒") + "</span>" +
-        '<span class="cd-name">' + card.name + "</span>" +
-        '<span class="cd-r" style="color:' + r.color + '">' + r.name + (count > 1 ? " ×" + count : "") + "</span>" +
-        (inLoadout ? '<span class="cd-eq">in loadout</span>' : equipped ? '<span class="cd-eq">equipped</span>' : "") +
+        '<div class="pcard cd-card rar-' + card.rarity + " type-" + card.type + (has ? "" : " locked") + (equipped ? " equipped" : "") + '" data-id="' + card.id + '">' +
+        cardFaceHtml(card, !has) +
+        '<div class="pcard-foot">' + foot + "</div>" +
         "</div>"
       );
     }

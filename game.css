@@ -1362,64 +1362,98 @@ button:hover:not(:disabled) {
 
 .cd-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-  margin-top: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
 }
-
-.cd-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  text-align: center;
-  padding: 10px 6px;
-  border-radius: 8px;
-  background: rgba(10, 20, 36, 0.5);
-  border: 1px solid #26466e;
-  border-top-width: 3px;
-}
-
-.cd-card.clickable {
-  cursor: pointer;
-}
-
-.cd-card.locked {
-  opacity: 0.4;
-}
-
-.cd-card.common { border-top-color: #9aa7b4; }
-.cd-card.rare { border-top-color: #4a90d9; }
-.cd-card.epic { border-top-color: #a25ddc; }
-.cd-card.legendary { border-top-color: #f2a03d; }
 .cd-rc.common { border-color: #9aa7b4; }
 .cd-rc.rare { border-color: #4a90d9; }
 .cd-rc.epic { border-color: #a25ddc; }
 .cd-rc.legendary { border-color: #f2a03d; box-shadow: 0 0 10px rgba(242, 160, 61, 0.4); }
 
-.cd-card.equipped {
-  box-shadow: 0 0 0 2px var(--gold) inset;
+/* ===== Playing card (shared by the deck collection and the campaign hand) ===== */
+.pcard {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  text-align: center;
+  background: linear-gradient(180deg, #14243c, #0c1830);
+  border: 1px solid #2b466e;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
-
-.cd-ico {
-  font-size: 1.6rem;
-}
-
-.cd-name {
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.cd-r {
-  font-size: 0.68rem;
-}
-
-.cd-eq {
-  font-size: 0.62rem;
-  color: var(--gold);
+.pcard-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 0.58rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  color: #cde0f5;
+  background: rgba(0, 0, 0, 0.3);
 }
+/* The art panel — a slot ready for real card art; the emoji stands in for now. */
+.pcard-art {
+  aspect-ratio: 3 / 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0) 62%),
+    linear-gradient(180deg, #22364f, #16273d);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.4);
+}
+.pcard-emoji {
+  font-size: 2.7rem;
+  line-height: 1;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+}
+.pcard-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin: 7px 6px 3px;
+  color: #f4ead0;
+}
+.pcard-desc {
+  flex: 1;
+  font-size: 0.72rem;
+  line-height: 1.28;
+  color: #aebdcf;
+  padding: 0 9px 9px;
+}
+.pcard-foot {
+  padding: 6px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.66rem;
+  color: var(--muted);
+  min-height: 1.5em;
+}
+.pcard-eq { color: var(--gold); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+.pcard-owned { color: #7fb98a; }
+.pcard-locked-tag { color: #7a8698; }
+
+/* Rarity accents */
+.pcard.rar-common { border-color: #6c7a89; }
+.pcard.rar-rare { border-color: #4a90d9; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(74, 144, 217, 0.35); }
+.pcard.rar-epic { border-color: #a25ddc; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(162, 93, 220, 0.4); }
+.pcard.rar-legendary { border-color: #f2a03d; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 12px rgba(242, 160, 61, 0.4); }
+.pcard.rar-legendary .pcard-banner { background: linear-gradient(90deg, rgba(242, 160, 61, 0.4), rgba(0, 0, 0, 0.3)); }
+.pcard.rar-epic .pcard-banner { background: linear-gradient(90deg, rgba(162, 93, 220, 0.35), rgba(0, 0, 0, 0.3)); }
+
+/* Art tinted by card type */
+.pcard.type-civ .pcard-art { background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.12), rgba(0,0,0,0) 62%), linear-gradient(180deg, #3a2a4f, #1c2740); }
+.pcard.type-general .pcard-art { background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.12), rgba(0,0,0,0) 62%), linear-gradient(180deg, #3a2f22, #1c2740); }
+.pcard.type-event .pcard-art { background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.12), rgba(0,0,0,0) 62%), linear-gradient(180deg, #1f3a44, #16273d); }
+.pcard.type-wonder .pcard-art { background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.12), rgba(0,0,0,0) 62%), linear-gradient(180deg, #34402a, #16273d); }
+.pcard.type-cosmetic .pcard-art { background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.12), rgba(0,0,0,0) 62%), linear-gradient(180deg, #2a3550, #16273d); }
+
+.pcard.locked { opacity: 0.55; }
+.pcard.locked .pcard-emoji { filter: grayscale(1) opacity(0.8); }
+.pcard.equipped { box-shadow: 0 0 0 2px var(--gold) inset, 0 4px 14px rgba(0, 0, 0, 0.5); }
+.cd-card.clickable { cursor: pointer; }
+.cd-card.clickable:hover { transform: translateY(-3px); transition: transform 0.1s ease; }
 
 .cd-loadout {
   display: flex;
@@ -2527,9 +2561,12 @@ details.panel-collapse > summary {
 }
 
 .hand-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.hand-grid .pcard {
+  width: 170px;
 }
 
 .hand-empty {
@@ -2538,28 +2575,11 @@ details.panel-collapse > summary {
   padding: 4px 0 6px;
 }
 
-.hand-card-item {
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid var(--line);
-  border-left-width: 4px;
-  border-radius: 8px;
-  padding: 9px 11px;
-}
-
-.hand-card-item.rar-legendary { border-left-color: #f2cc69; }
-.hand-card-item.rar-epic { border-left-color: #b06bd0; }
-.hand-card-item.rar-rare { border-left-color: #56a8e6; }
-.hand-card-item.rar-common { border-left-color: #8aa0b8; }
-
-.hand-ico { font-size: 1.5rem; }
-.hand-name { font-weight: 700; margin: 2px 0; }
-.hand-blurb { font-size: 0.82rem; color: var(--muted); }
-
 .hand-play {
-  margin-top: 7px;
   background: var(--accent);
   color: #f4f9ff;
   padding: 5px 12px;
+  border-radius: 5px;
 }
 
 .hand-done {
