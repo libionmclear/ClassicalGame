@@ -299,11 +299,11 @@ export const EDICTS = [
   { id:"edict-inundation",    name:"Nile Inundation",       rarity:"epic", civ:"egypt",    effect:{ special:"river-farm+2food" } },
   { id:"edict-oppida",        name:"Oppida Network",        rarity:"epic", civ:"gaul",     effect:{ special:"hill-city+2prod+25def" } },
   { id:"edict-silk-tolls",    name:"Silk Road Tolls",       rarity:"epic", civ:"parthia",  effect:{ special:"foreign-route-crossing+2gold" } },
-  { id:"edict-agoge",         name:"The Agoge",             rarity:"epic", civ:"sparta",   effect:{ special:"melee-spawn-vet1" } },
-  { id:"edict-companions",    name:"Companion Cavalry",     rarity:"epic", civ:"macedon",  effect:{ unitCatPct:{ cat:"mounted", movePlus:1 } } },
-  { id:"edict-royal-road",    name:"Royal Road",            rarity:"epic", civ:"persia",   effect:{ special:"roads-grant-vision+1" } },
+  { id:"edict-agoge",         name:"Laconic Discipline",             rarity:"epic", civ:"sparta",   effect:{ special:"melee-spawn-vet1" } },
+  { id:"edict-companions",    name:"Hetairoi Honours",     rarity:"epic", civ:"macedon",  effect:{ unitCatPct:{ cat:"mounted", movePlus:1 } } },
+  { id:"edict-royal-road",    name:"Angarium Couriers",            rarity:"epic", civ:"persia",   effect:{ special:"roads-grant-vision+1" } },
   { id:"edict-examination",   name:"Imperial Examination",  rarity:"epic", civ:"han",      effect:{ special:"library-city+1sci" } },
-  { id:"edict-arthashastra",  name:"Arthashastra Statecraft", rarity:"epic", civ:"maurya", effect:{ special:"see-enemy-gold-science" } },
+  { id:"edict-arthashastra",  name:"Spy Network", rarity:"epic", civ:"maurya", effect:{ special:"see-enemy-gold-science" } },
   { id:"edict-wagon-camps",   name:"Wagon Camps",           rarity:"epic", civ:"scythia",  effect:{ special:"heal-in-neutral-territory" } },
 ];
 

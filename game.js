@@ -3196,22 +3196,30 @@
   // Effect vocabulary → engine hooks. TODAY the engine only supports a flat
   // per-turn `perks` bonus (gold/science to the pool, food/production to the
   // capital). Only capital/city yields map; everything else is flagged.
-  const YIELD_KEY = { food: "food", gold: "gold", science: "science", labour: "production", production: "production" };
+  // STABILITY has no city stat yet (arrives in Phase 5): per the substitution
+  // rule (CIVS-CARDS-v2 §7.3) it is STUBBED here as +gold, so those cards aren't
+  // inert. Phase 5 replaces this stub with the real stability stat.
+  const YIELD_KEY = { food: "food", gold: "gold", science: "science", labour: "production", production: "production", stability: "gold" /* STUB */ };
   function effectToPerks(effect) {
     const perks = {};
-    const add = (src) => { if (!src) return; for (const k in src) { const t = YIELD_KEY[k]; if (t) perks[t] = (perks[t] || 0) + src[k]; } }; // stability deliberately dropped
+    const add = (src) => { if (!src) return; for (const k in src) { const t = YIELD_KEY[k]; if (t) perks[t] = (perks[t] || 0) + src[k]; } };
     add(effect && effect.capitalYield);
     add(effect && effect.cityYield); // NOTE: per-city approximated as flat until a per-city card hook exists
     return perks;
   }
-  // Effect keys the engine does NOT yet implement (surfaced to the user / handoff).
+  // Does this effect reference stability (currently STUBBED as gold)?
+  function effectStubsStability(effect) {
+    if (!effect) return false;
+    return !!((effect.cityYield && effect.cityYield.stability) || (effect.capitalYield && effect.capitalYield.stability));
+  }
+  // Effect keys the engine does NOT implement at all yet (surfaced for the handoff).
+  // Yields (incl. the stability→gold stub) ARE applied, so they aren't flagged.
   function effectFlags(effect) {
     if (!effect) return [];
     const flags = [];
     for (const k in effect) {
-      if (k === "capitalYield" || k === "cityYield") { if (effect[k] && effect[k].stability) flags.push("stability"); }
-      else if (k === "atkPct" || k === "defPct") { /* combat % — needs a hook */ flags.push(k); }
-      else flags.push(k); // unitCostPct, buildFasterPct, researchCostPct, movePlus, healPlus, plunderPct, tradeRouteGold, special, instant, unitPct, filters…
+      if (k === "capitalYield" || k === "cityYield") continue; // applied (stability stubbed)
+      flags.push(k); // atkPct/defPct/unitCostPct/buildFasterPct/researchCostPct/movePlus/healPlus/plunderPct/tradeRouteGold/special/instant/unitPct/filters…
     }
     return flags;
   }

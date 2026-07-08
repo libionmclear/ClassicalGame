@@ -206,10 +206,28 @@ Admin can toggle **Reveal map** for testing.
   session (`hegemon_session`), per‑account profile (`hegemon_profile__<user>`).
   Seeded **admin**: name `admin`, email `mclear@gmail.com`, password `1234567`
   (intended to be changed). Tracks wins/losses.
-- **Cards** (`game.js` `CARDS`): civs, generals (equip ≤3 for a small flat per‑turn
-  perk), event cards (one‑use), wonders, cosmetics. Rarities common/rare/epic/
-  legendary; earned via coins/packs/daily. Rendered as **playing cards** (art slot,
-  name, benefit text). **Never pay‑to‑win** — cosmetics or small always‑earnable edges.
+- **Cards v2** (design of record: `docs/HEGEMON-CIVS-CARDS-v2.md`; data of record:
+  `src/cards-data-v2.js`, an ES module the build turns into the browser global
+  `window.HEGEMON_CARDS_V2` — see `scripts/build-web.mjs`, loaded before `game.js`).
+  Card kinds: **civ** cards (30, waves 1–3, a `playable` flag), **Legends** (68 —
+  historical people with a role: commander/statesman/sage/builder/navigator),
+  **Edicts** (18 policy cards), **Events** (9 one‑use), plus **cosmetics**. Rarities
+  starter/common/rare/epic/legendary; earned via coins/packs/daily. Rendered as
+  **playing cards** (art slot, name, benefit text). **Never pay‑to‑win**.
+  - **Loadout (v2):** exactly **one Legend + one Edict + one Event**, all
+    civ‑matched (universal `civ:null` always applies). `profile.loadout` is
+    `{legend,edict,event}`; only slots matching the played civ take effect (the
+    hand marks mismatches inactive).
+  - **Effect mapping:** the declarative effect vocabulary (`docs` §7 / the data
+    file's EFFECT KEYS) is translated in `game.js`. **Today the engine only has one
+    card hook — flat per‑turn `player.perks`** — so only `capitalYield`/`cityYield`
+    map (per‑city is approximated as flat). **`stability` is STUBBED as `+gold`**
+    (substitution rule; the real stat arrives in Phase 5). Everything else
+    (combat %, cost %, movement, heal, plunder, trade‑route gold, all `special` /
+    `instant`) is **flagged** on `card.flags`, not applied. Two event instants
+    (+food to capital, +science) work; the rest are flagged and not consumed.
+  - The **five civ‑signature DOCTRINE techs** (Testudo etc.) are a separate engine
+    system (see §6), unrelated to these person/policy cards.
 
 ### Audio (procedural, `audio.js` → `window.HGAudio`)
 Everything **synthesized** with the Web Audio API (no files, no copyright — do NOT
@@ -282,6 +300,18 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **HEGEMON v2 — PHASE 1 (Cards migration).** Per `docs/HEGEMON-CIVS-CARDS-v2.md`
+  §7 and the `CLAUDE-CODE-HANDOFF.md` five‑phase plan: **Generals → Legends** (68) +
+  new **Edicts** (18), v2 **Events** (9) and **30 civ cards** (waves 1–3); the
+  loadout is now exactly **1 Legend + 1 Edict + 1 Event** (civ‑matched); **Greece →
+  Athens** display (id kept); the **4 edict renames** from `HEGEMON-TECHTREE-v2.md`
+  §3.3 (Royal Road→Angarium Couriers, Arthashastra Statecraft→Spy Network,
+  The Agoge→Laconic Discipline, Companion Cavalry→Hetairoi Honours). Effects map
+  only to the flat‑yield `perks` hook; **`stability` is stubbed as `+gold`**; all
+  other effects are **flagged, not built** (awaiting Phase‑2+ engine hooks — see the
+  handoff). Data pipeline: `src/cards-data-v2.js` → `window.HEGEMON_CARDS_V2` via the
+  web build. *Phases 2–5 (tech‑tree merge, units, cities, real stability) NOT yet
+  started — await authorization.*
 - **Research revamp** — every civ got a **signature doctrine** with a distinct
   effect (Testudo/Phalanx Wall/Nile Bureaucracy/Thalassocracy/Furor/Parthian Shot);
   every tech now has a concrete effect (per‑city yields, medicine heal, rhetoric
