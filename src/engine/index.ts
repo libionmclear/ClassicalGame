@@ -974,13 +974,15 @@ function applyImproveTile(state: GameState, action: ImproveTileAction): void {
   assertPlayerTurn(state, action.playerId);
   const tile = state.map.tiles[action.tileKey];
   if (!tile) throw new Error(`Unknown tile ${action.tileKey}`);
-  if (tile.terrain === "sea" || tile.terrain === "coast") throw new Error("Cannot build on open water");
+  const isWater = tile.terrain === "sea" || tile.terrain === "coast";
   const claim = claimingCity(state, parseKey(action.tileKey));
   if (!claim || claim.ownerId !== action.playerId) throw new Error("That tile is not in your territory");
   if (claim.id !== action.cityId) throw new Error("That city does not work this tile");
 
-  // Roads live alongside a worked improvement (a farm can have a road too).
+  // Roads live alongside a worked improvement (a farm can have a road too) — but
+  // never across open water.
   if (action.improvement === "road") {
+    if (isWater) throw new Error("Roads can't cross open water");
     if (tile.road) throw new Error("That tile already has a road");
     const item = `road:${action.tileKey}`;
     if ((claim.queue ?? []).includes(item)) throw new Error("A road is already queued for that tile");

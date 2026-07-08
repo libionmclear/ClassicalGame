@@ -8,11 +8,22 @@ interface UnitMovementContext {
   mounted?: boolean;
 }
 
-// Is there a friendly city WITH a Harbour on this tile? (the only place troops
-// may put to sea).
+// Can troops put to sea from this tile? Yes if it's a friendly city with the
+// Harbour building, OR it sits next to a built Harbour improvement whose home
+// port (an adjacent friendly city) is yours.
 function hasHarbourAt(state: GameState, c: Coord, ownerId: string): boolean {
   for (const city of Object.values(state.map.cities)) {
     if (city.ownerId === ownerId && city.position.q === c.q && city.position.r === c.r && (city.buildings ?? []).includes("harbor")) return true;
+  }
+  for (const n of neighborsOf(c)) {
+    const t = state.map.tiles[keyOf(n)];
+    if (!t || t.improvement !== "harbour") continue;
+    for (const city of Object.values(state.map.cities)) {
+      if (city.ownerId !== ownerId) continue;
+      for (const cn of neighborsOf(n)) {
+        if (cn.q === city.position.q && cn.r === city.position.r) return true;
+      }
+    }
   }
   return false;
 }

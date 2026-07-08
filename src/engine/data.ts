@@ -353,6 +353,22 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
     yields: { food: 1, gold: 2 },
     requiresTech: "pottery",
     note: "Terraced vines and olive groves — the wine and oil that were the classical world's cash crops. Effect: +1 food, +2 gold. (Needs Pottery for the amphorae.)"
+  },
+  fishery: {
+    name: "Fishery",
+    terrains: ["coast"],
+    cost: 10,
+    yields: { food: 2 },
+    requiresTech: "sailing",
+    note: "Nets, weirs and tunny-traps in the shallows — richest where the shoals run. Effect: +2 food. (Needs Sailing.)"
+  },
+  harbour: {
+    name: "Harbour",
+    terrains: ["coast"],
+    cost: 14,
+    yields: { food: 1, gold: 2 },
+    requiresTech: "sailing",
+    note: "A quay and moorings on a coastal hex beside a city — its troops can put to sea from here. Effect: +1 food, +2 gold, and lets armies embark. (Needs Sailing.)"
   }
 };
 
@@ -377,6 +393,10 @@ export const RESOURCES: Record<string, ResourceRule> = {
   fish: {
     name: "Fish", glyph: "🐟", terrains: ["coast"], yields: { food: 1, gold: 1 },
     note: "Tunny runs and salt-fish (garum) traded the length of the Mediterranean. Effect: +1 food, +1 gold."
+  },
+  coral: {
+    name: "Coral", glyph: "🪸", terrains: ["coast"], yields: { gold: 2 },
+    note: "Red coral and murex purple gathered off the shore — a luxury of the ancient sea trade. Effect: +2 gold."
   },
   timber: {
     name: "Timber", glyph: "🪵", terrains: ["forest"], yields: { production: 2 },

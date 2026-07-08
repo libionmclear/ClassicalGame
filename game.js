@@ -478,7 +478,7 @@
     granary: "🌾", workshop: "⚒️", market: "🪙", library: "📚", walls: "🧱", harbor: "⚓",
     temple: "⛩️", academy: "📐", lyceum: "🏛️", aqueduct: "💧", barracks: "🛡️", amphitheater: "🎭"
   };
-  const IMPROVEMENT_GLYPH = { farm: "🌾", pasture: "🐄", mine: "⛏️", "lumber-camp": "🪵", "trade-post": "🐫", quarry: "🪨", vineyard: "🍇" };
+  const IMPROVEMENT_GLYPH = { farm: "🌾", pasture: "🐄", mine: "⛏️", "lumber-camp": "🪵", "trade-post": "🐫", quarry: "🪨", vineyard: "🍇", fishery: "🐟", harbour: "⚓" };
 
   // Short "+2 🌾, +1 🪙" summary of a resource/improvement yield block.
   function resYieldStr(rr) {
@@ -2179,11 +2179,7 @@
     improveGroupEl.style.display = "";
     improveMenuEl.innerHTML = "";
 
-    if (tile.terrain === "sea" || tile.terrain === "coast") {
-      improveMenuEl.innerHTML = '<div class="bm-empty">Open water can\'t be improved.</div>';
-      return;
-    }
-
+    const isWater = tile.terrain === "sea" || tile.terrain === "coast";
     const coord = engine.parseKey(selectedTileKey);
     const city = engine.claimingCity ? engine.claimingCity(state, coord) : null;
     if (!city || city.ownerId !== HUMAN_ID) {
@@ -2239,11 +2235,18 @@
     }
 
     // A road (independent of the worked improvement — a farm can have a road too).
-    const roadCost = engine.ROAD_COST || 8;
-    const roadQueued = queue.indexOf("road:" + selectedTileKey) !== -1;
-    addOption("road", "Road", "🛤️", roadCost, "faster movement",
-      "Roads speed every unit across the tile and bridge rivers — the backbone of an empire (viae, the King's Road).",
-      !!tile.road, roadQueued);
+    // Roads are land-only, so open water skips this.
+    if (!isWater) {
+      const roadCost = engine.ROAD_COST || 8;
+      const roadQueued = queue.indexOf("road:" + selectedTileKey) !== -1;
+      addOption("road", "Road", "🛤️", roadCost, "faster movement",
+        "Roads speed every unit across the tile and bridge rivers — the backbone of an empire (viae, the King's Road).",
+        !!tile.road, roadQueued);
+    } else if (!improveMenuEl.children.length) {
+      improveMenuEl.innerHTML = tile.terrain === "coast"
+        ? '<div class="bm-empty">Research <b>Sailing</b> to build a fishery or harbour here.</div>'
+        : '<div class="bm-empty">Open sea — build a fishery or harbour on a coastal tile instead.</div>';
+    }
   }
 
   // What trade route a merchant could open right now: the city it stands at or

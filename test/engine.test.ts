@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   applyAction,
   canResearch,
+  claimingCity,
   computeCombatPreview,
   computeCityYield,
   computePlayerIncome,
@@ -489,6 +490,37 @@ test("harbors earn extra gold as a trade network", () => {
   assert.equal(networked, solo + 1, "a second harbor adds one trade-network gold");
 });
 
+test("a fishery can be built on a coastal tile, but not on open sea or as a road", () => {
+  let state = seaState(); // player "a" has sailing
+  state.map.tiles["4,0"].terrain = "coast"; // shallow water beside coast1 (3,0)
+  state = applyAction(state, { type: "IMPROVE_TILE", playerId: "a", cityId: "coast1", tileKey: "4,0", improvement: "fishery" });
+  assert.ok((state.map.cities.coast1.queue || []).some((q) => q.includes("fishery")), "the fishery was queued");
+
+  // A land improvement (fishery is coast-only) can't go on deep sea.
+  const s2 = seaState();
+  assert.throws(
+    () => applyAction(s2, { type: "IMPROVE_TILE", playerId: "a", cityId: "coast2", tileKey: "4,1", improvement: "fishery" })
+  );
+  // Roads never cross open water.
+  const s3 = seaState();
+  s3.map.tiles["4,0"].terrain = "coast";
+  assert.throws(
+    () => applyAction(s3, { type: "IMPROVE_TILE", playerId: "a", cityId: "coast1", tileKey: "4,0", improvement: "road" }),
+    /water/
+  );
+});
+
+test("a built Harbour improvement lets an army embark from beside it", () => {
+  const state = seaState(); // "a" has sailing
+  state.map.tiles["4,0"].terrain = "coast";
+  const ctx = { ownerId: "a", domain: "land" as const, mounted: false };
+  // No harbour yet: a land unit at the coastal city (3,0) can't step onto the water.
+  assert.equal(movementCost(state, ctx, { q: 3, r: 0 }, { q: 4, r: 0 }), Number.POSITIVE_INFINITY);
+  // Build a Harbour on the coast tile (4,0) next to the city — now it can embark.
+  state.map.tiles["4,0"].improvement = "harbour";
+  assert.ok(Number.isFinite(movementCost(state, ctx, { q: 3, r: 0 }, { q: 4, r: 0 })), "the army embarks through the harbour");
+});
+
 test("a trireme launches onto adjacent water, not the city's land tile", () => {
   let state = seaState(["sailing", "open-sea-sailing"]);
   state = applyAction(state, {
@@ -597,9 +629,19 @@ test("a road is built through the labour queue and speeds movement", () => {
 });
 
 test("a farm cannot be built on the sea or outside your territory", () => {
+  // Tile 4,0 is open water far from the inland city — rejected as not its tile.
   assert.throws(
     () => applyAction(seaState(), { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "4,0", improvement: "farm" }),
-    /water|sea|territory/
+    /water|sea|territory|work this tile/
+  );
+  // And even on a worked coastal tile, a farm is the wrong terrain (water now takes
+  // fisheries/harbours, not farms).
+  const s = seaState();
+  s.map.tiles["4,0"].terrain = "coast";
+  const claim = claimingCity(s, { q: 4, r: 0 });
+  assert.throws(
+    () => applyAction(s, { type: "IMPROVE_TILE", playerId: "a", cityId: claim!.id, tileKey: "4,0", improvement: "farm" }),
+    /cannot be built on/
   );
 });
 

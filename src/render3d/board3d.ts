@@ -658,6 +658,17 @@ function buildImprovement(imp: string): THREE.Group {
   } else if (imp === "trade-post") {
     const tent = meshOf(GEO.thatch, 0xd6b678); tent.scale.set(0.95, 0.85, 0.95); tent.position.set(0, 0.1, 0); g.add(tent);
     const crate = meshOf(GEO.building, 0x8a6a44); crate.scale.set(0.4, 0.4, 0.4); crate.position.set(0.16, 0.05, 0.1); g.add(crate);
+  } else if (imp === "fishery") {
+    // A little fishing boat and a line of stake-nets in the shallows.
+    const hull = meshOf(GEO.building, 0x6b4a2b); hull.scale.set(0.5, 0.14, 0.24); hull.position.set(-0.05, 0.06, 0); g.add(hull);
+    const mast = meshOf(GEO.column, 0x8a6a44, false); mast.scale.set(0.7, 1.0, 0.7); mast.position.set(-0.05, 0.14, 0); g.add(mast);
+    for (let i = 0; i < 3; i += 1) { const p = meshOf(GEO.column, 0x5a3d22, false); p.scale.set(0.5, 0.7, 0.5); p.position.set(0.06 + i * 0.11, 0.09, 0.16 - i * 0.05); g.add(p); }
+  } else if (imp === "harbour") {
+    // A stone quay with a warehouse and mooring posts.
+    const pier = meshOf(GEO.beam, 0xb7a483); pier.scale.set(0.8, 0.7, 0.34); pier.position.set(0, 0.05, 0); g.add(pier);
+    const house = meshOf(GEO.building, 0xd0bb90); house.scale.set(0.36, 0.42, 0.34); house.position.set(-0.16, 0.13, 0); g.add(house);
+    const boat = meshOf(GEO.building, 0x6b4a2b); boat.scale.set(0.42, 0.12, 0.2); boat.position.set(0.18, 0.06, 0.08); g.add(boat);
+    for (let i = 0; i < 2; i += 1) { const post = meshOf(GEO.column, 0x5a3d22, false); post.scale.set(0.6, 0.8, 0.6); post.position.set(0.1 + i * 0.14, 0.1, -0.14); g.add(post); }
   } else if (imp !== "road") {
     const m = meshOf(GEO.building, 0x9a8f7a); m.scale.set(0.4, 0.4, 0.4); m.position.set(0, 0.06, 0); g.add(m);
   }
