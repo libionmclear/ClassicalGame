@@ -35,8 +35,10 @@
     <div class="cols">
       <p style="margin:8px 0 3px"><b>Unit columns →</b><br/>
         <span class="tag">Warrior</span><span class="tag">Spearman</span><span class="tag">Archer</span><span class="tag">Horseman</span><span class="tag">Elephant</span><span class="tag">Siege</span><span class="tag">Trireme</span><span class="tag">Settler</span> · then each civ's <b>★ special unit</b> (Legionary, Hoplite, War Chariot, War Elephant, Gaesatae, Cataphract).</p>
-      <p style="margin:3px 0"><b>City stages →</b><br/>
-        <span class="tag">0 huts</span><span class="tag">1 hamlet</span><span class="tag">2 village</span><span class="tag">3 town</span><span class="tag">4 city</span><span class="tag">5 metro</span></p>
+      <p style="margin:3px 0"><b>City styles → all 12</b> (2 rows of 6, below the units), at the tier below.</p>
+      <p style="margin:6px 0 2px"><b>City tier:</b>
+        <input id="tier" type="range" min="1" max="10" value="5" style="width:180px;vertical-align:middle" />
+        <b id="tierlabel">5 · Market town</b></p>
     </div>
     <div class="hint">Drag to orbit · right-drag to pan · scroll to zoom.</div>
   </div>
@@ -68,8 +70,16 @@
         gaul: { form: "infantry", utype: "gaesatae", badge: "🗡️" },
         parthia: { form: "mounted", utype: "cataphract", badge: "🏹" }
       };
-      var POPS = [1, 2, 3, 5, 8, 12]; // stages 0..5
-      var CITY_GAP = 1; // blank column between units and cities
+      // All 12 architectural STYLES (design of record HEGEMON-VISUALS-v2 §1);
+      // the 6 wave-2 civs use their branch colours.
+      var STYLE_CIVS = CIVS.concat([
+        { id: "sparta", name: "Sparta", color: "#7f1d1d" }, { id: "macedon", name: "Macedon", color: "#1e3a8a" },
+        { id: "persia", name: "Persia", color: "#0e7490" }, { id: "han", name: "Han", color: "#b91c1c" },
+        { id: "maurya", name: "Maurya", color: "#a16207" }, { id: "scythia", name: "Scythia", color: "#4d7c0f" }
+      ]);
+      var TIER_NAMES = ["", "Hamlet", "Village", "Town", "Walled town", "Market town", "City", "Great city", "Metropolis", "Imperial city", "Wonder of the age"];
+      var specialCol = UNITS.length + 1;   // one gap after the generic line
+      var cityRow0 = CIVS.length * 2 + 2;  // the city block starts below the unit rows
 
       // Row legend (colour swatch per civ).
       var rows = document.getElementById("civ-rows");
@@ -79,41 +89,39 @@
         rows.appendChild(d);
       });
 
-      var tiles = [], sprites = [];
-      var seen = {};
-      function addTile(q, r, t) { var k = q + "," + r; if (seen[k]) return; seen[k] = 1; tiles.push({ q: q, r: r, t: t || "plains", v: 2, o: null, h: 0, res: null, imp: null, wx: "clear" }); }
-
-      var specialCol = UNITS.length + 1; // one gap after the generic line
-      var cityStartCol = specialCol + 1 + CITY_GAP;
-      var totalCols = cityStartCol + POPS.length;
-      CIVS.forEach(function (c, i) {
-        var r = i * 2;
-        // Units
-        UNITS.forEach(function (u, j) {
-          addTile(j, r);
-          sprites.push({ civ: c.id, kind: "unit", name: "", color: c.color, q: j, r: r, t: "plains", form: u.form, hpFrac: 1, badge: u.badge });
-        });
-        // The civ's signature unit
-        var sp = SPECIAL[c.id];
-        if (sp) {
-          addTile(specialCol, r);
-          sprites.push({ civ: c.id, kind: "unit", name: "", color: c.color, q: specialCol, r: r, t: "plains", form: sp.form, utype: sp.utype, hpFrac: 1, badge: sp.badge });
-        }
-        // Cities (six stages)
-        POPS.forEach(function (pop, k) {
-          var q = cityStartCol + k;
-          addTile(q, r);
-          sprites.push({ civ: c.id, kind: "city", name: "", color: c.color, q: q, r: r, t: "plains", pop: pop });
-        });
-        // pad blank tiles around for a continuous board
-        for (var q = -1; q <= totalCols; q++) { addTile(q, r); addTile(q, r + 1); }
-        addTile(-1, r - 1);
-      });
-
-      var civColors = {}; CIVS.forEach(function (c) { civColors[c.id] = c.color; });
+      var civColors = {}; STYLE_CIVS.forEach(function (c) { civColors[c.id] = c.color; });
       var board = Board3D.createBoard(document.getElementById("gal"));
-      var focusQ = totalCols / 2, focusR = (CIVS.length - 1); // centre of the grid
-      board.render({ tiles: tiles, sprites: sprites, borders: [], civColors: civColors, rivers: [], roads: [], focus: { q: focusQ, r: focusR } });
+
+      function buildView(tier) {
+        var tiles = [], sprites = [], seen = {};
+        function addTile(q, r, t) { var k = q + "," + r; if (seen[k]) return; seen[k] = 1; tiles.push({ q: q, r: r, t: t || "plains", v: 2, o: null, h: 0, res: null, imp: null, wx: "clear" }); }
+        // Unit rows — 6 civs.
+        CIVS.forEach(function (c, i) {
+          var r = i * 2;
+          UNITS.forEach(function (u, j) { addTile(j, r); sprites.push({ civ: c.id, kind: "unit", name: "", color: c.color, q: j, r: r, t: "plains", form: u.form, hpFrac: 1, badge: u.badge }); });
+          var sp = SPECIAL[c.id];
+          if (sp) { addTile(specialCol, r); sprites.push({ civ: c.id, kind: "unit", name: "", color: c.color, q: specialCol, r: r, t: "plains", form: sp.form, utype: sp.utype, hpFrac: 1, badge: sp.badge }); }
+        });
+        // City block — all 12 styles, 2 rows of 6, at the chosen tier.
+        STYLE_CIVS.forEach(function (c, idx) {
+          var r = cityRow0 + Math.floor(idx / 6) * 2;
+          var q = (idx % 6) * 2;
+          addTile(q, r);
+          sprites.push({ civ: c.id, kind: "city", name: "", color: c.color, q: q, r: r, t: "plains", tier: tier, pop: 1 });
+        });
+        // Pad a continuous board under everything.
+        var maxR = cityRow0 + 2;
+        for (var rr = -1; rr <= maxR + 1; rr++) for (var qq = -2; qq <= 12; qq++) addTile(qq, rr);
+        return { tiles: tiles, sprites: sprites, borders: [], civColors: civColors, rivers: [], roads: [], focus: { q: 5, r: cityRow0 - 2 } };
+      }
+
+      function render(tier) {
+        document.getElementById("tierlabel").textContent = tier + " · " + TIER_NAMES[tier];
+        board.render(buildView(tier));
+      }
+      var slider = document.getElementById("tier");
+      slider.addEventListener("input", function () { render(+slider.value); });
+      render(+slider.value);
     })();
   </script>
 </body>

@@ -215,10 +215,25 @@ into the tile**. Cities have HP and repair when not besieged.
 - Effects: rain slows mounted + rivers; fog −vision/+ambush and −5% ranged damage;
   storm blocks/damages deep‑sea ships; heat causes desert attrition (negated by
   `caravan-logistics`).
+- **Mediterranean climate:** `randomWeather` is ~64% clear, 16% heat (dry summer),
+  10% rain, 5.5% fog, 4.5% storm; weather still holds in ~4‑turn fronts.
 - **3D visuals:** the sky dome, sun, fog and sea colour shift to the home region's
   weather (clear = bright blue with a sun on the horizon; overcast = grey + drifting
   clouds); **rain** falls as dense streaks over the actually‑wet tiles; **fog** rolls
   in as ground mist; **storms** flash lightning. No weather text bar (removed).
+- **The sea renders FLAT** — coast and open water sit at one level (thin slabs);
+  depth is shown by colour only, and water is kept unambiguously blue (no warm
+  ownership/dim wash, which used to read purple).
+
+### Cities (3D) — 10 tiers, 12 styles
+Procedural generator `src/render3d/cityModels.js` (design of record
+`HEGEMON-VISUALS-v2.md §1`): `buildCity(THREE, {tier, style, seed, accent})`.
+board3d calls it for every city with `tier` from population (thresholds 1/3/6/10/
+15/21/28/36/45/55 → tiers 1–10: Hamlet → Wonder of the age), `style` = civ id (12
+architectural identities), `seed` from hex coords (stable look), `accent` = the
+player colour (tier‑5+ banner). Walls appear from tier 4 (Sparta only from t8,
+Scythia rings wagons instead); monuments from t6, civ landmark from t8, gilding at
+t10. `gallery.html` has a **12‑style city row + a tier slider (1–10)** to art‑direct.
 
 ### Fog of war
 `state.discovered` (per player) persists what's been seen. Undiscovered tiles are
@@ -325,6 +340,15 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **HEGEMON v2 — PHASE 4 (City models) + sea/weather polish.** Wired the new
+  procedural city generator (`cityModels.js` `buildCity(THREE,{tier,style,seed,accent})`)
+  into board3d — every city now renders at one of **10 tiers** (pop thresholds
+  1/3/6/10/15/21/28/36/45/55) in one of **12 architectural styles**, seeded by hex
+  coords; added a `.d.ts` so the pure‑TS engine build resolves the `.js`. Added the
+  12‑style **city row + tier slider (1–10)** to `gallery.html`. Also: the **sea is
+  now flat and blue** (thin slabs, one level, no purple ownership/dim wash) and the
+  **weather is Mediterranean** (clear‑dominant, rain rare). Verified via Playwright
+  gallery screenshots at tiers 1/5/10. *Phase 5 (real stability stat) NOT started.*
 - **HEGEMON v2 — PHASE 3 (Units roster).** Added the **25 remaining unique units**
   (`units-v2.js`; 3 per civ, minus the 6 pre‑existing and 5 added in Phase 2) to
   `data.ts` with stats from `basedOn`+mods, `requiresTech`=unlockedBy, `civLocked`

@@ -14,6 +14,18 @@ import { createInitialGameState } from "../engine/index";
 import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
 import type { GameState } from "../engine/types";
+import { buildCity as buildCityV2 } from "./cityModels.js";
+
+// City visual tier (1..10) from population — HEGEMON-VISUALS-v2.md §1 thresholds.
+const CITY_TIER_POP = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55];
+function cityTierForPop(pop: number): number {
+  let tier = 1;
+  for (let i = 0; i < CITY_TIER_POP.length; i += 1) if (pop >= CITY_TIER_POP[i]) tier = i + 1;
+  return tier;
+}
+function cityStyleFor(civ?: string): string {
+  return civ || "rome"; // civ ids map 1:1 to cityModels styles (greece = Athens)
+}
 
 const TERRAIN_COLOR: Record<string, number> = {
   plains: 0x7c8a4f,
@@ -45,7 +57,7 @@ const topOf = (t: string): number => (WATER.has(t) ? SEA_TOP : (TERRAIN_ELEV[t] 
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; }
-export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; id?: string; badge?: string; color?: string; t?: string; form?: string; utype?: string; pop?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
+export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; id?: string; badge?: string; color?: string; t?: string; form?: string; utype?: string; pop?: number; tier?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 // A segment between two tiles: rivers run along the shared edge, roads along the
 // centre line (from tile q,r to neighbour nq,nr).
@@ -1197,7 +1209,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       if (isCity) {
         const glb = getGLB("assets/models/cities/" + sv.civ + ".glb");
         if (glb) { model = glbInstance(glb, 1.4, false); scale = 1; }
-        else { model = buildCity(sv.pop || 1, sv.civ, sv.color); scale = 1.2; }
+        else {
+          // v2 procedural city: 10 tiers, 12 styles, seeded by hex so it's stable.
+          const tier = sv.tier != null ? sv.tier : cityTierForPop(sv.pop || 1);
+          const seed = (((sv.q * 73856093) ^ (sv.r * 19349663)) >>> 0) % 100000;
+          model = buildCityV2(THREE, { tier, style: cityStyleFor(sv.civ), seed, accent: sv.color }) as THREE.Group;
+          scale = 0.82;
+        }
       } else {
         const form = sv.form || "infantry";
         const glb = getGLB("assets/models/units/" + form + ".glb");
