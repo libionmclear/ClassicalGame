@@ -1781,7 +1781,7 @@
     if (!d) return "infantry";
     if (d.domain === "naval") return "naval";
     if (d.domain === "civilian") return "civilian";
-    if (type === "war-elephant") return "elephant";
+    if (type === "war-elephant" || type === "armoured-elephant") return "elephant";
     if (d.category === "siege") return "siege";
     if (d.mounted || d.category === "mounted") return "mounted";
     if (d.category === "ranged") return "ranged";

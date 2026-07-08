@@ -129,12 +129,21 @@ Docs already in repo: `ROADMAP.md`, `KNOWN-ISSUES.md`, `HEGEMON_Game_Design_Brie
 #e67e22). Each has a **signature unit tech** and a **signature doctrine tech**
 (see §6). A civ's unique techs are hidden from other civs in the tech tree.
 
-### Units (15)
+### Units (45 — v2 roster)
 Common: `warrior, archer, spearman, swordsman, horseman, siege, trireme, merchant,
-settler`. Civ specials: `legionary` (Rome), `hoplite` (Greece), `war-elephant`
-(Carthage), `war-chariot` (Egypt), `gaesatae` (Gaul), `horse-archer` (Parthia).
-Categories drive rock‑paper‑scissors counters (infantry/spear/heavy/mounted/
-ranged/siege). Units carry **upkeep** (a per‑turn food/gold cost).
+settler`. **Each of the 12 civs has 3 unique units** (`units-v2.js`), gated by
+`civ` + `requiresTech` (the unlocking branch tech, or a trunk tech + `civLocked`).
+Wave‑1 (playable) uniques include Rome `velites`/`legionary`/`praetorian`, Athens
+`peltast`/`hoplite`/`athenian-trireme`, Parthia `horse-archer`/`cataphract`/
+`camel-train`, etc.; wave‑2 civ units (spartiate, phalangite, immortal, crossbowman,
+companion‑cavalry, …) exist but are inert until those civs are playable. Stats are
+derived from a base unit + numeric mods; the **`special` behaviours are STUBBED**
+(base stats only — see §8). **Elite caps:** `UnitRule.buildCap` limits how many a
+player may field/queue (praetorian ≤2, spartiate ≤4), enforced in `BUILD_UNIT`.
+Categories drive rock‑paper‑scissors counters (infantry/spear/heavy/mounted/ranged/
+siege/support). Units carry **upkeep**. Each new unit renders on its **category
+rig** today; distinct per‑unit 3D silhouettes (`UNIT_SILHOUETTES`) are a visual
+follow‑up.
 
 ### Combat
 `computeCombatPreview` (deterministic) → damage both ways, with modifiers:
@@ -316,6 +325,18 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **HEGEMON v2 — PHASE 3 (Units roster).** Added the **25 remaining unique units**
+  (`units-v2.js`; 3 per civ, minus the 6 pre‑existing and 5 added in Phase 2) to
+  `data.ts` with stats from `basedOn`+mods, `requiresTech`=unlockedBy, `civLocked`
+  handled via civ+trunk‑tech, and build costs. Added **elite build caps**
+  (`UnitRule.buildCap`, enforced in `BUILD_UNIT`: praetorian ≤2, spartiate ≤4) and
+  a `support` category (camel‑train). New `test/units.test.ts`. Every new unit
+  **renders on its category rig** (unitForm handles them; armoured‑elephant → the
+  elephant rig, camel‑train → civilian). **STUBBED:** all `special` unit behaviours
+  (retreat‑after‑attack, elite auras, terrain conditionality, camel resupply,
+  upkeep‑in‑food, target‑terrain‑def‑halved, spawns‑vet, never‑retreats, …) ship as
+  base stats only. **DEFERRED:** distinct per‑unit 3D silhouettes (the prop/palette
+  variations in `UNIT_SILHOUETTES`). Phases 4–5 (cities, real stability) NOT started.
 - **HEGEMON v2 — PHASE 2 (Tech‑tree data merge).** Per `HEGEMON-TECHTREE-v2.md` §3:
   merged the **12 civ‑unique branches (121 techs)** into `TECHS` (via generated
   `src/engine/branch-data.ts`), **absorbed** the 12 signature ids with new branch

@@ -1431,6 +1431,14 @@ function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   if (unitRule.domain === "naval" && !isCoastalCity(state, action.cityId)) {
     throw new Error(`Ships can only be built in a coastal city`);
   }
+  // Elite-guard cap (praetorian max 2, spartiate max 4): count what's alive plus
+  // everything already queued across the player's cities.
+  if (unitRule.buildCap) {
+    let count = 0;
+    for (const id of player.unitIds) { const u = state.map.units[id]; if (u && u.type === action.unitType) count += 1; }
+    for (const cid of player.cityIds) { const c = state.map.cities[cid]; if (c) for (const q of c.queue ?? []) if (q === action.unitType) count += 1; }
+    if (count >= unitRule.buildCap) throw new Error(`You may field at most ${unitRule.buildCap} ${action.unitType}`);
+  }
   enqueueProduction(city, action.unitType);
 }
 

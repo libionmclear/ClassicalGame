@@ -286,7 +286,40 @@ export const UNITS: Record<string, UnitRule> = {
     domain: "land", movement: 1, attack: 22, defense: 12, maxHp: 18, range: 2, upkeep: 1,
     requiresTech: "crossbow-production", civ: "han", category: "ranged",
     upgradesFrom: "archer"
-  }
+  },
+
+  // --- v2 unique-unit roster (units-v2.js): 3 per civ. Stats derived from
+  //     basedOn + numeric mods; the `special` behaviours (retreat-after-attack,
+  //     elite auras, terrain conditionality, resupply, upkeep-in-food, etc.) are
+  //     STUBBED — base stats only — and listed in the Phase-3 summary. Wave-2 civ
+  //     units are civ-gated and inert until those civs are playable. Distinct 3D
+  //     silhouettes (UNIT_SILHOUETTES) are a visual follow-up; today each renders
+  //     on its category rig.
+  velites: { domain: "land", movement: 3, attack: 15, defense: 12, maxHp: 18, range: 2, upkeep: 1, requiresTech: "castra", civ: "rome", category: "ranged", upgradesFrom: "archer" },
+  praetorian: { domain: "land", movement: 2, attack: 32, defense: 28, maxHp: 28, range: 1, upkeep: 2, requiresTech: "marian-reforms", civ: "rome", category: "heavy", counters: { ranged: 0.35, spear: 0.25 }, upgradesFrom: "legionary", buildCap: 2 },
+  "sacred-band": { domain: "land", movement: 2, attack: 16, defense: 24, maxHp: 22, range: 1, upkeep: 1, requiresTech: "suffete-council", civ: "carthage", category: "spear", counters: { mounted: 0.6 }, upgradesFrom: "spearman" },
+  "numidian-cavalry": { domain: "land", movement: 4, attack: 22, defense: 13, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "numidian-alliance", civ: "carthage", category: "mounted", counters: { ranged: 0.5, infantry: 0.15 }, upgradesFrom: "horseman" },
+  peltast: { domain: "land", movement: 3, attack: 16, defense: 12, maxHp: 18, range: 2, upkeep: 1, requiresTech: "hoplite-phalanx", civ: "greece", category: "ranged", counters: { spear: 0.25 }, upgradesFrom: "archer" },
+  "athenian-trireme": { domain: "naval", movement: 4, attack: 26, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "neorion", civ: "greece", category: "ranged", upgradesFrom: "trireme" },
+  "nubian-archer": { domain: "land", movement: 2, attack: 18, defense: 12, maxHp: 18, range: 2, upkeep: 1, requiresTech: "nubian-archers", civ: "egypt", category: "ranged", upgradesFrom: "archer" },
+  machimoi: { domain: "land", movement: 2, attack: 15, defense: 23, maxHp: 20, range: 1, upkeep: 1, requiresTech: "temple-estates", civ: "egypt", category: "spear", counters: { mounted: 0.6 }, upgradesFrom: "spearman" },
+  "noble-horse": { domain: "land", movement: 3, attack: 24, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "noble-cavalry", civ: "gaul", category: "mounted", counters: { ranged: 0.5, infantry: 0.15 }, upgradesFrom: "horseman" },
+  soldurii: { domain: "land", movement: 2, attack: 28, defense: 21, maxHp: 22, range: 1, upkeep: 2, requiresTech: "client-warbands", civ: "gaul", category: "infantry", counters: { ranged: 0.3 }, upgradesFrom: "swordsman" },
+  "camel-train": { domain: "civilian", movement: 2, attack: 0, defense: 8, maxHp: 16, range: 0, upkeep: 1, requiresTech: "desert-waystations", civ: "parthia", category: "support" },
+  "perioikoi-hoplite": { domain: "land", movement: 2, attack: 15, defense: 22, maxHp: 20, range: 1, upkeep: 1, requiresTech: "perioikoi-crafts", civ: "sparta", category: "spear", counters: { mounted: 0.6 }, upgradesFrom: "spearman" },
+  skiritai: { domain: "land", movement: 3, attack: 20, defense: 18, maxHp: 20, range: 1, upkeep: 1, requiresTech: "krypteia", civ: "sparta", category: "infantry", upgradesFrom: "warrior" },
+  "companion-cavalry": { domain: "land", movement: 3, attack: 25, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "hetairoi", civ: "macedon", category: "mounted", counters: { ranged: 0.5, infantry: 0.15 }, upgradesFrom: "horseman" },
+  hypaspist: { domain: "land", movement: 3, attack: 28, defense: 21, maxHp: 22, range: 1, upkeep: 2, requiresTech: "royal-pages", civ: "macedon", category: "infantry", counters: { ranged: 0.3 }, upgradesFrom: "swordsman" },
+  sparabara: { domain: "land", movement: 2, attack: 16, defense: 14, maxHp: 18, range: 2, upkeep: 1, requiresTech: "archer-corps", civ: "persia", category: "ranged", upgradesFrom: "archer" },
+  "scythed-chariot": { domain: "land", movement: 3, attack: 25, defense: 12, maxHp: 22, range: 1, upkeep: 2, mounted: true, requiresTech: "engineering", civ: "persia", category: "mounted", counters: { ranged: 0.5 }, upgradesFrom: "horseman" },
+  "han-cavalry": { domain: "land", movement: 3, attack: 23, defense: 15, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "heavenly-horses", civ: "han", category: "mounted", counters: { mounted: 0.3 }, upgradesFrom: "horseman" },
+  "ji-halberdier": { domain: "land", movement: 2, attack: 28, defense: 21, maxHp: 22, range: 1, upkeep: 2, requiresTech: "iron-salt-monopoly", civ: "han", category: "infantry", counters: { mounted: 0.3 }, upgradesFrom: "swordsman" },
+  "armoured-elephant": { domain: "land", movement: 2, attack: 35, defense: 24, maxHp: 34, range: 1, upkeep: 2, requiresTech: "elephant-corps", civ: "maurya", category: "heavy", counters: { infantry: 0.4, ranged: 0.3 }, upgradesFrom: "war-elephant" },
+  "indian-longbow": { domain: "land", movement: 2, attack: 18, defense: 12, maxHp: 18, range: 2, upkeep: 1, requiresTech: "archery", civ: "maurya", category: "ranged", upgradesFrom: "archer" },
+  "kshatriya-chariot": { domain: "land", movement: 3, attack: 24, defense: 16, maxHp: 22, range: 1, upkeep: 2, mounted: true, requiresTech: "imperial-army-scale", civ: "maurya", category: "mounted", counters: { ranged: 0.5, infantry: 0.2 }, upgradesFrom: "horseman" },
+  "steppe-archer": { domain: "land", movement: 4, attack: 16, defense: 12, maxHp: 18, range: 2, upkeep: 2, mounted: true, requiresTech: "recurve-mastery", civ: "scythia", category: "ranged", upgradesFrom: "archer" },
+  "royal-scythian": { domain: "land", movement: 3, attack: 23, defense: 16, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "kurgan-rites", civ: "scythia", category: "heavy", counters: { ranged: 0.4 }, upgradesFrom: "horseman" },
+  "amazon-rider": { domain: "land", movement: 4, attack: 23, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true, requiresTech: "warrior-women", civ: "scythia", category: "mounted", counters: { ranged: 0.5, infantry: 0.15 }, upgradesFrom: "horseman" }
 };
 
 export interface BuildingRule {
@@ -575,7 +608,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
   heavy: "heavy infantry",
   ranged: "ranged",
   mounted: "cavalry",
-  siege: "siege"
+  siege: "siege",
+  support: "support"
 };
 
 export const UNIT_BUILD_COSTS: Record<string, number> = {
@@ -600,5 +634,12 @@ export const UNIT_BUILD_COSTS: Record<string, number> = {
   spartiate: 26,
   phalangite: 24,
   immortal: 22,
-  crossbowman: 22
+  crossbowman: 22,
+  // v2 unique-unit roster
+  velites: 12, praetorian: 34, "sacred-band": 22, "numidian-cavalry": 20,
+  peltast: 16, "athenian-trireme": 26, "nubian-archer": 18, machimoi: 14,
+  "noble-horse": 24, soldurii: 24, "camel-train": 16, "perioikoi-hoplite": 16,
+  skiritai: 16, "companion-cavalry": 26, hypaspist: 24, sparabara: 18,
+  "scythed-chariot": 26, "han-cavalry": 22, "ji-halberdier": 24, "armoured-elephant": 30,
+  "indian-longbow": 18, "kshatriya-chariot": 24, "steppe-archer": 20, "royal-scythian": 24, "amazon-rider": 20
 };

@@ -61,6 +61,8 @@ export interface UnitRule {
   civ?: string;
   /** Base unit type this one upgrades from in the field (e.g. legionary from swordsman). */
   upgradesFrom?: string;
+  /** Max this player may ever have alive+queued (elite guards: praetorian, spartiate). */
+  buildCap?: number;
 }
 
 export interface TechRule {
