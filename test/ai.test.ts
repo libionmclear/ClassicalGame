@@ -103,7 +103,9 @@ test("the AI works its land with tile improvements", () => {
   const cities = {
     c1: { id: "c1", ownerId: "p1", position: { q: 3, r: 3 }, population: 3, hp: 40, maxHp: 40 }
   };
-  let state = makeState({}, cities, [], 40);
+  // Tile improvements now need their unlocking tech; give the AI basic agriculture
+  // so the test exercises the improve pipeline rather than the research pace.
+  let state = makeState({}, cities, ["irrigation", "animal-husbandry"], 40);
   for (let i = 0; i < 70 && !Object.values(state.map.tiles).some((t) => t.improvement); i += 1) {
     const current = state.players[state.currentPlayerIndex].id;
     state = runAiTurn(state, current, 12).state;

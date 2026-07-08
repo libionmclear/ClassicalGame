@@ -351,11 +351,12 @@ function maneuverAction(state: GameState, player: Player): GameAction | null {
 
 // Best improvement for a terrain — favour labour, then food, then gold.
 const IMPROVE_PREFERENCE = ["mine", "quarry", "lumber-camp", "farm", "pasture", "vineyard", "trade-post"];
-function pickImprovement(terrain: string, player: Player): string | null {
+function pickImprovement(tile: { terrain: string; resource?: string }, player: Player): string | null {
   for (const id of IMPROVE_PREFERENCE) {
     const rule = IMPROVEMENTS[id];
-    if (!rule || !rule.terrains.includes(terrain)) continue;
+    if (!rule || !rule.terrains.includes(tile.terrain)) continue;
     if (rule.requiresTech && !player.techs.includes(rule.requiresTech)) continue;
+    if (rule.requiresResource && !(tile.resource && rule.requiresResource.includes(tile.resource))) continue;
     return id;
   }
   return null;
@@ -377,7 +378,7 @@ function improveAction(state: GameState, player: Player): GameAction | null {
         const claim = claimingCity(state, parseKey(key));
         if (!claim || claim.id !== city.id) continue;
         if ((city.queue ?? []).some((q) => q.startsWith("imp:") && q.endsWith(`:${key}`))) continue;
-        const imp = pickImprovement(tile.terrain, player);
+        const imp = pickImprovement(tile, player);
         if (!imp) continue;
         return { type: "IMPROVE_TILE", playerId: player.id, cityId: city.id, tileKey: key, improvement: imp };
       }

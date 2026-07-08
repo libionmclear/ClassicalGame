@@ -66,17 +66,19 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
   const crossingKey = edgeKey(from, to);
   const crossingRiver = !!state.map.rivers[crossingKey];
 
-  // A road makes any land tile quick to cross. It also BRIDGES a river — but only
-  // once your people know engineering (how to build a bridge). Without it, a road
-  // still can't spare you the ford, so you slow down to cross.
+  // A road makes any land tile quick to cross — half a move, so a paved route is
+  // clearly faster than open ground (a unit covers twice the distance on roads).
+  // It also BRIDGES a river, but only once your people know engineering (how to
+  // build a bridge). Without it, a road still can't spare you the ford.
+  const ROAD_MOVE = 0.5;
   const owner = state.playersById[unit.ownerId];
   const canBridge = !!owner && owner.techs.includes("engineering");
-  if (toTile.road && (!crossingRiver || canBridge)) return 1;
+  if (toTile.road && (!crossingRiver || canBridge)) return ROAD_MOVE;
 
   // Rivers double as roads FOR NOW: moving ALONG a river (both tiles on the same
   // bank, not fording it) travels at road speed. Land units only.
   if (!crossingRiver && unit.domain === "land" && !terrain.navalOnly && touchesRiver(state, from) && touchesRiver(state, to)) {
-    return 1;
+    return ROAD_MOVE;
   }
 
   let cost = terrain.moveCost;

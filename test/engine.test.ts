@@ -91,9 +91,9 @@ test("a road bridges a river only once you have engineering", () => {
   const ctx = { ownerId: "p1", domain: "land" as const, mounted: false };
   // Without the bridge tech the ford still slows you (forest 2 + river 1).
   assert.equal(movementCost(state, ctx, { q: 1, r: 1 }, { q: 2, r: 1 }), 3);
-  // Engineering lets the road bridge the river.
+  // Engineering lets the road bridge the river — and a road is half a move.
   state.playersById.p1.techs.push("engineering");
-  assert.equal(movementCost(state, ctx, { q: 1, r: 1 }, { q: 2, r: 1 }), 1);
+  assert.equal(movementCost(state, ctx, { q: 1, r: 1 }, { q: 2, r: 1 }), 0.5);
 });
 
 test("moving along a river bank travels at road speed", () => {
@@ -101,8 +101,8 @@ test("moving along a river bank travels at road speed", () => {
   state.map.rivers["2,1|2,2"] = true; // (2,1) touches a river
   state.map.rivers["3,0|3,1"] = true; // (3,1) touches a river
   const ctx = { ownerId: "p1", domain: "land" as const, mounted: false };
-  // (2,1) is forest (cost 2); entering it from riverside (3,1) without fording is road-fast.
-  assert.equal(movementCost(state, ctx, { q: 3, r: 1 }, { q: 2, r: 1 }), 1);
+  // (2,1) is forest (cost 2); entering it from riverside (3,1) without fording is road-fast (½).
+  assert.equal(movementCost(state, ctx, { q: 3, r: 1 }, { q: 2, r: 1 }), 0.5);
 });
 
 test("combat preview remains deterministic with visible modifiers", () => {
@@ -674,7 +674,7 @@ test("a tile improvement adds its yield to the claiming city", () => {
 });
 
 test("improving a tile queues in the claiming city and completes with labour", () => {
-  let s = seaState();
+  let s = seaState(["sailing", "irrigation"]);
   s = applyAction(s, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "farm" });
   assert.ok((s.map.cities.inland.queue || []).includes("imp:farm:1,0"), "the improvement is queued");
   s.map.cities.inland.production = 999; // fund it
@@ -698,7 +698,7 @@ test("a city repairs itself in peace but not while besieged", () => {
 });
 
 test("a road is built through the labour queue and speeds movement", () => {
-  let s = seaState();
+  let s = seaState(["sailing", "masonry"]); // roads need Masonry
   s.map.tiles["1,0"].terrain = "hills"; // normally slow to cross
   s = applyAction(s, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "road" });
   assert.ok((s.map.cities.inland.queue || []).includes("road:1,0"));
@@ -709,8 +709,28 @@ test("a road is built through the labour queue and speeds movement", () => {
   const ctx = { ownerId: "a", domain: "land" as const };
   const hillsNoRoad = movementCost(seaState(), ctx, { q: 0, r: 0 }, { q: 1, r: 0 });
   const onRoad = movementCost(s, ctx, { q: 0, r: 0 }, { q: 1, r: 0 });
-  assert.equal(onRoad, 1, "moving onto a road costs 1");
-  assert.ok(onRoad <= hillsNoRoad, "the road is no slower than open ground");
+  assert.equal(onRoad, 0.5, "moving onto a road costs half a move");
+  assert.ok(onRoad <= hillsNoRoad, "the road is faster than open ground");
+});
+
+test("roads need the Masonry tech to lay", () => {
+  const s = seaState(); // only sailing
+  s.map.tiles["1,0"].terrain = "hills";
+  assert.throws(
+    () => applyAction(s, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "road" }),
+    /Masonry/
+  );
+});
+
+test("Rome's Testudo shields infantry from missiles", () => {
+  const s = buildState();
+  // u2 is p1's archer (ranged); u3 is p2's warrior (infantry). Same target, before
+  // and after p2 drills the Testudo — missile damage should fall.
+  const before = computeCombatPreview(s, "u2", "u3");
+  s.playersById.p2.techs.push("testudo");
+  const after = computeCombatPreview(s, "u2", "u3");
+  assert.ok(after.damageToDefender < before.damageToDefender, "testudo cuts missile damage to infantry");
+  assert.ok((after.modifiers || []).some((m) => /Testudo/.test(m)), "the modifier is shown");
 });
 
 test("a farm cannot be built on the sea or outside your territory", () => {

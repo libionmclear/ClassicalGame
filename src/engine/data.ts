@@ -26,6 +26,7 @@ export const TECHS: Record<string, TechRule> = {
   masonry: { age: 1, prerequisites: [] },
   archery: { age: 1, prerequisites: [] },
   irrigation: { age: 1, prerequisites: [] },
+  "animal-husbandry": { age: 1, prerequisites: [] },
 
   "phalanx-doctrine": {
     age: 1,
@@ -116,6 +117,8 @@ export const TECHS: Record<string, TechRule> = {
   "hoplite-phalanx": { age: 1, prerequisites: ["bronze-working"], civ: "greece", cost: 24 },
   chariotry: { age: 1, prerequisites: ["bronze-working"], civ: "egypt", cost: 24 },
   "legionary-system": { age: 2, prerequisites: ["iron-working"], civ: "rome", cost: 44 },
+  // Rome's drill: the testudo shell — legionaries lock shields and shrug off arrows.
+  testudo: { age: 3, prerequisites: ["legionary-system"], civ: "rome", cost: 48 },
   "war-elephants": { age: 2, prerequisites: ["iron-working"], civ: "carthage", cost: 36 },
   "iron-mastery": { age: 2, prerequisites: ["iron-working"], civ: "gaul", cost: 40 },
   "horse-archery": { age: 2, prerequisites: ["horseback-riding"], civ: "parthia", cost: 44 }
@@ -310,14 +313,16 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
     terrains: ["plains", "valley"],
     cost: 10,
     yields: { food: 2 },
-    note: "Ditched fields and irrigation — the centuriated farmland of Italy, the flood-fed plots of the Nile. Effect: +2 food."
+    requiresTech: "irrigation",
+    note: "Ditched fields and irrigation — the centuriated farmland of Italy, the flood-fed plots of the Nile. Effect: +2 food. (Needs Irrigation.)"
   },
   pasture: {
     name: "Pasture",
     terrains: ["plains", "valley", "hills"],
     cost: 10,
     yields: { food: 1, production: 1 },
-    note: "Herds of cattle, sheep and horses on open range — hides, wool and remounts. Effect: +1 food, +1 labour."
+    requiresTech: "animal-husbandry",
+    note: "Herds of cattle, sheep and horses on open range — hides, wool and remounts. Effect: +1 food, +1 labour. (Needs Animal Husbandry.)"
   },
   mine: {
     name: "Mine",
@@ -332,7 +337,8 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
     terrains: ["forest"],
     cost: 10,
     yields: { production: 1, gold: 1 },
-    note: "Timber for ships, siege engines and building — the forests of Gaul and Germania. Effect: +1 labour, +1 gold."
+    requiresTech: "bronze-working",
+    note: "Timber for ships, siege engines and building — the forests of Gaul and Germania. Effect: +1 labour, +1 gold. (Needs Bronze Working for the tools.)"
   },
   "trade-post": {
     name: "Trade Post",

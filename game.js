@@ -2283,17 +2283,31 @@
         hint.innerHTML = label + " need a " + Array.from(needs).join(" / ") + " deposit on this tile.";
         improveMenuEl.appendChild(hint);
       }
+      // Improvements this tile suits but whose unlocking research you still lack.
+      const prettyTech = (t) => t.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      const techLocked = Object.keys(engine.IMPROVEMENTS || {})
+        .filter((id) => { const imp = engine.IMPROVEMENTS[id]; return imp.terrains.indexOf(tile.terrain) !== -1 && imp.requiresTech && me.techs.indexOf(imp.requiresTech) === -1; });
+      if (!isWater && me.techs.indexOf("masonry") === -1) techLocked.push("__road");
+      if (techLocked.length) {
+        const parts = techLocked.map((id) => id === "__road"
+          ? "🛤️ Road (Masonry)"
+          : (IMPROVEMENT_GLYPH[id] || "▪") + " " + engine.IMPROVEMENTS[id].name + " (" + prettyTech(engine.IMPROVEMENTS[id].requiresTech) + ")");
+        const hint = document.createElement("div");
+        hint.className = "bm-empty";
+        hint.innerHTML = "🔬 Research unlocks: " + parts.join(", ") + ".";
+        improveMenuEl.appendChild(hint);
+      }
     }
 
     // A road (independent of the worked improvement — a farm can have a road too).
-    // Roads are land-only, so open water skips this.
-    if (!isWater) {
+    // Land-only, and only once you know Masonry (paved roads).
+    if (!isWater && me.techs.indexOf("masonry") !== -1) {
       const roadCost = engine.ROAD_COST || 8;
       const roadQueued = queue.indexOf("road:" + selectedTileKey) !== -1;
       addOption("road", "Road", "🛤️", roadCost, "faster movement",
-        "Roads speed every unit across the tile and bridge rivers — the backbone of an empire (viae, the King's Road).",
+        "Roads halve the cost to cross the tile and bridge rivers — the backbone of an empire (viae, the King's Road).",
         !!tile.road, roadQueued);
-    } else if (!improveMenuEl.children.length) {
+    } else if (isWater && !improveMenuEl.children.length) {
       improveMenuEl.innerHTML = tile.terrain === "coast"
         ? '<div class="bm-empty">Research <b>Sailing</b> to build a fishery or harbour here.</div>'
         : '<div class="bm-empty">Open sea — build a fishery or harbour on a coastal tile instead.</div>';

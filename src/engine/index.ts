@@ -163,11 +163,17 @@ function randomWeather(roll: number): WeatherType {
   return "heat";
 }
 
+// A weather FRONT holds for several turns before it shifts, so rain settles in
+// for a spell rather than flickering on and off every single turn. Fronts are
+// staggered per region so the whole map doesn't change weather on the same turn.
+const WEATHER_FRONT = 4;
 function generateWeatherByRegion(state: GameState, turn: number): Record<string, WeatherType> {
   const result: Record<string, WeatherType> = {};
   const regions = state.map.regions.length > 0 ? state.map.regions : ["core"];
   for (const region of regions) {
-    const rand = seededRandom(state.seed, `weather:${turn}:${region}`);
+    const phase = Math.floor(seededRandom(state.seed, `wphase:${region}`)() * WEATHER_FRONT);
+    const epoch = Math.floor((turn + phase) / WEATHER_FRONT);
+    const rand = seededRandom(state.seed, `weather:${epoch}:${region}`);
     result[region] = randomWeather(rand());
   }
   return result;
@@ -375,6 +381,14 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   if (counterDef > 0) {
     defenseMult += counterDef;
     modifiers.push(`Enemy ${CATEGORY_LABELS[defCat] || defCat} vs ${CATEGORY_LABELS[atkCat] || atkCat} ${pct(counterDef)}`);
+  }
+  // Rome's Testudo: shield-locked legionaries shrug off missiles. A big defensive
+  // bonus for Roman infantry against ranged/siege fire, a smaller one in melee.
+  const defOwner = state.playersById[defender.ownerId];
+  if (defOwner && defOwner.techs.includes("testudo") && defCat === "infantry") {
+    const shell = atkCat === "ranged" || atkCat === "siege" ? 0.5 : 0.2;
+    defenseMult += shell;
+    modifiers.push(`Testudo ${pct(shell)}`);
   }
 
   const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
@@ -985,9 +999,10 @@ function applyImproveTile(state: GameState, action: ImproveTileAction): void {
   if (claim.id !== action.cityId) throw new Error("That city does not work this tile");
 
   // Roads live alongside a worked improvement (a farm can have a road too) — but
-  // never across open water.
+  // never across open water, and only once your people know how to lay them.
   if (action.improvement === "road") {
     if (isWater) throw new Error("Roads can't cross open water");
+    if (!state.playersById[action.playerId].techs.includes("masonry")) throw new Error("Roads need the Masonry tech");
     if (tile.road) throw new Error("That tile already has a road");
     const item = `road:${action.tileKey}`;
     if ((claim.queue ?? []).includes(item)) throw new Error("A road is already queued for that tile");
