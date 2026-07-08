@@ -199,9 +199,10 @@ test("a unit upgrades into its civ's elite for gold", () => {
 
 test("improvements requiring a tech are gated until it is researched", () => {
   const state = buildState();
-  // Make an adjacent tile hills so c1 (at 0,0) works it, then test the Quarry's
-  // Metallurgy gate directly.
+  // Make an adjacent tile hills with a stone deposit so c1 (at 0,0) works it,
+  // then test the Quarry's Metallurgy gate directly.
   state.map.tiles["1,0"].terrain = "hills";
+  state.map.tiles["1,0"].resource = "stone";
 
   assert.throws(
     () =>
@@ -490,9 +491,16 @@ test("harbors earn extra gold as a trade network", () => {
   assert.equal(networked, solo + 1, "a second harbor adds one trade-network gold");
 });
 
-test("a fishery can be built on a coastal tile, but not on open sea or as a road", () => {
+test("a fishery needs a fish deposit, and can't go on open sea or as a road", () => {
   let state = seaState(); // player "a" has sailing
   state.map.tiles["4,0"].terrain = "coast"; // shallow water beside coast1 (3,0)
+  // Without a fish deposit the fishery is refused.
+  assert.throws(
+    () => applyAction(state, { type: "IMPROVE_TILE", playerId: "a", cityId: "coast1", tileKey: "4,0", improvement: "fishery" }),
+    /fish/
+  );
+  // With one, it's built.
+  state.map.tiles["4,0"].resource = "fish";
   state = applyAction(state, { type: "IMPROVE_TILE", playerId: "a", cityId: "coast1", tileKey: "4,0", improvement: "fishery" });
   assert.ok((state.map.cities.coast1.queue || []).some((q) => q.includes("fishery")), "the fishery was queued");
 
@@ -519,6 +527,44 @@ test("a built Harbour improvement lets an army embark from beside it", () => {
   // Build a Harbour on the coast tile (4,0) next to the city — now it can embark.
   state.map.tiles["4,0"].improvement = "harbour";
   assert.ok(Number.isFinite(movementCost(state, ctx, { q: 3, r: 0 }, { q: 4, r: 0 })), "the army embarks through the harbour");
+});
+
+test("a mine needs an ore deposit and a quarry needs stone", () => {
+  const bare = seaState(["metallurgy"]);
+  bare.map.tiles["1,0"].terrain = "hills"; // worked by the inland city (0,0)
+  assert.throws(
+    () => applyAction(bare, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "mine" }),
+    /iron|silver|deposit/
+  );
+  const ore = seaState(["metallurgy"]);
+  ore.map.tiles["1,0"].terrain = "hills";
+  ore.map.tiles["1,0"].resource = "iron";
+  const built = applyAction(ore, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "mine" });
+  assert.ok((built.map.cities.inland.queue || []).some((q) => q.includes("mine")), "a mine goes on an iron deposit");
+  // A quarry wants stone, not iron.
+  const iron = seaState(["metallurgy"]);
+  iron.map.tiles["1,0"].terrain = "hills";
+  iron.map.tiles["1,0"].resource = "iron";
+  assert.throws(
+    () => applyAction(iron, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "quarry" }),
+    /stone|deposit/
+  );
+});
+
+test("an idle city sells surplus labour for coin instead of hoarding it", () => {
+  const tiles: Record<string, { terrain: string; region: string }> = {};
+  for (let r = 0; r < 2; r += 1) for (let q = 0; q < 2; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "r" };
+  let s = createInitialGameState({
+    seed: "idle",
+    players: [{ id: "a", civ: "A" }],
+    map: { width: 2, height: 2, regions: ["r"], tiles: tiles as never, cities: { c: { id: "c", ownerId: "a", position: { q: 0, r: 0 }, population: 3 } } }
+  });
+  s.map.cities.c.production = 200;
+  s.map.cities.c.queue = []; // nothing left to build
+  const goldBefore = s.playersById.a.gold;
+  s = applyAction(s, { type: "END_TURN", playerId: "a" });
+  assert.ok((s.map.cities.c.production ?? 0) <= 25, "hoarded labour drains to a small reserve");
+  assert.ok(s.playersById.a.gold > goldBefore, "the surplus labour became gold");
 });
 
 test("a trireme launches onto adjacent water, not the city's land tile", () => {

@@ -1000,6 +1000,9 @@ function applyImproveTile(state: GameState, action: ImproveTileAction): void {
   if (rule.requiresTech && !owner.techs.includes(rule.requiresTech)) {
     throw new Error(`${action.improvement} requires tech ${rule.requiresTech}`);
   }
+  if (rule.requiresResource && !(tile.resource && rule.requiresResource.includes(tile.resource))) {
+    throw new Error(`${action.improvement} needs a ${rule.requiresResource.join(" or ")} deposit`);
+  }
   const item = `imp:${action.improvement}:${action.tileKey}`;
   const queued = (claim.queue ?? []).some((q) => q.startsWith("imp:") && q.endsWith(`:${action.tileKey}`));
   if (queued) throw new Error("An improvement is already queued for that tile");
@@ -1010,6 +1013,9 @@ export const HEAL_IN_CITY = 8;
 export const HEAL_IN_TERRITORY = 4;
 export const HEAL_IN_FIELD = 1;
 export const CITY_REGEN = 3;
+// Labour a city with an empty queue keeps banked; anything above it is sold off
+// as coin so idle cities don't hoard hundreds of unspendable production.
+export const IDLE_PROD_RESERVE = 20;
 
 // How much a unit would heal if left to rest this turn (0 if it is at full HP
 // or has already moved/fought). Location decides the rate.
@@ -1062,6 +1068,15 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
       // Production is banked per-city and drives the build queue.
       city.production = (city.production ?? 0) + Math.round(yields.production * mult);
       processCityQueue(state, city);
+
+      // An IDLE city (nothing left to build) turns surplus labour into coin at a
+      // modest rate instead of hoarding it forever — public works, hired gangs,
+      // roadwork. A small reserve is kept so queuing something next turn isn't lost.
+      if ((city.queue ?? []).length === 0 && (city.production ?? 0) > IDLE_PROD_RESERVE) {
+        const surplus = (city.production ?? 0) - IDLE_PROD_RESERVE;
+        endingPlayer.gold += Math.floor(surplus / 3);
+        city.production = IDLE_PROD_RESERVE;
+      }
 
       // A city left in peace repairs its walls; one under assault this turn does
       // not — so taking a city needs sustained, concentrated force, not a lone

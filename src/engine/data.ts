@@ -299,6 +299,8 @@ export interface ImprovementRule {
   yields: { food?: number; production?: number; gold?: number; science?: number };
   /** Tech that must be researched before this improvement can be built. */
   requiresTech?: string;
+  /** If set, the tile must hold one of these resource deposits to build it. */
+  requiresResource?: string[];
   note: string;
 }
 
@@ -322,7 +324,8 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
     terrains: ["hills", "mountains"],
     cost: 12,
     yields: { production: 2 },
-    note: "Shafts and galleries after silver, iron and copper — Laurion, Rio Tinto, the Noric iron. Effect: +2 labour."
+    requiresResource: ["iron", "silver"],
+    note: "Shafts and galleries after silver, iron and copper — Laurion, Rio Tinto, the Noric iron. Effect: +2 labour. (Needs an iron or silver deposit.)"
   },
   "lumber-camp": {
     name: "Lumber Camp",
@@ -344,7 +347,8 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
     cost: 12,
     yields: { production: 2, gold: 1 },
     requiresTech: "metallurgy",
-    note: "Cut stone and marble for walls, roads and monuments — the travertine of Tibur, the marble of Paros. Effect: +2 labour, +1 gold. (Needs Metallurgy.)"
+    requiresResource: ["stone"],
+    note: "Cut stone and marble for walls, roads and monuments — the travertine of Tibur, the marble of Paros. Effect: +2 labour, +1 gold. (Needs a stone deposit and Metallurgy.)"
   },
   vineyard: {
     name: "Vineyard",
@@ -360,7 +364,8 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
     cost: 10,
     yields: { food: 2 },
     requiresTech: "sailing",
-    note: "Nets, weirs and tunny-traps in the shallows — richest where the shoals run. Effect: +2 food. (Needs Sailing.)"
+    requiresResource: ["fish"],
+    note: "Nets, weirs and tunny-traps worked over a shoal. Effect: +2 food. (Needs a fish deposit and Sailing.)"
   },
   harbour: {
     name: "Harbour",

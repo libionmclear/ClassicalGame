@@ -2221,6 +2221,8 @@
       const imp = engine.IMPROVEMENTS[id];
       if (imp.terrains.indexOf(tile.terrain) === -1) return false;
       if (imp.requiresTech && me.techs.indexOf(imp.requiresTech) === -1) return false;
+      // Extraction improvements need the matching deposit on the tile.
+      if (imp.requiresResource && !(tile.resource && imp.requiresResource.indexOf(tile.resource) !== -1)) return false;
       return true;
     });
     const impQueued = queue.some((q) => q.indexOf("imp:") === 0 && q.slice(-suffix.length) === suffix);
@@ -2232,6 +2234,26 @@
       if (imp.yields.gold) yld.push("+" + imp.yields.gold + " 🪙");
       addOption(id, imp.name, IMPROVEMENT_GLYPH[id] || "▪", imp.cost, yld.join(" "), imp.note,
         tile.improvement === id, tile.improvement ? tile.improvement === id : impQueued);
+    }
+
+    // Explain extraction improvements this tile could take if only it had the
+    // deposit (a mine needs ore, a quarry needs stone, a fishery needs fish).
+    if (!tile.improvement) {
+      const blocked = Object.keys(engine.IMPROVEMENTS || {}).filter((id) => {
+        const imp = engine.IMPROVEMENTS[id];
+        return imp.terrains.indexOf(tile.terrain) !== -1 &&
+          (!imp.requiresTech || me.techs.indexOf(imp.requiresTech) !== -1) &&
+          imp.requiresResource && !(tile.resource && imp.requiresResource.indexOf(tile.resource) !== -1);
+      });
+      if (blocked.length) {
+        const needs = new Set();
+        blocked.forEach((id) => (engine.IMPROVEMENTS[id].requiresResource || []).forEach((r) => needs.add(r)));
+        const label = blocked.map((id) => (IMPROVEMENT_GLYPH[id] || "▪") + " " + engine.IMPROVEMENTS[id].name).join(", ");
+        const hint = document.createElement("div");
+        hint.className = "bm-empty";
+        hint.innerHTML = label + " need a " + Array.from(needs).join(" / ") + " deposit on this tile.";
+        improveMenuEl.appendChild(hint);
+      }
     }
 
     // A road (independent of the worked improvement — a farm can have a road too).
