@@ -611,12 +611,18 @@
       }
     }
 
+    let stab = 0;
+    try { if (engine.computeCityStability) stab = engine.computeCityStability(state, city.id); } catch (e) {}
+    const stabColor = stab > 0 ? "#6fae5f" : stab < 0 ? "#d0655a" : "#9aa7b4";
+    const stabTip = "Stability " + (stab > 0 ? "+" : "") + stab + " — each point is ±2% to all yields" + (stab >= 3 ? "; +1 labour (civic pride)" : stab <= -3 ? "; the city is restive" : "");
+    const stabSpan = '<span class="co-stab" style="color:' + stabColor + '" title="' + stabTip + '">🌿 ' + (stab > 0 ? "+" : "") + stab + "</span>";
     const yieldRow = y
       ? '<div class="co-yields">' +
         '<span title="Food per turn (before your army\'s food upkeep)">🌾 ' + y.food + "</span>" +
         '<span title="Labour per turn">⚒️ ' + y.production + "</span>" +
         '<span title="Gold per turn">🪙 ' + y.gold + "</span>" +
-        '<span title="Science per turn">🧪 ' + y.science + "</span></div>"
+        '<span title="Science per turn">🧪 ' + y.science + "</span>" +
+        stabSpan + "</div>"
       : "";
     const depRow = deposits.length
       ? '<div class="co-row"><span class="co-label">Deposits</span>' +
@@ -3208,10 +3214,9 @@
   // Effect vocabulary → engine hooks. TODAY the engine only supports a flat
   // per-turn `perks` bonus (gold/science to the pool, food/production to the
   // capital). Only capital/city yields map; everything else is flagged.
-  // STABILITY has no city stat yet (arrives in Phase 5): per the substitution
-  // rule (CIVS-CARDS-v2 §7.3) it is STUBBED here as +gold, so those cards aren't
-  // inert. Phase 5 replaces this stub with the real stability stat.
-  const YIELD_KEY = { food: "food", gold: "gold", science: "science", labour: "production", production: "production", stability: "gold" /* STUB */ };
+  // STABILITY is now a real per-city stat (Phase 5): a card's stability flows into
+  // player.perks.stability, which the engine adds to every city's stability score.
+  const YIELD_KEY = { food: "food", gold: "gold", science: "science", labour: "production", production: "production", stability: "stability" };
   function effectToPerks(effect) {
     const perks = {};
     const add = (src) => { if (!src) return; for (const k in src) { const t = YIELD_KEY[k]; if (t) perks[t] = (perks[t] || 0) + src[k]; } };
@@ -3872,6 +3877,7 @@
     if (perks.production) perkStr.push("+" + perks.production + " ⚒️");
     if (perks.gold) perkStr.push("+" + perks.gold + " 🪙");
     if (perks.science) perkStr.push("+" + perks.science + " 🧪");
+    if (perks.stability) perkStr.push((perks.stability > 0 ? "+" : "") + perks.stability + " 🌿");
     const loSlots = LOADOUT_SLOTS.map(function (slot) {
       const c = CARDS_BY_ID[lo[slot]];
       const label = c ? (c.icon + " " + c.name) : "<i>empty</i>";

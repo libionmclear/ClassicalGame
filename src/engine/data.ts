@@ -158,11 +158,13 @@ export const TECH_CITY_YIELD: Record<string, { food?: number; production?: numbe
 // prerequisites — save compatibility: ids unchanged, prereq edges new. Branch
 // techs use the shared age-derived costs (no explicit cost). The doctrine
 // reassignment (phalanx-wall→sparta, new wooden-walls→Athens) rides in via the
-// data. Effects: only cityYield maps today (added to TECH_CITY_YIELD below, with
-// stability STUBBED as gold per §3.6 / cards v2 §7.3, labour→production). Combat
-// %, capitalYield, buildingBoost, upkeepPct and every `special:` hook are FLAGGED
-// (not wired) except the six existing doctrines, whose combat effects are already
-// hardcoded in index.ts and keep working.
+// data. Effects: cityYield maps to TECH_CITY_YIELD below (labour→production); its
+// stability now feeds the real per-city STABILITY stat via TECH_STABILITY (no
+// longer stubbed as gold). Combat %, capitalYield, buildingBoost, upkeepPct and
+// every `special:` hook are still FLAGGED (not wired) except the six existing
+// doctrines, whose combat effects are already hardcoded in index.ts.
+// Per-tech per-city stability contribution (Phase 5 un-stub).
+export const TECH_STABILITY: Record<string, number> = {};
 for (const t of UNIQUE_TECHS) {
   const prior = TECHS[t.id];
   TECHS[t.id] = {
@@ -184,10 +186,11 @@ for (const t of UNIQUE_TECHS) {
       const v = cy[k];
       if (k === "food") y.food = (y.food ?? 0) + v;
       else if (k === "science") y.science = (y.science ?? 0) + v;
-      else if (k === "gold" || k === "stability") y.gold = (y.gold ?? 0) + v; // stability STUB → gold
+      else if (k === "gold") y.gold = (y.gold ?? 0) + v;
       else if (k === "labour" || k === "production") y.production = (y.production ?? 0) + v;
+      else if (k === "stability") TECH_STABILITY[t.id] = (TECH_STABILITY[t.id] ?? 0) + v; // real stat now
     }
-    TECH_CITY_YIELD[t.id] = y;
+    if (y.food || y.production || y.gold || y.science) TECH_CITY_YIELD[t.id] = y;
   }
 }
 

@@ -113,6 +113,8 @@ export interface City {
   queue?: string[];
   /** Turn this city was last assaulted — it only heals when left in peace. */
   lastAttackedTurn?: number;
+  /** Turn this city last changed hands — a fresh conquest is briefly unstable. */
+  capturedTurn?: number;
 }
 
 export interface Player {
@@ -132,7 +134,7 @@ export interface Player {
   lastEventTurn?: number;
   /** Small flat per-turn bonuses from equipped General cards (the meta-game).
    *  gold/science are added to the player pool; food/production to the capital. */
-  perks?: { food?: number; production?: number; gold?: number; science?: number };
+  perks?: { food?: number; production?: number; gold?: number; science?: number; stability?: number };
 }
 
 export interface GameMap {

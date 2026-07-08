@@ -179,9 +179,10 @@ into the tile**. Cities have HP and repair when not besieged.
 - Deep tree across 3 ages (Villages / Kingdoms / Empires) with prerequisites and a
   few **forks**. Base costs by age **20 / 46 / 82**, ×`costScale`. `rhetoric` −15%.
 - **Effects:** trunk techs and the six existing doctrines all have concrete engine
-  effects. For the ~90 new branch techs, **only `cityYield` is wired** (into
-  `TECH_CITY_YIELD`, with `stability` STUBBED as `+gold` until the stat ships in
-  Phase 5); `unlocks` gate units/buildings via `requiresTech`. **Combat %,
+  effects. For the ~90 new branch techs, **`cityYield` is wired** (into
+  `TECH_CITY_YIELD`; `cityYield.stability` now routes to **`TECH_STABILITY`**, a
+  real per‑city stat as of Phase 5 — no longer a `+gold` stub); `unlocks` gate
+  units/buildings via `requiresTech`. **Combat %,
   `capitalYield`, `buildingBoost`, `upkeepPct` and every `special:` hook are
   FLAGGED, not built** (their `effect` block is carried on the tech for later
   wiring). The AI research picker (`ai.ts`) is **branch‑aware** (own branch ×1.5,
@@ -261,8 +262,9 @@ Admin can toggle **Reveal map** for testing.
   - **Effect mapping:** the declarative effect vocabulary (`docs` §7 / the data
     file's EFFECT KEYS) is translated in `game.js`. **Today the engine only has one
     card hook — flat per‑turn `player.perks`** — so only `capitalYield`/`cityYield`
-    map (per‑city is approximated as flat). **`stability` is STUBBED as `+gold`**
-    (substitution rule; the real stat arrives in Phase 5). Everything else
+    map (per‑city is approximated as flat). **`stability` now maps to the real
+    `perks.stability`** (Phase 5 un‑stub; feeds every city via
+    `computeCityStability` — no longer approximated as `+gold`). Everything else
     (combat %, cost %, movement, heal, plunder, trade‑route gold, all `special` /
     `instant`) is **flagged** on `card.flags`, not applied. Two event instants
     (+food to capital, +science) work; the rest are flagged and not consumed.
@@ -340,6 +342,18 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **HEGEMON v2 — PHASE 5 (Stability, phase 1).** Per `HEGEMON-VISUALS-v2.md` §3:
+  added a **per‑city stability stat** (`computeCityStability`, clamped −5..+5).
+  **Sources wired:** buildings (temple/amphitheater/forum +1 each), owner techs
+  (`TECH_STABILITY`, un‑stubbed from the Phase 2 gold approximation), card perks
+  (`perks.stability`, un‑stubbed from Phase 1), **garrison** +1, and **recently
+  captured** −2 decaying 1/turn (new `City.capturedTurn`). **Effect wired:** each
+  point shifts *all* city yields **±2%** and **+3 grants +1 labour** (in
+  `computeCityYield`). **UI:** a **🌿 laurel** on the city panel (green/grey/red)
+  + the deck perk preview. New `test/stability.test.ts`. Exposed via
+  `browser-entry`/`window.HegemonEngine`. **FLAGGED / phase 2:** war‑weariness
+  (no war‑state tracking yet), starving −2, and the unrest (−3) / revolt (−5)
+  events — sources+yield only for now. Science yields unchanged.
 - **HEGEMON v2 — PHASE 4 (City models) + sea/weather polish.** Wired the new
   procedural city generator (`cityModels.js` `buildCity(THREE,{tier,style,seed,accent})`)
   into board3d — every city now renders at one of **10 tiers** (pop thresholds
@@ -348,7 +362,7 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   12‑style **city row + tier slider (1–10)** to `gallery.html`. Also: the **sea is
   now flat and blue** (thin slabs, one level, no purple ownership/dim wash) and the
   **weather is Mediterranean** (clear‑dominant, rain rare). Verified via Playwright
-  gallery screenshots at tiers 1/5/10. *Phase 5 (real stability stat) NOT started.*
+  gallery screenshots at tiers 1/5/10.
 - **HEGEMON v2 — PHASE 3 (Units roster).** Added the **25 remaining unique units**
   (`units-v2.js`; 3 per civ, minus the 6 pre‑existing and 5 added in Phase 2) to
   `data.ts` with stats from `basedOn`+mods, `requiresTech`=unlockedBy, `civLocked`
@@ -367,7 +381,8 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   prereqs (old saves load), reassigned **phalanx‑wall → Sparta** and gave **Athens
   a new capstone `wooden-walls`**, added the **5 branch units** (cataphract wave‑1;
   spartiate/phalangite/immortal/crossbowman gated to wave‑2 civs) + the **forum**
-  building, wired branch **`cityYield`** (stability→gold stub) and `unlocks`, made
+  building, wired branch **`cityYield`** (stability→`TECH_STABILITY` since Phase 5;
+  was a gold stub) and `unlocks`, made
   the **AI branch‑aware**, and adapted the tech‑tree UI (name/note fallback + branch
   colour + capstone glow). New `test/branches.test.ts` (§3.10 validity). *Combat %,
   capitalYield, buildingBoost, upkeepPct and all `special:` hooks are FLAGGED, not

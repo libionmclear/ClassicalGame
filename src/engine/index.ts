@@ -12,7 +12,8 @@ import {
   RESOURCES,
   BUILD_RESOURCE,
   BUILD_DISCOUNT,
-  TECH_CITY_YIELD
+  TECH_CITY_YIELD,
+  TECH_STABILITY
 } from "./data";
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -569,6 +570,7 @@ function applyAttackCity(state: GameState, action: AttackCityAction): void {
     city.ownerId = attacker.ownerId;
     city.population = Math.max(1, city.population - 1);
     city.hp = Math.ceil(city.maxHp * 0.6);
+    city.capturedTurn = state.turn; // a fresh conquest is briefly unstable (stability)
     syncOwnershipIndexes(state);
     // March the victors into the fallen city.
     tryAdvanceInto(state, attacker, { q: city.position.q, r: city.position.r });
@@ -663,6 +665,29 @@ export function scaledResearchCost(state: GameState, techId: string, playerId?: 
   return Math.max(1, Math.round(cost));
 }
 
+// ===== Per-city STABILITY (Phase 5) =====
+// An integer clamped −5..+5. Sources: stabilising buildings (temple/amphitheater/
+// forum +1 each), the owner's researched branch techs (TECH_STABILITY) + equipped
+// card perks (perks.stability), a garrison standing in the city (+1), minus the
+// lingering shock of a fresh conquest (−2, easing 1/turn). Effect (Phase 5): each
+// point is ±2% to all city yields, and +3 grants +1 labour (civic pride). Unrest
+// and revolt are Phase-6+.
+const STABILITY_BUILDINGS: Record<string, number> = { temple: 1, amphitheater: 1, forum: 1 };
+export function computeCityStability(state: GameState, cityId: string): number {
+  const city = state.map.cities[cityId];
+  if (!city) return 0;
+  const owner = state.playersById[city.ownerId];
+  let s = 0;
+  for (const b of city.buildings ?? []) s += STABILITY_BUILDINGS[b] ?? 0;
+  if (owner) {
+    for (const techId of Object.keys(TECH_STABILITY)) if (owner.techs.includes(techId)) s += TECH_STABILITY[techId];
+    s += owner.perks?.stability ?? 0;
+  }
+  if (Object.values(state.map.units).some((u) => u.ownerId === city.ownerId && u.position.q === city.position.q && u.position.r === city.position.r)) s += 1;
+  if (city.capturedTurn != null) s -= Math.max(0, 2 - (state.turn - city.capturedTurn));
+  return Math.max(-5, Math.min(5, s));
+}
+
 export function computeCityYield(
   state: GameState,
   cityId: string
@@ -738,6 +763,17 @@ export function computeCityYield(
       yields.science += res.yields.science ?? 0;
     }
   }
+
+  // Stability modifies everything: ±2% per point, and civic pride (+3) adds labour.
+  const stability = computeCityStability(state, cityId);
+  if (stability !== 0) {
+    const sf = 1 + 0.02 * stability;
+    yields.food = Math.max(0, Math.round(yields.food * sf));
+    yields.production = Math.max(0, Math.round(yields.production * sf));
+    yields.gold = Math.max(0, Math.round(yields.gold * sf));
+    yields.science = Math.max(0, Math.round(yields.science * sf));
+  }
+  if (stability >= 3) yields.production += 1;
   return yields;
 }
 
