@@ -30,11 +30,17 @@ const TERRAIN_ELEV: Record<string, number> = {
 };
 const FLOOR = -0.6;
 const SIZE = 1;
+// The sea is rendered as ONE FLAT surface: coast and open water sit at a single
+// level (depth is shown by colour, not elevation), and as thin slabs so there are
+// no tall prism sides — those sides caught the warm sun on dark-blue water and
+// read as purple. See paintTiles.
+const WATER = new Set(["sea", "coast"]);
+const SEA_TOP = -0.1;
 
 function axialToWorld(q: number, r: number): { x: number; z: number } {
   return { x: SIZE * Math.sqrt(3) * (q + r / 2), z: SIZE * 1.5 * r };
 }
-const topOf = (t: string): number => TERRAIN_ELEV[t] ?? 0.08;
+const topOf = (t: string): number => (WATER.has(t) ? SEA_TOP : (TERRAIN_ELEV[t] ?? 0.08));
 
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
@@ -1050,6 +1056,18 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
   function colorFor(tv: TileView, civColors: Record<string, string>): THREE.Color {
     if (tv.v === 0) return HIDDEN.clone();
+    // WATER is handled up front and kept unambiguously BLUE: no warm ownership
+    // wash, no muddy dim, only a faint cool weather cast. (Territory over water is
+    // shown by the coloured border, not a tint — a warm civ colour on blue read as
+    // purple.) Depth/visibility change the shade, never the hue.
+    if (tv.t === "sea" || tv.t === "coast") {
+      const c = new THREE.Color(tv.t === "coast" ? 0x2f6a9e : 0x224d78);
+      if (tv.v === 1) c.multiplyScalar(0.72); // out of sight — darker, still blue
+      if (tv.wx === "storm") c.lerp(new THREE.Color(0x1f2c3a), 0.3);
+      else if (tv.wx === "rain") c.lerp(new THREE.Color(0x274661), 0.2);
+      else if (tv.wx === "fog") c.lerp(new THREE.Color(0x5a6f7e), 0.18);
+      return c;
+    }
     const jitter = (((tv.q * 928371 + tv.r * 12547) % 17) / 17 - 0.5) * 0.06;
     const c = new THREE.Color(TERRAIN_COLOR[tv.t] ?? 0x808080).offsetHSL(0, 0, jitter);
     // Ownership tint. Over WATER it's kept very light — a strong wash of a warm
@@ -1090,11 +1108,20 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       if (idx == null) continue;
       tileMesh.setColorAt(idx, colorFor(tv, view.civColors));
       // Height follows visibility: undiscovered tiles lie FLAT (a blank map, no
-      // hex relief); discovered/visible tiles rise to their terrain elevation.
+      // hex relief); land rises to its terrain elevation; DISCOVERED WATER is a
+      // thin flat slab at the single sea level (a flat sea, no terraced steps and
+      // no tall purple-catching sides).
       const w = axialToWorld(tv.q, tv.r);
-      const top = tv.v === 0 ? HIDDEN_ELEV : topOf(tv.t);
-      const height = Math.max(0.12, top - FLOOR);
-      _pp.set(w.x, (top + FLOOR) / 2, w.z);
+      const water = tv.v !== 0 && WATER.has(tv.t);
+      let top: number, height: number;
+      if (water) {
+        top = SEA_TOP;
+        height = 0.08; // thin slab
+      } else {
+        top = tv.v === 0 ? HIDDEN_ELEV : topOf(tv.t);
+        height = Math.max(0.12, top - FLOOR);
+      }
+      _pp.set(w.x, top - height / 2, w.z);
       _ps.set(1, height, 1);
       _pm.compose(_pp, _pq, _ps);
       tileMesh.setMatrixAt(idx, _pm);

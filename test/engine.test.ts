@@ -77,6 +77,7 @@ test("weather generation is deterministic by seed and turn", () => {
 
 test("movement accounts for river crossing", () => {
   const state = buildState();
+  for (const r in state.weather.current) state.weather.current[r] = "clear"; // isolate from weather penalties
   const unit = state.map.units.u1;
   const cost = movementCost(
     state,
@@ -89,6 +90,7 @@ test("movement accounts for river crossing", () => {
 
 test("a road bridges a river only once you have engineering", () => {
   const state = buildState();
+  for (const r in state.weather.current) state.weather.current[r] = "clear"; // isolate from weather penalties
   state.map.tiles["2,1"].road = true;
   const ctx = { ownerId: "p1", domain: "land" as const, mounted: false };
   // Without the bridge tech the ford still slows you (forest 2 + river 1).

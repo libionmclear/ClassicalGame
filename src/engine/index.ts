@@ -156,12 +156,14 @@ function syncOwnershipIndexes(state: GameState): void {
   }
 }
 
+// Mediterranean climate: mostly clear skies and hot, dry summers; rain is the
+// exception, not the rule; storms and fog are rare.
 function randomWeather(roll: number): WeatherType {
-  if (roll < 0.5) return "clear";
-  if (roll < 0.7) return "rain";
-  if (roll < 0.85) return "fog";
-  if (roll < 0.93) return "storm";
-  return "heat";
+  if (roll < 0.64) return "clear"; // 64%
+  if (roll < 0.80) return "heat";  // 16% — the long dry summer
+  if (roll < 0.90) return "rain";  // 10%
+  if (roll < 0.955) return "fog";  // 5.5%
+  return "storm";                  // 4.5%
 }
 
 // A weather FRONT holds for several turns before it shifts, so rain settles in
