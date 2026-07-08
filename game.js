@@ -1237,6 +1237,35 @@
     }
   }
 
+  // ---- Audio: procedural sound (see audio.js). All calls are null-safe. ----
+  function audioInit() { if (window.HGAudio) window.HGAudio.init(); }
+  function playSfx(name) { if (window.HGAudio) window.HGAudio.sfx(name); }
+  function playActionSfx(action) {
+    if (!window.HGAudio || action.playerId !== HUMAN_ID) return;
+    switch (action.type) {
+      case "MOVE_UNIT": window.HGAudio.sfx("march"); break;
+      case "ATTACK": case "ATTACK_CITY": window.HGAudio.sfx("clash"); break;
+      case "FOUND_CITY": case "BUILD_BUILDING": case "BUILD_UNIT": case "IMPROVE_TILE": case "UPGRADE_UNIT": window.HGAudio.sfx("build"); break;
+      case "RESEARCH_TECH": window.HGAudio.sfx("research"); break;
+      case "ESTABLISH_TRADE_ROUTE": window.HGAudio.sfx("coin"); break;
+      case "END_TURN": window.HGAudio.sfx("click"); break;
+      default: break;
+    }
+  }
+  let lastAmbience = null, lastWeatherSound = null;
+  function updateSoundscape(skyWx, tiles) {
+    if (!window.HGAudio || !window.HGAudio.isReady()) return;
+    if (skyWx !== lastWeatherSound) { window.HGAudio.setWeather(skyWx); lastWeatherSound = skyWx; }
+    // Forest ambience when forest dominates what you can actually see.
+    let forest = 0, land = 0;
+    for (const tv of tiles) {
+      if (tv.v !== 2 || tv.t === "sea" || tv.t === "coast") continue;
+      land += 1; if (tv.t === "forest") forest += 1;
+    }
+    const env = land > 0 && forest / land >= 0.28 ? "forest" : "open";
+    if (env !== lastAmbience) { window.HGAudio.setAmbience(env); lastAmbience = env; }
+  }
+
   function apply(action) {
     try {
       const beforeSummary = action.type === "END_TURN" && action.playerId === HUMAN_ID ? snapshotHumanState() : null;
@@ -1251,6 +1280,7 @@
         action.type === "RESOLVE_EVENT" ||
         action.type === "RENAME_CITY";
       state = engine.applyAction(state, action);
+      playActionSfx(action);
       if (!keepSelection) clearSelection();
       else if (selectedCityId && !state.map.cities[selectedCityId]) clearSelection();
       logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
@@ -1314,6 +1344,7 @@
       const ownHere = clickedUnits.filter((u) => u.ownerId === HUMAN_ID);
       if (ownHere.length) {
         // A stack (army): pick the first; clicking the tile again cycles to the next.
+        playSfx("select");
         selectedUnitId = ownHere[0].id;
         selectedCityId = null;
         selectedTileKey = null;
@@ -1849,6 +1880,7 @@
       const region = capTile ? capTile.region : (state.map.regions && state.map.regions[0]);
       skyWx = (region && state.weather.current[region]) || "clear";
     }
+    updateSoundscape(skyWx, tiles);
     const view = { tiles: tiles, sprites: sprites, borders: borders, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx };
     if (pendingRecenter) {
       const home =
@@ -2981,6 +3013,25 @@
       setTimeout(function () { window.dispatchEvent(new Event("resize")); }, 60);
     });
   }
+
+  // Sound on/off. First press also boots the audio engine (browsers need a gesture).
+  const soundBtn = document.getElementById("sound-btn");
+  if (soundBtn) {
+    soundBtn.addEventListener("click", function () {
+      audioInit();
+      const m = window.HGAudio ? window.HGAudio.toggleMuted() : true;
+      soundBtn.textContent = m ? "🔇" : "🔊";
+      soundBtn.title = m ? "Sound off — click for sound" : "Sound on / off";
+    });
+  }
+  // Boot audio on the first gesture anywhere so ambience/music are ready in-game.
+  const bootAudioOnce = function () {
+    audioInit();
+    window.removeEventListener("pointerdown", bootAudioOnce);
+    window.removeEventListener("keydown", bootAudioOnce);
+  };
+  window.addEventListener("pointerdown", bootAudioOnce);
+  window.addEventListener("keydown", bootAudioOnce);
 
   // Glow the Research button when a tech is both available and affordable.
   function updateResearchIndicator() {

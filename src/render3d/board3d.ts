@@ -806,9 +806,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   let curDisc = WEATHER_SKY.clear.disc, curCloud = 0;
   let moodTarget: SkyMood = WEATHER_SKY.clear;
 
-  // Rain/storm: a volume of falling streaks that follows the view, shown only when
-  // a visible region is wet. Storm makes it heavier + darker.
-  const RAIN_N = 1600, RAIN_SPREAD = 70, RAIN_TOP = 42;
+  // Rain/storm: a dense volume of falling STREAKS that follows the view, shown
+  // only when a visible region is wet. Storm makes it heavier + darker. Each drop
+  // is a vertical streak (a tall point sprite) and there are enough of them that
+  // the fall reads as one continuous sheet rather than sparse flickering dots.
+  const RAIN_N = 5000, RAIN_SPREAD = 70, RAIN_TOP = 42;
   const rainArr = new Float32Array(RAIN_N * 3);
   for (let i = 0; i < RAIN_N; i += 1) {
     rainArr[i * 3] = (Math.random() - 0.5) * RAIN_SPREAD;
@@ -817,7 +819,18 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
   const rainGeo = new THREE.BufferGeometry();
   rainGeo.setAttribute("position", new THREE.BufferAttribute(rainArr, 3));
-  const rainMat = new THREE.PointsMaterial({ color: 0xaec4dc, size: 0.16, transparent: true, opacity: 0.55, depthWrite: false });
+  // A vertical streak texture so each "drop" is a thin falling line, not a dot.
+  const rainStreak = (() => {
+    const cv = document.createElement("canvas"); cv.width = 8; cv.height = 32;
+    const g = cv.getContext("2d")!;
+    const grad = g.createLinearGradient(0, 0, 0, 32);
+    grad.addColorStop(0, "rgba(255,255,255,0)");
+    grad.addColorStop(0.5, "rgba(255,255,255,0.9)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad; g.fillRect(3, 0, 2, 32);
+    const t = new THREE.CanvasTexture(cv); t.needsUpdate = true; return t;
+  })();
+  const rainMat = new THREE.PointsMaterial({ map: rainStreak, color: 0xbcd0e4, size: 0.7, transparent: true, opacity: 0.5, depthWrite: false });
   const rain = new THREE.Points(rainGeo, rainMat);
   rain.visible = false;
   scene.add(rain);
