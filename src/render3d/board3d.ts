@@ -1013,7 +1013,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (tv.v === 0) return HIDDEN.clone();
     const jitter = (((tv.q * 928371 + tv.r * 12547) % 17) / 17 - 0.5) * 0.06;
     const c = new THREE.Color(TERRAIN_COLOR[tv.t] ?? 0x808080).offsetHSL(0, 0, jitter);
-    if (tv.o && civColors[tv.o]) c.lerp(new THREE.Color(civColors[tv.o]), 0.17);
+    // Ownership tint. Over WATER it's kept very light — a strong wash of a warm
+    // civ colour (Rome red, Carthage violet) over blue sea reads as purple/pink,
+    // and the coloured border already shows who controls the water.
+    if (tv.o && civColors[tv.o]) {
+      const isWater = tv.t === "sea" || tv.t === "coast";
+      c.lerp(new THREE.Color(civColors[tv.o]), isWater ? 0.05 : 0.17);
+    }
     // Seen-but-not-visible keeps its DISCOVERED terrain colour, only dimmed.
     // Water dims toward a deep BLUE (multiplying it toward black went muddy-purple
     // once the warm ground-light hit the hex sides); land keeps the plain dim.
