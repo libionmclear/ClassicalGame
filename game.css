@@ -1,20 +1,72 @@
 :root {
-  --bg: #0a1626;
-  --panel: #12263f;
-  --panel-2: #1b3557;
-  --line: #2d5384;
-  --text: #e9f2fc;
-  --muted: #97b3d6;
-  --accent: #3f93d8;
-  --gold: #f2cc69;
-  --rome: #e77c3a;
-  --carthage: #56a8e6;
-  /* Aged papyrus palette for the top menu / setup overlay. */
-  --papyrus: #e7d7ac;
-  --papyrus-2: #d8c491;
-  --papyrus-edge: #b79b62;
-  --ink: #3a2a15;
-  --ink-soft: #6a5228;
+  /* ===== HEGEMON design system (UI-SPEC v2 §1): carved stone, bronze, gold, civ ===== */
+  /* ground */
+  --bg: #0d1420;
+  --ground: #0d1420;
+  --panel: #16202f;
+  --panel-2: #1c2938;
+  --line: #2a3648;
+  /* text */
+  --text: #e8e2d4;
+  --parchment: #e8e2d4;
+  --muted: #9aa4b2;
+  --faint: #5f6b7a;
+  /* metals */
+  --gold: #c9a84c;
+  --gold-dim: #c9a84c55;
+  --bronze: #b98a4f;
+  --accent: #5b9bd4;
+  /* semantic resource colors — the HUD teaches them, every panel reuses them */
+  --ok: #8fae5a;
+  --bad: #c05545;
+  --sci: #5b9bd4;
+  --food: #8fae5a;
+  --prod: #b98a4f;
+  --coin: #c9a84c;
+  /* civ accent — the ONLY place civ color floods; set per game on <body data-civ> */
+  --civ: #c0392b;
+  --rome: #c0392b;
+  --carthage: #8e44ad;
+  /* Menu / HUD surfaces were "aged papyrus"; now carved stone. Names kept so the
+     ~40 papyrus references flip to stone (with parchment text / gold accents) at once. */
+  --papyrus: #1c2938;
+  --papyrus-2: #141d2a;
+  --papyrus-edge: #2f3d4f;
+  --ink: #e8e2d4;      /* was dark text on papyrus; now parchment text on stone */
+  --ink-soft: #c9a84c; /* section subheads -> gold */
+  /* type */
+  --display: "Cinzel", Georgia, "Times New Roman", serif;
+  --body: "Spectral", Georgia, serif;
+  /* rhythm */
+  --r: 6px;
+  --r-lg: 10px;
+  --pad: 12px 16px;
+}
+
+/* ===== Civ accent map (UI-SPEC §7.4): <body data-civ> floods --civ ===== */
+body[data-civ="rome"] { --civ:#c0392b; }
+body[data-civ="carthage"] { --civ:#8e44ad; }
+body[data-civ="greece"] { --civ:#2e86de; }
+body[data-civ="egypt"] { --civ:#d4ac0d; }
+body[data-civ="gaul"] { --civ:#27ae60; }
+body[data-civ="parthia"] { --civ:#e67e22; }
+body[data-civ="sparta"] { --civ:#b03a2e; }
+body[data-civ="macedon"] { --civ:#2980b9; }
+body[data-civ="persia"] { --civ:#9b59b6; }
+body[data-civ="han"] { --civ:#cb4335; }
+body[data-civ="maurya"] { --civ:#e29d3e; }
+body[data-civ="scythia"] { --civ:#16a085; }
+
+/* ===== Signature motifs (UI-SPEC §3), pure CSS ===== */
+.meander { height:6px; opacity:.55;
+  background:repeating-linear-gradient(90deg,
+    var(--gold) 0 10px, transparent 10px 14px,
+    var(--gold) 14px 16px, transparent 16px 20px); }
+.rule { width:120px; height:1px; background:var(--gold-dim); margin:16px auto; border:0; }
+.civ-edge { border-left:3px solid var(--civ); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
 
 * {
@@ -28,8 +80,8 @@ html {
 
 body {
   margin: 0;
-  font-family: "Spectral", Georgia, "Times New Roman", serif;
-  background: radial-gradient(circle at 50% 0%, #16304f, var(--bg));
+  font-family: var(--body);
+  background: radial-gradient(circle at 50% -8%, #16233a, var(--bg));
   color: var(--text);
 }
 
@@ -58,20 +110,20 @@ h1, h2, h3, .topbar-brand, .turn-indicator, .menu-head h2 {
   align-items: center;
   margin-bottom: 12px;
   padding: 7px 12px;
-  border-radius: 8px;
-  color: var(--ink);
-  background:
-    linear-gradient(180deg, rgba(255, 250, 235, 0.55), rgba(0, 0, 0, 0.04)),
-    repeating-linear-gradient(90deg, rgba(120, 90, 40, 0.05) 0 3px, rgba(120, 90, 40, 0) 3px 7px),
-    linear-gradient(135deg, var(--papyrus), var(--papyrus-2));
-  border: 1px solid var(--papyrus-edge);
-  box-shadow: 0 2px 0 rgba(120, 90, 40, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+  padding-top: calc(7px + env(safe-area-inset-top));
+  border-radius: var(--r-lg);
+  color: var(--parchment);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
 .topbar-brand {
   font-size: 1.2rem;
   font-weight: 700;
-  color: var(--ink);
+  color: var(--gold);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   margin-right: 4px;
 }
 
@@ -79,17 +131,18 @@ h1, h2, h3, .topbar-brand, .turn-indicator, .menu-head h2 {
   flex: 1 1 auto;
 }
 
-/* Parchment buttons in the bar (override the dark ghost/solid styles). */
+/* Stone secondary buttons in the bar. */
 .topbar button {
-  background: linear-gradient(180deg, #f2e6c4, var(--papyrus-2));
-  color: var(--ink);
-  border: 1px solid var(--papyrus-edge);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  background: var(--panel-2);
+  color: var(--parchment);
+  border: 1px solid var(--line);
+  box-shadow: none;
 }
 
 .topbar button:hover:not(:disabled) {
-  color: var(--ink);
-  filter: brightness(1.04);
+  color: var(--parchment);
+  border-color: var(--gold);
+  filter: brightness(1.05);
 }
 
 .topbar .menu-btn,
@@ -98,8 +151,9 @@ h1, h2, h3, .topbar-brand, .turn-indicator, .menu-head h2 {
 }
 
 .topbar .primary-btn {
-  background: linear-gradient(180deg, #d9b45a, #c69a3c);
-  border-color: #a97f2c;
+  background: linear-gradient(180deg, #e0c063, var(--gold));
+  color: #1a1408;
+  border-color: #a9863a;
 }
 
 .topbar .zoom-btn {
@@ -153,29 +207,50 @@ h1, h2, h3, .topbar-brand, .turn-indicator, .menu-head h2 {
 .map-picker select,
 .map-picker input,
 #map-size-select {
-  background: #f4ead0;
-  color: var(--ink);
-  border: 1px solid var(--papyrus-edge);
-  border-radius: 4px;
+  background: var(--panel);
+  color: var(--parchment);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
   padding: 6px 8px;
   font-family: inherit;
   font-size: 0.9rem;
   cursor: pointer;
 }
 
+/* Base button = secondary: stone fill, line border, parchment text, gold hover.
+   Min 44px hit target is applied on interactive contexts (PWA §4). */
 button {
-  background: var(--accent);
-  color: #f4f9ff;
-  border: 0;
-  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--parchment);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
   padding: 8px 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  transition: border-color 0.14s ease-out, background 0.14s ease-out, filter 0.14s ease-out;
 }
 
 button:hover:not(:disabled) {
-  filter: brightness(1.08);
+  border-color: var(--gold);
+  filter: brightness(1.05);
+}
+
+/* Primary action (one per screen): gold fill, ink text, serif caps. */
+.primary-btn {
+  background: linear-gradient(180deg, #e0c063, var(--gold));
+  color: #1a1408;
+  border: 1px solid #a9863a;
+  border-radius: var(--r);
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.primary-btn:hover:not(:disabled) {
+  border-color: #a9863a;
+  filter: brightness(1.06);
 }
 
 .status-panel {
@@ -234,7 +309,10 @@ button:hover:not(:disabled) {
 }
 
 .res .res-ico {
-  font-size: 0.95rem;
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+  color: var(--muted);
 }
 
 .res .res-val {
@@ -260,9 +338,9 @@ button:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: #16283f;
-  border: 1px solid #26466e;
-  border-radius: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   padding: 2px 8px;
 }
 
@@ -394,20 +472,26 @@ button:hover:not(:disabled) {
 /* ===== Selection title ===== */
 .selection-title {
   margin: 0 0 10px;
+  font-family: var(--display);
   font-size: 1.05rem;
   line-height: 1.3;
+  letter-spacing: 0.06em;
+  color: var(--parchment);
 }
 
 .selection-title .sel-sub {
   display: block;
-  font-size: 0.78rem;
+  font-family: var(--body);
+  font-size: 0.72rem;
   font-weight: 400;
-  color: var(--muted);
-  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  margin-top: 3px;
 }
 
 .heal-note {
-  color: #86d98a;
+  color: var(--ok);
   font-weight: 600;
 }
 
@@ -898,9 +982,10 @@ button:hover:not(:disabled) {
   width: 270px;
   overflow-y: auto;
   font-size: 0.82rem;
-  background: rgba(14, 26, 44, 0.97);
-  border: 1px solid #33608f;
-  border-radius: 10px;
+  background: rgba(13, 20, 32, 0.97);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--civ);
+  border-radius: var(--r-lg);
   padding: 8px 11px 12px;
   box-shadow: -8px 0 34px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(2px);
@@ -919,6 +1004,7 @@ button:hover:not(:disabled) {
   margin: 8px 0 6px;
 }
 
+/* Text tabs with a 2px gold underline on active (UI-SPEC §4) — no boxes. */
 .cp-tab {
   flex: 1 1 50%;
   display: inline-flex;
@@ -928,17 +1014,23 @@ button:hover:not(:disabled) {
   padding: 7px 6px;
   font-size: 0.82rem;
   font-weight: 700;
-  background: #16324f;
+  background: transparent;
   color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
 }
 
+.cp-tab:hover:not(.active) {
+  color: var(--parchment);
+  filter: none;
+}
+
 .cp-tab.active {
-  background: var(--accent);
-  color: #f4f9ff;
-  border-color: var(--accent);
+  background: transparent;
+  color: var(--parchment);
+  border-bottom-color: var(--gold);
 }
 
 .cp-tab span {
@@ -966,7 +1058,7 @@ button:hover:not(:disabled) {
   gap: 8px;
   position: sticky;
   top: 0;
-  background: rgba(14, 26, 44, 0.97);
+  background: rgba(13, 20, 32, 0.97);
   padding-top: 2px;
   margin: 0 -4px 2px;
   padding-left: 4px;
@@ -979,16 +1071,17 @@ button:hover:not(:disabled) {
   height: 26px;
   padding: 0;
   line-height: 1;
-  border-radius: 6px;
-  background: #21395a;
-  border: 1px solid #33608f;
-  color: #cfe0f5;
+  border-radius: var(--r);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
   cursor: pointer;
 }
 
 .cp-close:hover {
-  background: #2c4a72;
-  color: #fff;
+  background: var(--panel-2);
+  border-color: var(--gold);
+  color: var(--parchment);
 }
 
 .control-panel h2 {
@@ -1064,16 +1157,18 @@ button:hover:not(:disabled) {
 .res-bar.hud-tl {
   display: flex;
   gap: 6px;
-  background: rgba(10, 20, 36, 0.82);
-  border: 1px solid #2a4a70;
-  border-radius: 8px;
+  background: rgba(13, 20, 32, 0.86);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
   padding: 5px 8px;
+  margin-top: env(safe-area-inset-top);
+  margin-left: env(safe-area-inset-left);
 }
 
 .res-bar.hud-tl .res {
   display: flex;
-  align-items: baseline;
-  gap: 3px;
+  align-items: center;
+  gap: 4px;
   font-size: 0.82rem;
 }
 
@@ -1092,9 +1187,18 @@ button:hover:not(:disabled) {
 
 /* Food (or any stat) in deficit — flag it red. */
 .res-bar.hud-tl .res.res-warn .res-val {
-  color: #ff6b6b;
+  color: var(--bad);
   font-weight: 700;
 }
+
+/* Numbers + icon wear their resource color (UI-SPEC §2). JS tags each chip r-<key>. */
+.res.r-food .res-val, .res.r-food .res-ico { color: var(--food); }
+.res.r-production .res-val, .res.r-production .res-ico { color: var(--prod); }
+.res.r-gold .res-val, .res.r-gold .res-ico { color: var(--coin); }
+.res.r-science .res-val, .res.r-science .res-ico { color: var(--sci); }
+.res.r-pop .res-ico { color: var(--muted); }
+.res.r-upkeep .res-ico { color: var(--bronze); }
+.res.res-warn .res-val, .res.res-warn .res-ico { color: var(--bad); }
 
 /* ===== Player profile ===== */
 .profile-body {
@@ -1497,9 +1601,9 @@ button:hover:not(:disabled) {
 }
 
 .standings-panel {
-  background: rgba(10, 20, 36, 0.95);
-  border: 1px solid #2a4a70;
-  border-radius: 8px;
+  background: rgba(13, 20, 32, 0.96);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
   padding: 8px 10px;
   min-width: 200px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
@@ -1533,7 +1637,7 @@ button:hover:not(:disabled) {
 #clear-selection-btn {
   width: 100%;
   margin-bottom: 8px;
-  background: #2d5384;
+  background: var(--panel-2);
   color: var(--text);
 }
 
@@ -1549,14 +1653,19 @@ button:hover:not(:disabled) {
 }
 
 .panel-group {
-  border-top: 1px solid #26466e;
+  border-top: 1px solid var(--line);
   padding-top: 8px;
   margin-top: 8px;
 }
 
 .panel-group h3 {
   margin: 0 0 6px;
-  font-size: 0.95rem;
+  font-family: var(--display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--gold);
 }
 
 /* Collapsible sections (click the summary to open) */
@@ -2010,7 +2119,7 @@ details.panel-collapse > summary {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(12, 9, 7, 0.72);
+  background: rgba(6, 9, 14, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2019,16 +2128,35 @@ details.panel-collapse > summary {
 
 .result-card {
   width: min(420px, 100%);
-  background: #2b1f17;
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 22px;
   text-align: center;
 }
 
 .result-card h2 {
   margin-top: 0;
+  font-family: var(--display);
   font-size: 1.6rem;
+  letter-spacing: 0.06em;
+  color: var(--parchment);
+}
+
+/* Events & pack opening are theatrical — a gold meander crowns them (§4). */
+.event-card, .hand-card {
+  position: relative;
+  overflow: hidden;
+}
+.event-card::before, .hand-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  opacity: 0.55;
+  background: repeating-linear-gradient(90deg,
+    var(--gold) 0 10px, transparent 10px 14px,
+    var(--gold) 14px 16px, transparent 16px 20px);
 }
 
 /* ===== Campaign briefing ===== */
@@ -2036,7 +2164,7 @@ details.panel-collapse > summary {
   width: min(560px, 100%);
   max-height: 88vh;
   text-align: left;
-  background: #241a13;
+  background: var(--panel);
   display: flex;
   flex-direction: column;
 }
@@ -2092,11 +2220,11 @@ details.panel-collapse > summary {
 .brief-didyouknow {
   font-size: 0.84rem;
   line-height: 1.45;
-  background: #16283f;
-  border: 1px solid #26466e;
-  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
   padding: 10px 12px;
-  color: #cfe0f2;
+  color: var(--muted);
   margin-bottom: 16px;
 }
 
@@ -2378,13 +2506,13 @@ details.panel-collapse > summary {
 
 .turn-indicator {
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: 14px;
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--ink);
-  background: linear-gradient(135deg, var(--papyrus), var(--papyrus-2));
-  border: 1px solid var(--papyrus-edge);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.4);
+  color: var(--parchment);
+  background: linear-gradient(135deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--civ);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.4);
   white-space: nowrap;
 }
 
@@ -2403,7 +2531,7 @@ details.panel-collapse > summary {
 }
 
 .turn-indicator .ti-move.ti-you {
-  color: #2f7d20;
+  color: var(--ok);
   opacity: 1;
 }
 
@@ -2443,31 +2571,45 @@ details.panel-collapse > summary {
 }
 
 .menu-card {
+  position: relative;
   width: min(560px, 100%);
-  color: var(--ink);
-  background:
-    linear-gradient(180deg, rgba(255, 250, 235, 0.5), rgba(0, 0, 0, 0.03)),
-    repeating-linear-gradient(90deg, rgba(120, 90, 40, 0.045) 0 4px, rgba(120, 90, 40, 0) 4px 9px),
-    linear-gradient(135deg, var(--papyrus), var(--papyrus-2));
-  border: 1px solid var(--papyrus-edge);
-  border-radius: 12px;
-  padding: 16px 18px 18px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  color: var(--parchment);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 18px 18px 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+/* Gold meander crowns the full-screen menu (§3 restraint: full screens only). */
+.menu-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  opacity: 0.55;
+  background: repeating-linear-gradient(90deg,
+    var(--gold) 0 10px, transparent 10px 14px,
+    var(--gold) 14px 16px, transparent 16px 20px);
 }
 
 .menu-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--papyrus-edge);
-  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
   margin-bottom: 12px;
 }
 
 .menu-head h2 {
   margin: 0;
+  font-family: var(--display);
   font-size: 1.5rem;
-  color: var(--ink);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
 }
 
 .menu-head .cp-close {
@@ -2497,11 +2639,11 @@ details.panel-collapse > summary {
 
 .primary-btn.menu-wide {
   width: 100%;
-  background: linear-gradient(180deg, #d9b45a, #c69a3c);
-  color: var(--ink);
-  border: 1px solid #a97f2c;
+  background: linear-gradient(180deg, #e0c063, var(--gold));
+  color: #1a1408;
+  border: 1px solid #a9863a;
   font-size: 1.02rem;
-  padding: 10px 12px;
+  padding: 12px;
 }
 
 .menu-actions {
@@ -2512,10 +2654,10 @@ details.panel-collapse > summary {
 
 .menu-actions .ghost-btn {
   flex: 1 1 40%;
-  background: #f2e6c4;
-  color: var(--ink);
-  border: 1px solid var(--papyrus-edge);
-  padding: 9px 10px;
+  background: var(--panel-2);
+  color: var(--parchment);
+  border: 1px solid var(--line);
+  padding: 10px;
 }
 
 .menu-actions a.ghost-btn {
@@ -2529,8 +2671,9 @@ details.panel-collapse > summary {
 }
 
 .menu-actions .ghost-btn:hover:not(:disabled) {
-  color: var(--ink);
-  filter: brightness(1.04);
+  color: var(--parchment);
+  border-color: var(--gold);
+  filter: brightness(1.05);
 }
 
 .rename-btn {
@@ -2682,23 +2825,36 @@ details.panel-collapse > summary {
 }
 
 .auth-card {
+  position: relative;
   width: min(380px, 100%);
-  color: var(--ink);
-  background:
-    linear-gradient(180deg, rgba(255, 250, 235, 0.5), rgba(0, 0, 0, 0.03)),
-    linear-gradient(135deg, var(--papyrus), var(--papyrus-2));
-  border: 1px solid var(--papyrus-edge);
-  border-radius: 12px;
-  padding: 22px 22px 20px;
+  color: var(--parchment);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 26px 22px 20px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  opacity: 0.55;
+  background: repeating-linear-gradient(90deg,
+    var(--gold) 0 10px, transparent 10px 14px,
+    var(--gold) 14px 16px, transparent 16px 20px);
 }
 
 .auth-brand {
-  font-family: "Cinzel", serif;
+  font-family: var(--display);
   font-size: 1.8rem;
   font-weight: 700;
   text-align: center;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
 }
 
 .auth-sub {
@@ -2720,19 +2876,24 @@ details.panel-collapse > summary {
 }
 
 .auth-field input {
-  background: #f4ead0;
-  color: var(--ink);
-  border: 1px solid var(--papyrus-edge);
-  border-radius: 5px;
+  background: var(--panel);
+  color: var(--parchment);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
   padding: 9px 10px;
-  font-family: "Spectral", serif;
+  font-family: var(--body);
   font-size: 1rem;
   text-transform: none;
   letter-spacing: normal;
 }
 
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
 .auth-err {
-  color: #9b2d1f;
+  color: var(--bad);
   font-size: 0.85rem;
   min-height: 1.1em;
   margin-bottom: 6px;
@@ -2749,7 +2910,7 @@ details.panel-collapse > summary {
 .account-line .auth-link {
   background: transparent;
   border: 0;
-  color: #8a5a1e;
+  color: var(--gold);
   font-weight: 700;
   cursor: pointer;
   padding: 0;
@@ -2829,10 +2990,10 @@ details.panel-collapse > summary {
   border-radius: 50%;
   font-size: 0.85rem;
   line-height: 1;
-  color: var(--ink);
-  background: linear-gradient(180deg, #f2e6c4, var(--papyrus-2));
+  color: var(--gold);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
   border: 2px solid var(--gold);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   cursor: pointer;
   animation: udt-pulse 1.5s ease-out infinite;
 }

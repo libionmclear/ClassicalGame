@@ -283,6 +283,29 @@ Signed in as admin: **☰ Menu → account → 🖉 Map editor** — a terrain p
 click‑paint tiles on the live map, and **Export atlas** to dump the map as an
 offset ASCII grid to paste into a scenario file.
 
+### UI design system (`docs/HEGEMON-UI-SPEC.md`, Phase 6)
+The DOM client (`game.html`/`game.css`/`game.js`) uses one design language:
+**carved stone, bronze, gold, civ colour** on an ink ground — the old "aged
+papyrus" menu/HUD skin is gone. Tokens live in `:root` (`--ink/--panel/--panel-2/
+--line`, `--parchment/--muted/--faint`, `--gold/--gold-dim/--bronze`, semantic
+`--ok/--bad/--sci/--food/--prod/--coin`, `--civ`, `--display`/`--body`, `--r/--r-lg`).
+**Key lever:** the ~40 legacy `--papyrus*`/`--ink`/`--ink-soft` references were
+*repointed* (papyrus→stone, ink→parchment text, ink‑soft→gold) so every old
+surface flipped at once; the few hardcoded light gradients were patched by hand.
+**Civ accent:** `<body data-civ="…">` (set each frame in `render()`) maps to `--civ`
+via a 12‑civ CSS block; it floods the turn‑pill border and the context‑panel edge.
+**Icons:** an inline‑SVG sprite in `game.html` (`#ic-wheat/hammer/coin/flask/shield/
+people/laurel`, `currentColor`) replaces the resource‑HUD emoji; `renderHud` tags
+each chip `r-<key>` so numbers+icon wear their resource colour. Motifs (`.meander`,
+`.rule`, `.civ-edge`) are pure CSS; the gold meander crowns full‑screen surfaces
+(auth, menu) and theatrical modals (event/hand) only. Buttons: base = stone
+secondary (gold hover border), `.primary-btn` = gold fill / ink text / serif caps
+(one per screen). Tabs are text + 2px gold underline. `prefers-reduced-motion` and
+`env(safe-area-inset-*)` are honoured. **Deferred (net‑new IA, not restyle):** a
+distinct pause menu (Resume/Save/Load/Concede + ESC toggle) and Continue/scenario
+tiles per §5, the slim bottom‑centre unit **selection footer** (still the right‑side
+panel), a dedicated settings panel, and emoji→SVG beyond the HUD.
+
 ---
 
 ## 6. Data reference — techs
@@ -342,6 +365,20 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **HEGEMON v2 — PHASE 6 (Menu/HUD restyle).** Per `docs/HEGEMON-UI-SPEC.md`,
+  migrated the whole DOM client to one **carved‑stone / bronze / gold / civ‑colour**
+  design language (was "aged papyrus"): added the §1 token system to `:root`,
+  repointed the ~40 legacy `--papyrus*`/`--ink`/`--ink-soft` refs so every surface
+  flipped at once, and hand‑patched the few hardcoded light gradients. Restyled
+  the top bar, resource HUD (SVG icon sprite + resource‑coloured chips), turn pill
+  (civ border), End‑Turn (gold serif), the right‑side city/unit context panel
+  (civ‑edge, gold section heads, gold‑underline text tabs), the menu/setup overlay,
+  auth card, briefing, and all modals (event/hand get a gold meander crown). Added
+  `<body data-civ>` (§7.4, set in `render()`), the `.meander/.rule/.civ-edge` motifs,
+  `prefers-reduced-motion`, and `env(safe-area-inset-*)`. No engine change — 123/123
+  tests, typecheck clean, screenshot smoke clean (auth/menu/HUD/panel/research/hand).
+  See §5 "UI design system" for the deferred net‑new IA (pause menu, unit footer,
+  settings panel, Continue/scenario tiles).
 - **HEGEMON v2 — PHASE 5 (Stability, phase 1).** Per `HEGEMON-VISUALS-v2.md` §3:
   added a **per‑city stability stat** (`computeCityStability`, clamped −5..+5).
   **Sources wired:** buildings (temple/amphitheater/forum +1 each), owner techs

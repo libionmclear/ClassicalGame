@@ -2382,6 +2382,10 @@
     const current = state.players[state.currentPlayerIndex];
     const victory = engine.getVictoryStatus(state);
 
+    // Flood the civ accent (UI-SPEC §7.4): <body data-civ> maps to --civ, used by
+    // the turn pill border, the context-panel edge, and the tech-tree band.
+    if (document.body.dataset.civ !== HUMAN_ID) document.body.dataset.civ = HUMAN_ID;
+
     try {
       const activeColor = CIV_COLORS[current.id] || "#ccc";
       const turnLabel = state.turnLimit
@@ -2641,15 +2645,17 @@
       const d = engine.UNITS && engine.UNITS[u.type];
       if (d) upkeep += d.upkeep || 0;
     }
+    // Icons come from the inline-SVG sprite (UI-SPEC §7.3); `key` drives the
+    // resource color (§2 — the HUD teaches the color code, panels reuse it).
     const resources = [
-      { ico: "👥", val: pop, lbl: "Populus", delta: null },
-      { ico: "🌾", val: (netFood >= 0 ? "+" : "") + netFood + "/t", lbl: "Food", delta: null, warn: netFood < 0 },
+      { ico: "ic-people", key: "pop", val: pop, lbl: "Populus", delta: null },
+      { ico: "ic-wheat", key: "food", val: (netFood >= 0 ? "+" : "") + netFood + "/t", lbl: "Food", delta: null, warn: netFood < 0 },
       // Labor is per-city, not a shared pool — show the empire's output RATE, not
       // a banked total (which read as spendable and confused players).
-      { ico: "⚒️", val: (inc.production || 0) + "/t", lbl: "Labor", delta: null },
-      { ico: "🪙", val: rome.gold, lbl: "Denarii", delta: inc.gold },
-      { ico: "🛡️", val: "−" + upkeep + "/t", lbl: "Upkeep", delta: null, warn: upkeep > 0 && (inc.gold || 0) < 0, title: "Army upkeep — gold each unit costs to maintain per turn (" + upkeep + " total)." },
-      { ico: "🧪", val: rome.science, lbl: "Scientia", delta: inc.science }
+      { ico: "ic-hammer", key: "production", val: (inc.production || 0) + "/t", lbl: "Labor", delta: null },
+      { ico: "ic-coin", key: "gold", val: rome.gold, lbl: "Denarii", delta: inc.gold },
+      { ico: "ic-shield", key: "upkeep", val: "−" + upkeep + "/t", lbl: "Upkeep", delta: null, warn: upkeep > 0 && (inc.gold || 0) < 0, title: "Army upkeep — gold each unit costs to maintain per turn (" + upkeep + " total)." },
+      { ico: "ic-flask", key: "science", val: rome.science, lbl: "Scientia", delta: inc.science }
     ];
     resourceBarEl.innerHTML = resources
       .map(function (r) {
@@ -2658,8 +2664,9 @@
             ? '<span class="res-delta">(' + (r.delta > 0 ? "+" : "") + r.delta + ")</span>"
             : "";
         return (
-          '<span class="res' + (r.warn ? " res-warn" : "") + '" title="' + (RES_TITLES[r.lbl] || "") + '"><span class="res-ico">' + r.ico +
-          '</span><span class="res-val">' + r.val + "</span>" + delta +
+          '<span class="res r-' + r.key + (r.warn ? " res-warn" : "") + '" title="' + (RES_TITLES[r.lbl] || "") +
+          '"><svg class="res-ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#' + r.ico + '"/></svg>' +
+          '<span class="res-val">' + r.val + "</span>" + delta +
           '<span class="res-lbl">' + r.lbl + "</span></span>"
         );
       })
