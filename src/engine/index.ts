@@ -11,7 +11,8 @@ import {
   IMPROVEMENTS,
   RESOURCES,
   BUILD_RESOURCE,
-  BUILD_DISCOUNT
+  BUILD_DISCOUNT,
+  TECH_CITY_YIELD
 } from "./data";
 import { distance, edgeKey, keyOf, neighborsOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -208,8 +209,11 @@ function cityAt(state: GameState, cityId: string): City {
   return city;
 }
 
-function movementBudgetFor(unit: Unit): number {
-  return UNITS[unit.type].movement;
+function movementBudgetFor(state: GameState, unit: Unit): number {
+  const def = UNITS[unit.type];
+  // Roads & Logistics — an imperial road network: land units march one tile more.
+  const logistics = def.domain === "land" && (state.playersById[unit.ownerId]?.techs.includes("roads-logistics") ?? false) ? 1 : 0;
+  return def.movement + logistics;
 }
 
 function applyMovement(state: GameState, action: MoveUnitAction): void {
@@ -373,6 +377,22 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
     attackMult += combined.bonus;
     modifiers.push(combined.label as string);
   }
+  // Civilisation attack doctrines.
+  const atkOwner = state.playersById[attacker.ownerId];
+  if (atkOwner) {
+    if (atkOwner.techs.includes("furor") && (atkCat === "heavy" || atkCat === "infantry")) {
+      attackMult += 0.35;
+      modifiers.push("Furor charge +35%");
+    }
+    if (atkOwner.techs.includes("thalassocracy") && attackerDef.domain === "naval") {
+      attackMult += 0.3;
+      modifiers.push("Thalassocracy +30%");
+    }
+    if (atkOwner.techs.includes("parthian-shot") && attackerDef.mounted && attackerDef.range > 1) {
+      attackMult += 0.2;
+      modifiers.push("Parthian shot +20%");
+    }
+  }
 
   const terrainBonus = defenderTerrainBonus(state, defender);
   let defenseMult = terrainBonus + veterancyMultiplier(defender.veterancy);
@@ -389,6 +409,17 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
     const shell = atkCat === "ranged" || atkCat === "siege" ? 0.5 : 0.2;
     defenseMult += shell;
     modifiers.push(`Testudo ${pct(shell)}`);
+  }
+  // Greece's phalanx wall — spearmen hold an unbreakable line.
+  if (defOwner && defOwner.techs.includes("phalanx-wall") && defCat === "spear") {
+    const wall = atkCat === "mounted" ? 0.6 : 0.35;
+    defenseMult += wall;
+    modifiers.push(`Phalanx wall ${pct(wall)}`);
+  }
+  // Carthage's thalassocracy — her warships are hard to sink.
+  if (defOwner && defOwner.techs.includes("thalassocracy") && defenderDef.domain === "naval") {
+    defenseMult += 0.3;
+    modifiers.push("Thalassocracy +30%");
   }
 
   const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
@@ -411,6 +442,10 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   if (rangedNoRetaliation) {
     damageToAttacker = 0;
     modifiers.push("Ranged — no retaliation");
+  } else if (atkOwner && atkOwner.techs.includes("parthian-shot") && attackerDef.mounted && attackerDef.range > 1 && damageToAttacker > 0) {
+    // The Parthian shot: horse archers wheel away before the enemy can strike back.
+    damageToAttacker = 0;
+    modifiers.push("Parthian shot — no retaliation");
   }
 
   return {
@@ -459,7 +494,11 @@ function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTA
   const preview = computeCombatPreview(state, attacker.id, defender.id);
   attacker.hp = preview.attackerRemainingHp;
   defender.hp = preview.defenderRemainingHp;
-  attacker.movementRemaining = 0;
+  // The Parthian shot: a mounted archer keeps half its movement to wheel away after
+  // loosing; everyone else spends the turn on the attack.
+  const atkDefC = UNITS[attacker.type];
+  const parthian = !!atkDefC.mounted && atkDefC.range > 1 && (state.playersById[attacker.ownerId]?.techs.includes("parthian-shot") ?? false);
+  attacker.movementRemaining = parthian ? Math.max(1, Math.floor(atkDefC.movement / 2)) : 0;
 
   const defenderPos: Coord = { q: defender.position.q, r: defender.position.r };
 
@@ -569,7 +608,7 @@ function applyResearch(state: GameState, action: ResearchTechAction): void {
     throw new Error(`Cannot research tech ${action.techId}`);
   }
 
-  const cost = scaledResearchCost(state, action.techId);
+  const cost = scaledResearchCost(state, action.techId, action.playerId);
   if (player.science < cost) {
     throw new Error(`Insufficient science for ${action.techId}: needs ${cost}, has ${player.science}`);
   }
@@ -602,7 +641,8 @@ export function researchCost(techId: string): number {
   const tech = TECHS[techId];
   if (tech && typeof tech.cost === "number") return tech.cost;
   const age = tech ? tech.age : 1;
-  return age === 1 ? 18 : age === 2 ? 36 : 60;
+  // Steeper by age so a full tree is a real, deepening commitment, not a formality.
+  return age === 1 ? 20 : age === 2 ? 46 : 82;
 }
 
 // Bigger maps take proportionally longer to develop: research + build costs scale
@@ -613,9 +653,12 @@ export function mapCostScale(width: number, height: number): number {
   const area = Math.max(1, (width || 0) * (height || 0));
   return Math.min(3, Math.max(1, Math.round(Math.sqrt(area / REFERENCE_AREA) * 100) / 100));
 }
-// Research cost after the map-size scaling.
-export function scaledResearchCost(state: GameState, techId: string): number {
-  return Math.max(1, Math.round(researchCost(techId) * (state.costScale || 1)));
+// Research cost after the map-size scaling. Rhetoric — schools of oratory and
+// argument — makes a people learn faster, so their research costs 15% less.
+export function scaledResearchCost(state: GameState, techId: string, playerId?: string): number {
+  let cost = researchCost(techId) * (state.costScale || 1);
+  if (playerId && state.playersById[playerId]?.techs.includes("rhetoric")) cost *= 0.85;
+  return Math.max(1, Math.round(cost));
 }
 
 export function computeCityYield(
@@ -637,6 +680,18 @@ export function computeCityYield(
     gold: terrainYield.gold + Math.floor(pop / 2) + 1,
     science: 2 + pop + writingBonus
   };
+
+  // Every research counts: certain techs add a flat per-city yield each turn.
+  if (owner) {
+    for (const techId of Object.keys(TECH_CITY_YIELD)) {
+      if (!owner.techs.includes(techId)) continue;
+      const y = TECH_CITY_YIELD[techId];
+      yields.food += y.food ?? 0;
+      yields.production += y.production ?? 0;
+      yields.gold += y.gold ?? 0;
+      yields.science += y.science ?? 0;
+    }
+  }
 
   for (const buildingId of city.buildings ?? []) {
     const b = BUILDINGS[buildingId];
@@ -743,7 +798,10 @@ export function buildDiscount(state: GameState, ownerId: string, id: string): nu
 export function effectiveItemCost(state: GameState, ownerId: string, id: string): number {
   const base = productionItemCost(id);
   if (!Number.isFinite(base)) return base;
-  return Math.max(1, Math.round(base * buildDiscount(state, ownerId, id) * (state.costScale || 1)));
+  let mult = buildDiscount(state, ownerId, id) * (state.costScale || 1);
+  // Carthage's thalassocracy — her shipyards turn out warships 25% cheaper.
+  if (UNITS[id]?.domain === "naval" && (state.playersById[ownerId]?.techs.includes("thalassocracy") ?? false)) mult *= 0.75;
+  return Math.max(1, Math.round(base * mult));
 }
 
 // Food eaten by an empire's standing army each turn: 1 per non-civilian unit,
@@ -1041,13 +1099,15 @@ export const IDLE_PROD_RESERVE = 20;
 // or has already moved/fought). Location decides the rate.
 export function restHealAmount(state: GameState, unit: Unit): number {
   if (unit.hp >= unit.maxHp) return 0;
-  if (unit.movementRemaining < movementBudgetFor(unit)) return 0; // it moved or fought
+  if (unit.movementRemaining < movementBudgetFor(state, unit)) return 0; // it moved or fought
   const cityHere = Object.values(state.map.cities).find(
     (c) => c.position.q === unit.position.q && c.position.r === unit.position.r
   );
-  if (cityHere && cityHere.ownerId === unit.ownerId) return HEAL_IN_CITY;
+  // Medicine — field surgeons and better care mend wounds faster everywhere.
+  const medic = state.playersById[unit.ownerId]?.techs.includes("medicine") ? 3 : 0;
+  if (cityHere && cityHere.ownerId === unit.ownerId) return HEAL_IN_CITY + medic;
   const claim = claimingCity(state, unit.position);
-  return claim && claim.ownerId === unit.ownerId ? HEAL_IN_TERRITORY : HEAL_IN_FIELD;
+  return (claim && claim.ownerId === unit.ownerId ? HEAL_IN_TERRITORY : HEAL_IN_FIELD) + medic;
 }
 
 function applyEndTurn(state: GameState, action: EndTurnAction): void {
@@ -1192,7 +1252,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
     const unit = state.map.units[unitId];
     if (!unit) continue;
 
-    unit.movementRemaining = movementBudgetFor(unit);
+    unit.movementRemaining = movementBudgetFor(state, unit);
 
     const unitTile = tileAt(state, unit.position);
     if (unit.type === "trireme" && unitTile.terrain === "sea" && state.weather.current[unitTile.region] === "storm") {

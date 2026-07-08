@@ -18,7 +18,9 @@ import {
   playerFoodUpkeep,
   productionItemCost,
   replayActions,
+  restHealAmount,
   rushProductionCost,
+  scaledResearchCost,
   tradeRouteIncome
 } from "../src/engine/index";
 
@@ -720,6 +722,67 @@ test("roads need the Masonry tech to lay", () => {
     () => applyAction(s, { type: "IMPROVE_TILE", playerId: "a", cityId: "inland", tileKey: "1,0", improvement: "road" }),
     /Masonry/
   );
+});
+
+test("Parthia's Parthian shot: no retaliation and the horse archer keeps moving", () => {
+  const tiles: Record<string, { terrain: string; region: string }> = {};
+  for (let r = 0; r < 2; r += 1) for (let q = 0; q < 4; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "r" };
+  let s = createInitialGameState({
+    seed: "parthia",
+    players: [
+      { id: "a", civ: "Parthia", techs: ["horseback-riding", "horse-archery", "parthian-shot"] },
+      { id: "b", civ: "Rome", production: 0 }
+    ],
+    map: {
+      width: 4, height: 2, regions: ["r"], tiles: tiles as never,
+      cities: { ca: { id: "ca", ownerId: "a", position: { q: 3, r: 1 }, population: 2 }, cb: { id: "cb", ownerId: "b", position: { q: 3, r: 0 }, population: 2 } },
+      units: {
+        ha: { id: "ha", type: "horse-archer", ownerId: "a", position: { q: 0, r: 0 } } as never,
+        foe: { id: "foe", type: "warrior", ownerId: "b", position: { q: 1, r: 0 } } as never
+      }
+    }
+  });
+  const preview = computeCombatPreview(s, "ha", "foe"); // adjacent target
+  assert.equal(preview.damageToAttacker, 0, "the enemy can't strike back at the Parthian shot");
+  s = applyAction(s, { type: "ATTACK", playerId: "a", attackerId: "ha", defenderId: "foe" });
+  assert.ok((s.map.units.ha?.movementRemaining ?? 0) > 0, "the horse archer keeps movement to wheel away");
+});
+
+test("techs add real per-city yield (research always counts)", () => {
+  const s = buildState();
+  const base = computeCityYield(s, "c1");
+  s.playersById.p1.techs.push("philosophy"); // +1 science/city
+  assert.equal(computeCityYield(s, "c1").science, base.science + 1);
+  s.playersById.p1.techs.push("nile-bureaucracy"); // +1 food, +1 science
+  const after = computeCityYield(s, "c1");
+  assert.equal(after.food, base.food + 1);
+  assert.equal(after.science, base.science + 2);
+});
+
+test("Rhetoric makes research cheaper", () => {
+  const s = buildState();
+  const before = scaledResearchCost(s, "mathematics", "p1");
+  s.playersById.p1.techs.push("rhetoric");
+  const after = scaledResearchCost(s, "mathematics", "p1");
+  assert.ok(after < before, "rhetoric discounts research");
+});
+
+test("Medicine mends wounds faster", () => {
+  const s = buildState();
+  const unit = s.map.units.u1;
+  unit.maxHp = 20; unit.hp = 5;
+  const before = restHealAmount(s, unit);
+  s.playersById.p1.techs.push("medicine");
+  assert.ok(restHealAmount(s, unit) > before, "medicine heals more per turn");
+});
+
+test("Gaul's Furor sharpens the charge", () => {
+  const s = buildState();
+  const before = computeCombatPreview(s, "u1", "u3"); // p1 warrior (infantry) attacks
+  s.playersById.p1.techs.push("furor");
+  const after = computeCombatPreview(s, "u1", "u3");
+  assert.ok(after.damageToDefender > before.damageToDefender, "furor hits harder");
+  assert.ok((after.modifiers || []).some((m) => /Furor/.test(m)));
 });
 
 test("Rome's Testudo shields infantry from missiles", () => {

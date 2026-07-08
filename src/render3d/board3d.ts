@@ -796,6 +796,20 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
   scene.add(cloudDeck);
 
+  // A low GROUND MIST for fog weather — wide, soft, near-white sheets drifting just
+  // above the surface so fog reads as more than a grey sky.
+  const mistTex = radialTexture(214, 222, 226, 0.5);
+  const mistDeck = new THREE.Group();
+  for (let i = 0; i < 12; i += 1) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0, depthWrite: false, depthTest: false, color: 0xd2dade }));
+    const a = (i / 12) * Math.PI * 2;
+    m.position.set(Math.cos(a) * (16 + (i % 4) * 12), 1.3 + (i % 3) * 0.6, Math.sin(a) * (16 + (i % 3) * 12));
+    const s = 30 + (i % 4) * 10; m.scale.set(s, s * 0.4, 1);
+    mistDeck.add(m);
+  }
+  scene.add(mistDeck);
+  let curMist = 0, lightningT = 4, lightningFlash = 0;
+
   // Per-weather scene mood. Colours are lerped toward these each frame so weather
   // transitions glide rather than snap.
   interface SkyMood { top: number; bottom: number; fog: number; fogNear: number; fogFar: number; sun: number; sunI: number; ambI: number; hemiI: number; sea: number; disc: number; cloud: number; }
@@ -816,6 +830,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   let curFogNear = WEATHER_SKY.clear.fogNear, curFogFar = WEATHER_SKY.clear.fogFar;
   let curDisc = WEATHER_SKY.clear.disc, curCloud = 0;
   let moodTarget: SkyMood = WEATHER_SKY.clear;
+  let moodName = "clear";
 
   // Rain/storm: a dense volume of falling STREAKS that follows the view, shown
   // only when a visible region is wet. Storm makes it heavier + darker. Each drop
@@ -1484,6 +1499,26 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       if ((c as THREE.Sprite).position.x > 110) (c as THREE.Sprite).position.x -= 220;
       ((c as THREE.Sprite).material as THREE.SpriteMaterial).opacity = curCloud * 0.75;
     }
+    // Ground mist for fog weather.
+    curMist += ((moodName === "fog" ? 0.6 : 0) - curMist) * kw;
+    mistDeck.visible = curMist > 0.02;
+    for (const m of mistDeck.children) {
+      (m as THREE.Sprite).position.x += dt * 0.6;
+      if ((m as THREE.Sprite).position.x > 80) (m as THREE.Sprite).position.x -= 160;
+      ((m as THREE.Sprite).material as THREE.SpriteMaterial).opacity = curMist;
+    }
+    // Storm lightning: an occasional bright flash across the whole scene.
+    if (moodName === "storm") {
+      lightningT -= dt;
+      if (lightningT <= 0) { lightningFlash = 1; lightningT = 3 + Math.random() * 7; }
+    }
+    if (lightningFlash > 0.001) {
+      lightningFlash = Math.max(0, lightningFlash - dt * 4);
+      const boost = lightningFlash * lightningFlash; // sharp falloff
+      ambLight.intensity = curAmbI + boost * 1.8;
+      sun.intensity = curSunI + boost * 1.4;
+      skyMat.uniforms.topColor.value.copy(skyTopC).lerp(new THREE.Color(0xe6ecf2), boost);
+    }
     composer.render();
     requestAnimationFrame(loop);
   };
@@ -1520,7 +1555,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       rainMat.opacity = stormy ? 0.75 : 0.5;
       rainMat.color.set(stormy ? 0x8fa4bc : 0xaec4dc);
       // Overall sky mood — sunny is bright with a sun disc; overcast greys it out.
-      moodTarget = WEATHER_SKY[view.weather || "clear"] || WEATHER_SKY.clear;
+      moodName = view.weather || "clear";
+      moodTarget = WEATHER_SKY[moodName] || WEATHER_SKY.clear;
       if (view.focus) {
         const w = axialToWorld(view.focus.q, view.focus.r);
         controls.target.set(w.x, 0, w.z);

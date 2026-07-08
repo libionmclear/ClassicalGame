@@ -409,16 +409,19 @@
     cartography: "🗺️", assimilation: "🤝", "tribute-empire": "🏰", pottery: "🏺", mathematics: "📐",
     philosophy: "💭", metallurgy: "🔩", aqueducts: "🌉", astronomy: "🔭", rhetoric: "🗣️",
     "hoplite-phalanx": "🛡️", chariotry: "🏇", "legionary-system": "🦅", "war-elephants": "🐘",
-    "iron-mastery": "🗡️", "horse-archery": "🏇"
+    "iron-mastery": "🗡️", "horse-archery": "🏇", "animal-husbandry": "🐄", "crop-rotation": "🌾",
+    testudo: "🐢", "phalanx-wall": "🧱", "nile-bureaucracy": "📜", thalassocracy: "🌊", furor: "🔥", "parthian-shot": "🏹"
   };
   // Display name + one-line sourced history note (the educational layer).
   const TECH_INFO = {
-    "bronze-working": { name: "Bronze Working", note: "Alloying copper and tin armed the first city militias (~3000 BC). EFFECT: unlocks the Spearman — your anti-cavalry line." },
+    "bronze-working": { name: "Bronze Working", note: "Alloying copper and tin armed the first militias and shod the woodsman's axe. EFFECT: unlocks the Spearman and the Lumber Camp improvement." },
     sailing: { name: "Sailing", note: "Coast-hugging galleys opened Mediterranean trade and colonization. EFFECT: prerequisite for Open-Sea Sailing and the naval line." },
     writing: { name: "Writing", note: "Administration and law from cuneiform to the alphabet. EFFECT: +1 science per city, unlocks the Library, and opens the Economy fork (Temple vs Coinage)." },
-    masonry: { name: "Masonry", note: "Dressed stone means lasting walls and monuments. EFFECT: unlocks City Walls (+20 city HP) and leads to Engineering." },
+    masonry: { name: "Masonry", note: "Dressed stone means lasting walls, monuments — and paved roads. EFFECT: unlocks City Walls (+20 city HP) and Roads, and leads to Engineering." },
     archery: { name: "Archery", note: "Massed bowmen — the skirmish and ambush school of war. EFFECT: opens the Skirmish Doctrine fork." },
-    irrigation: { name: "Irrigation", note: "Canals and basins multiplied river-valley harvests. EFFECT: strengthens the farming economy of your valleys." },
+    irrigation: { name: "Irrigation", note: "Canals and basins multiplied river-valley harvests. EFFECT: unlocks the Farm improvement (+2 food) and leads to Crop Rotation." },
+    "animal-husbandry": { name: "Animal Husbandry", note: "Herding cattle, sheep and horses on open range. EFFECT: unlocks the Pasture improvement (+1 food, +1 labour)." },
+    "crop-rotation": { name: "Crop Rotation", note: "Fallowing and legumes keep the soil rich year on year. EFFECT: +1 food in every city." },
     "phalanx-doctrine": { name: "Phalanx Doctrine", note: "FORK: heavy spear-line, shields locked — the Greek hoplite way." },
     "skirmish-doctrine": { name: "Skirmish Doctrine", note: "FORK: mobility, javelins and bows — hit and fade." },
     "temple-economy": { name: "Temple Economy", note: "FORK: faith and culture fund the state — Egypt's model." },
@@ -434,27 +437,33 @@
     monarchy: { name: "Monarchy", note: "FORK: one crowned ruler — the Hellenistic kingdoms." },
     "ramming-fleets": { name: "Ramming Fleets", note: "FORK: the bronze ram and the trireme — Salamis, 480 BC." },
     "merchant-marine": { name: "Merchant Marine", note: "FORK: cargo hulls and sea-trade wealth — Carthage, Phoenicia." },
-    "roads-logistics": { name: "Roads & Logistics", note: "The Via Appia (312 BC): legions marching 25 miles a day." },
+    "roads-logistics": { name: "Roads & Logistics", note: "The Via Appia (312 BC): legions marching 25 miles a day. EFFECT: every land unit gains +1 movement." },
     siegecraft: { name: "Siegecraft", note: "Ballistae and towers crack the strongest walls. EFFECT: unlocks the Siege Ballista — devastating against cities." },
-    medicine: { name: "Medicine", note: "Army physicians and hygiene keep veterans in the field." },
-    "law-administration": { name: "Law & Administration", note: "Codified law binds a sprawling empire together." },
-    "currency-reform": { name: "Currency Reform", note: "Standardized coinage steadies trade across provinces." },
-    cartography: { name: "Cartography", note: "Sea charts and itineraries extend reach and vision." },
+    medicine: { name: "Medicine", note: "Army physicians and hygiene keep veterans in the field. EFFECT: your units heal +3 HP more each turn." },
+    "law-administration": { name: "Law & Administration", note: "Codified law binds a sprawling empire together. EFFECT: +1 gold in every city." },
+    "currency-reform": { name: "Currency Reform", note: "Standardized coinage steadies trade across provinces. EFFECT: +1 gold in every city." },
+    cartography: { name: "Cartography", note: "Sea charts and itineraries extend reach and vision. EFFECT: prerequisite for the imperial-method fork." },
     assimilation: { name: "Assimilation", note: "FORK: extend citizenship — captured cities become your own." },
     "tribute-empire": { name: "Tribute Empire", note: "FORK: satrapies pay heavy tribute but stay restless." },
     pottery: { name: "Pottery", note: "Fired clay for grain jars, amphorae and the wine trade. EFFECT: unlocks the Temple and the Vineyard improvement." },
-    mathematics: { name: "Mathematics", note: "Geometry and proof from Thales to Euclid. EFFECT: unlocks the Academy (+3 science) and leads to Astronomy." },
-    philosophy: { name: "Philosophy", note: "Reasoned inquiry — Plato's Academy, Aristotle's Lyceum. EFFECT: unlocks the Lyceum (+2 science, +1 gold)." },
+    mathematics: { name: "Mathematics", note: "Geometry and proof from Thales to Euclid. EFFECT: unlocks the Academy and +1 labour in every city; leads to Astronomy." },
+    philosophy: { name: "Philosophy", note: "Reasoned inquiry — Plato's Academy, Aristotle's Lyceum. EFFECT: unlocks the Lyceum and +1 science in every city." },
     metallurgy: { name: "Metallurgy", note: "Mastery of the forge — pattern-welding, tempering, mass-produced arms. EFFECT: unlocks the Barracks and the Quarry improvement." },
-    aqueducts: { name: "Aqueducts", note: "Arched channels carrying clean water for miles (Aqua Appia, 312 BC). EFFECT: unlocks the Aqueduct (+3 food) for bigger cities." },
-    astronomy: { name: "Astronomy", note: "The heavens charted for calendar and navigation — Hipparchus, the Antikythera mechanism. EFFECT: deepens the science tree." },
-    rhetoric: { name: "Rhetoric", note: "Persuasion and public games that bound a populace to the state. EFFECT: unlocks the Amphitheater (+2 gold, +1 science)." },
+    aqueducts: { name: "Aqueducts", note: "Arched channels carrying clean water for miles (Aqua Appia, 312 BC). EFFECT: unlocks the Aqueduct and +1 food in every city." },
+    astronomy: { name: "Astronomy", note: "The heavens charted for calendar and navigation — Hipparchus, the Antikythera mechanism. EFFECT: +1 science in every city." },
+    rhetoric: { name: "Rhetoric", note: "Schools of oratory and argument sharpen a people's learning. EFFECT: all your research costs 15% less." },
     "hoplite-phalanx": { name: "Hoplite Phalanx", note: "GREECE ONLY. The citizen shield-wall. EFFECT: unlocks the Hoplite — an immovable anti-cavalry spear line." },
     chariotry: { name: "Chariotry", note: "EGYPT ONLY. The two-horse war chariot. EFFECT: unlocks the War Chariot — fast mobile archery." },
     "legionary-system": { name: "Legionary System", note: "ROME ONLY. Manipular drill, pilum and gladius. EFFECT: unlocks the Legionary — elite heavy infantry." },
     "war-elephants": { name: "War Elephants", note: "CARTHAGE ONLY. Trained battle-elephants. EFFECT: unlocks the War Elephant — a line-breaking shock beast." },
     "iron-mastery": { name: "Iron Mastery", note: "GAUL ONLY. La Tène ironwork — long swords and fine mail. EFFECT: unlocks the Gaesatae — a ferocious charging warband." },
-    "horse-archery": { name: "Horse Archery", note: "PARTHIA ONLY. Mounted bow and the feigned retreat. EFFECT: unlocks the Horse Archer — the deadly Parthian shot." }
+    "horse-archery": { name: "Horse Archery", note: "PARTHIA ONLY. Mounted bow and the feigned retreat. EFFECT: unlocks the Horse Archer — the deadly Parthian shot." },
+    testudo: { name: "Testudo", note: "ROME ONLY. Legionaries lock shields into a moving shell. EFFECT: Roman infantry take +50% defence vs ranged/siege, +20% in melee." },
+    "phalanx-wall": { name: "Phalanx Wall", note: "GREECE ONLY. Serried spears, shields overlapped. EFFECT: your spearmen defend +35% (+60% vs cavalry)." },
+    "nile-bureaucracy": { name: "Nile Bureaucracy", note: "EGYPT ONLY. Scribes, granaries and the flood census. EFFECT: +1 food and +1 science in every city." },
+    thalassocracy: { name: "Thalassocracy", note: "CARTHAGE ONLY. Mastery of the sea-lanes. EFFECT: your warships fight +30% and cost 25% less." },
+    furor: { name: "Furor", note: "GAUL ONLY. The terrifying headlong charge. EFFECT: your infantry and warbands attack +35%." },
+    "parthian-shot": { name: "Parthian Shot", note: "PARTHIA ONLY. Loose from the saddle, then wheel away. EFFECT: mounted archers take no return fire and keep half their move after shooting; +20% attack." }
   };
 
   function canResearchSafe(player, techId) {
@@ -2551,7 +2560,7 @@
         const forkClosed =
           !researched && !available && rule.forkGroup &&
           player.forkChoices[rule.forkGroup] && player.forkChoices[rule.forkGroup] !== rule.forkBranch;
-        const cost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id) : (engine.researchCost ? engine.researchCost(id) : 0);
+        const cost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id, HUMAN_ID) : (engine.researchCost ? engine.researchCost(id) : 0);
         const affordable = player.science >= cost;
 
         const prereqs = (rule.prerequisites || []).map(function (p) {
@@ -3121,7 +3130,7 @@
       const t = engine.TECHS[id];
       if (t.civ && !civMatches(player, t.civ)) continue;
       if (!canResearchSafe(player, id)) continue;
-      const cost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id) : (engine.researchCost ? engine.researchCost(id) : 0);
+      const cost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id, HUMAN_ID) : (engine.researchCost ? engine.researchCost(id) : 0);
       if (player.science >= cost) ready += 1;
     }
     researchBtn.classList.toggle("glow", ready > 0 && isHumanTurn());

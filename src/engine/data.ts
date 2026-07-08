@@ -113,15 +113,43 @@ export const TECHS: Record<string, TechRule> = {
   astronomy: { age: 2, prerequisites: ["mathematics"] },
   rhetoric: { age: 3, prerequisites: ["writing"] },
 
+  // Deeper economy so research keeps paying off.
+  "crop-rotation": { age: 2, prerequisites: ["irrigation"], cost: 30 },
+
   // --- Civilization-unique techs (each fields that people's signature unit) ---
   "hoplite-phalanx": { age: 1, prerequisites: ["bronze-working"], civ: "greece", cost: 24 },
   chariotry: { age: 1, prerequisites: ["bronze-working"], civ: "egypt", cost: 24 },
   "legionary-system": { age: 2, prerequisites: ["iron-working"], civ: "rome", cost: 44 },
-  // Rome's drill: the testudo shell — legionaries lock shields and shrug off arrows.
-  testudo: { age: 3, prerequisites: ["legionary-system"], civ: "rome", cost: 48 },
   "war-elephants": { age: 2, prerequisites: ["iron-working"], civ: "carthage", cost: 36 },
   "iron-mastery": { age: 2, prerequisites: ["iron-working"], civ: "gaul", cost: 40 },
-  "horse-archery": { age: 2, prerequisites: ["horseback-riding"], civ: "parthia", cost: 44 }
+  "horse-archery": { age: 2, prerequisites: ["horseback-riding"], civ: "parthia", cost: 44 },
+
+  // --- Civilization signature DOCTRINES (a second unique, a distinct effect) ---
+  // Rome's testudo shell — legionaries lock shields and shrug off arrows.
+  testudo: { age: 3, prerequisites: ["legionary-system"], civ: "rome", cost: 48 },
+  // Greece's phalanx wall — spearmen hold an unbreakable line, murderous to cavalry.
+  "phalanx-wall": { age: 2, prerequisites: ["hoplite-phalanx"], civ: "greece", cost: 40 },
+  // Egypt's Nile bureaucracy — scribes and granaries: extra food & science per city.
+  "nile-bureaucracy": { age: 2, prerequisites: ["writing"], civ: "egypt", cost: 40 },
+  // Carthage's thalassocracy — mastery of the sea: warships hit harder and cost less.
+  thalassocracy: { age: 2, prerequisites: ["open-sea-sailing"], civ: "carthage", cost: 44 },
+  // Gaul's furor — the headlong charge: warbands strike with terrible force.
+  furor: { age: 2, prerequisites: ["iron-mastery"], civ: "gaul", cost: 40 },
+  // Parthia's Parthian shot — horse archers loose and wheel away untouched.
+  "parthian-shot": { age: 3, prerequisites: ["horse-archery"], civ: "parthia", cost: 48 }
+};
+
+// Per-city yield each turn from certain researched techs — so every research has a
+// concrete, lasting impact on your empire, not just a unit or building unlock.
+export const TECH_CITY_YIELD: Record<string, { food?: number; production?: number; gold?: number; science?: number }> = {
+  philosophy: { science: 1 },
+  mathematics: { production: 1 },
+  astronomy: { science: 1 },
+  aqueducts: { food: 1 },
+  "law-administration": { gold: 1 },
+  "currency-reform": { gold: 1 },
+  "crop-rotation": { food: 1 },
+  "nile-bureaucracy": { food: 1, science: 1 } // Egypt's civ bonus
 };
 
 // Classical rock-paper-scissors, both when attacking and defending:
