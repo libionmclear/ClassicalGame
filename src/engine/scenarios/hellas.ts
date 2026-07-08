@@ -35,7 +35,7 @@ export const hellasScenario: CreateGameConfig = fromAscii({
   rows: MAP,
   regions: ["Hellas", "Aegean", "Ionia"],
   players: [
-    { id: "greece", civ: "Greece", food: 8, production: 30, gold: 20, techs: ["sailing"] },
+    { id: "greece", civ: "Athens", food: 8, production: 30, gold: 20, techs: ["sailing"] },
     { id: "parthia", civ: "Persia", food: 8, production: 34, gold: 26, techs: ["sailing"] },
     { id: "egypt", civ: "Egypt", food: 10, production: 28, gold: 24, techs: ["sailing"] }
   ]

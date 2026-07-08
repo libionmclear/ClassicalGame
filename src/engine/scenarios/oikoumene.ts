@@ -128,7 +128,7 @@ export const oikoumeneScenario: CreateGameConfig = fromAscii({
   players: [
     { id: "rome", civ: "Rome", food: 8, production: 30, gold: 20, techs: [] },
     { id: "carthage", civ: "Carthage", food: 8, production: 32, gold: 26, techs: ["sailing"] },
-    { id: "greece", civ: "Greece", food: 8, production: 30, gold: 22, techs: ["sailing"] },
+    { id: "greece", civ: "Athens", food: 8, production: 30, gold: 22, techs: ["sailing"] },
     { id: "egypt", civ: "Egypt", food: 10, production: 30, gold: 24, techs: ["sailing"] },
     { id: "gaul", civ: "Gaul", food: 9, production: 30, gold: 16, techs: [] },
     { id: "parthia", civ: "Parthia", food: 8, production: 32, gold: 20, techs: [] }

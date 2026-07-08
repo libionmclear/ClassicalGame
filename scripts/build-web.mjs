@@ -112,4 +112,14 @@ if (await exists(spriteDist)) {
 }
 await writeFile(path.join(publicWebDir, "sprites.js"), `window.HEGEMON_SPRITES = ${JSON.stringify(manifest)};\n`);
 
+// Cards v2 (design of record: src/cards-data-v2.js, an ES module). game.js is a
+// classic script and can't `import`, so emit a browser global from the same
+// single source: strip the `export` keywords and expose window.HEGEMON_CARDS_V2.
+{
+  const cardsSrc = await readFile(path.join(root, "src", "cards-data-v2.js"), "utf8");
+  const asClassic = cardsSrc.replace(/^export const /gm, "const ") +
+    "\nwindow.HEGEMON_CARDS_V2 = { RARITY, CIV_CARDS, LEGENDS, EDICTS, EVENT_CARDS, PACK_ECONOMY };\n";
+  await writeFile(path.join(publicDir, "cards-data.js"), asClassic);
+}
+
 console.log(`Built public game bundle.${Object.keys(manifest).length ? " Sprites: " + Object.keys(manifest).join(", ") : ""}`);

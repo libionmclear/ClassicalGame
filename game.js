@@ -2731,8 +2731,10 @@
     const myCivName = (config.players.find((p) => p.id === HUMAN_ID) || {}).civ || HUMAN_ID;
     label = "Playing " + myCivName + " — " + label;
 
-    // Bring your equipped Generals' perks into the campaign (the human only).
-    const startPerks = loadoutPerks();
+    // Bring your equipped Legend + Edict perks into the campaign (the human only,
+    // and only the slots matching your civ). Effects the engine can't do yet are
+    // flagged in the deck, not applied.
+    const startPerks = loadoutPerks(HUMAN_ID);
     if (Object.keys(startPerks).length && config.players) {
       const hp = config.players.find((pl) => pl.id === HUMAN_ID);
       if (hp) hp.perks = startPerks;
@@ -3163,6 +3165,7 @@
   // the card gate.
   const STARTER_CIVS = ["gaul", "parthia", "rome", "greece", "egypt", "carthage"];
   const RARITY = {
+    starter: { name: "Starter", color: "#6fae5f", weight: 0 }, // free civs; never drop in packs
     common: { name: "Common", color: "#9aa7b4", weight: 62 },
     rare: { name: "Rare", color: "#4a90d9", weight: 26 },
     epic: { name: "Epic", color: "#a25ddc", weight: 9 },
@@ -3181,44 +3184,65 @@
   const COINS_LOSS = 18;
   // The card catalogue. Civ cards unlock a people; cosmetics equip on the profile
   // (crown before the name, an emblem, a title after). No card grants power.
-  const CARDS = [
-    { id: "civ-rome", type: "civ", civ: "rome", rarity: "legendary", name: "Rome", icon: "🦅" },
-    { id: "civ-greece", type: "civ", civ: "greece", rarity: "epic", name: "Athenians", icon: "🏛️" },
-    { id: "civ-egypt", type: "civ", civ: "egypt", rarity: "epic", name: "Egypt", icon: "🔺" },
-    { id: "civ-carthage", type: "civ", civ: "carthage", rarity: "epic", name: "Carthage", icon: "🐘" },
-    // Generals: equip up to 3 for a small flat per-turn bonus (earnable, not P2W).
-    { id: "gen-augustus", type: "general", rarity: "epic", name: "Augustus", icon: "🪙", perk: { gold: 3 }, blurb: "The first emperor — the prosperity of the Pax Romana. +3 gold/turn." },
-    { id: "gen-caesar", type: "general", rarity: "epic", name: "Caesar", icon: "🗡️", perk: { production: 2 }, blurb: "Julius Caesar — logistics and command. +2 labour/turn." },
-    { id: "gen-socrates", type: "general", rarity: "rare", name: "Socrates", icon: "💭", perk: { science: 2 }, blurb: "The philosopher — inquiry and reason. +2 science/turn." },
-    { id: "gen-pericles", type: "general", rarity: "rare", name: "Pericles", icon: "🏺", perk: { gold: 1, science: 1 }, blurb: "The golden age of Athens. +1 gold, +1 science/turn." },
-    { id: "gen-xerxes", type: "general", rarity: "epic", name: "Xerxes", icon: "🦁", perk: { food: 1, production: 1 }, blurb: "The Great King — the abundance of an empire. +1 food, +1 labour/turn." },
-    { id: "gen-cleopatra", type: "general", rarity: "epic", name: "Cleopatra", icon: "🐍", perk: { gold: 2, science: 1 }, blurb: "Egypt's last pharaoh — wealth and guile. +2 gold, +1 science/turn." },
-    { id: "gen-hannibal", type: "general", rarity: "epic", name: "Hannibal", icon: "🗻", perk: { production: 2 }, blurb: "Carthage's scourge of Rome. +2 labour/turn." },
-    { id: "gen-alexander", type: "general", rarity: "legendary", name: "Alexander", icon: "🌏", perk: { production: 1, science: 1, gold: 1 }, blurb: "Conqueror to the Indus. +1 labour, +1 science, +1 gold/turn." },
-    // More figures of the age — philosophers, conquerors, statesmen.
-    { id: "gen-aristotle", type: "general", rarity: "rare", name: "Aristotle", icon: "📜", perk: { science: 2 }, blurb: "The Lyceum — the systematic study of everything. +2 science/turn." },
-    { id: "gen-archimedes", type: "general", rarity: "epic", name: "Archimedes", icon: "⚙️", perk: { production: 1, science: 1 }, blurb: "Syracuse's genius of machines. +1 labour, +1 science/turn." },
-    { id: "gen-solon", type: "general", rarity: "rare", name: "Solon", icon: "⚖️", perk: { gold: 1, science: 1 }, blurb: "The Athenian lawgiver. +1 gold, +1 science/turn." },
-    { id: "gen-leonidas", type: "general", rarity: "epic", name: "Leonidas", icon: "🛡️", perk: { production: 2 }, blurb: "The Spartan king at Thermopylae. +2 labour/turn." },
-    { id: "gen-scipio", type: "general", rarity: "epic", name: "Scipio Africanus", icon: "🦅", perk: { production: 1, gold: 1 }, blurb: "Rome's answer to Hannibal. +1 labour, +1 gold/turn." },
-    { id: "gen-cyrus", type: "general", rarity: "epic", name: "Cyrus the Great", icon: "👑", perk: { gold: 1, food: 1 }, blurb: "Founder of the Persian empire. +1 gold, +1 food/turn." },
-    { id: "gen-hammurabi", type: "general", rarity: "rare", name: "Hammurabi", icon: "🏛️", perk: { gold: 2 }, blurb: "The code and the marketplace. +2 gold/turn." },
-    // Event cards — played once per match, for an immediate effect.
-    { id: "ev-goldenage", type: "event", rarity: "epic", name: "Golden Age", icon: "✨", blurb: "Once: a burst of prosperity — +60 gold and +40 science, right now." },
-    { id: "ev-nile", type: "event", rarity: "rare", name: "Nile Flood", icon: "🌊", blurb: "Once: the flood enriches your fields — every city banks growth toward its next citizen." },
-    { id: "ev-levy", type: "event", rarity: "rare", name: "Fresh Levies", icon: "🎖️", blurb: "Once: reinforcements muster — all your units heal to full." },
-    { id: "ev-plague", type: "event", rarity: "rare", name: "Plague", icon: "☠️", blurb: "Once: a pestilence strikes the enemy's largest city, shrinking it." },
-    { id: "ev-vesuvius", type: "event", rarity: "epic", name: "Vesuvius Eruption", icon: "🌋", blurb: "Once: fire and ash batter every enemy city near a mountain." },
-    // Wonders — collect one, then build it on a city tile for a lasting bonus.
-    { id: "won-colosseum", type: "wonder", rarity: "epic", name: "Colosseum", icon: "🏟️", perk: { gold: 2 }, blurb: "Games that bind a people. Build in a city: +2 gold/turn." },
-    { id: "won-library", type: "wonder", rarity: "epic", name: "Library of Alexandria", icon: "📚", perk: { science: 3 }, blurb: "The sum of ancient knowledge. Build in a city: +3 science/turn." },
-    { id: "won-pyramids", type: "wonder", rarity: "legendary", name: "Great Pyramids", icon: "🔺", perk: { production: 2, gold: 1 }, blurb: "Monuments for the ages. Build in a city: +2 labour, +1 gold/turn." },
-    { id: "won-hanging", type: "wonder", rarity: "epic", name: "Hanging Gardens", icon: "🌿", perk: { food: 2 }, blurb: "A paradise of terraces. Build in a city: +2 food/turn." },
-    // Enhancer cards — small heads-up edges (effects come later).
-    { id: "en-scouts", type: "enhance", rarity: "common", name: "Scouts", icon: "🔭", blurb: "A small heads-up edge. (effect coming soon)" },
-    { id: "en-omen", type: "enhance", rarity: "common", name: "Favourable Omen", icon: "🔮", blurb: "(coming soon)" },
-    { id: "en-veterans", type: "enhance", rarity: "rare", name: "Veteran Levy", icon: "🎖️", blurb: "(coming soon)" },
-    { id: "en-masons", type: "enhance", rarity: "rare", name: "Master Masons", icon: "🧱", blurb: "(coming soon)" },
+  // ===== Cards v2 (Legends / Edicts / Events / Civs) — data of record lives in
+  // src/cards-data-v2.js, exposed to the browser as window.HEGEMON_CARDS_V2 by the
+  // build (see scripts/build-web.mjs). game.js maps the declarative effect
+  // vocabulary onto the engine's hooks; anything the engine can't do yet is
+  // catalogued as "flagged" (see cardFlags / CARD_FLAG_KEYS below).
+  const V2 = (window.HEGEMON_CARDS_V2) || { CIV_CARDS: [], LEGENDS: [], EDICTS: [], EVENT_CARDS: [] };
+  const CIV_ICON = { rome: "🦅", greece: "🏛️", egypt: "🔺", carthage: "🐘", gaul: "⚔️", parthia: "🏹", sparta: "🛡️", macedon: "🐎", persia: "👑", han: "🀄", maurya: "🐘", scythia: "🐎", phoenicia: "⚓", etruria: "🏺", thrace: "🗡️", ptolemies: "👁️", seleucids: "🐘", numidia: "🐎", epirus: "🐘", pontus: "☠️", armenia: "⛰️", judea: "✡️", kush: "🏹", celtiberia: "🗡️", germania: "🌲", britannia: "🗿", dacia: "🐺", illyria: "⚓", pergamon: "📜", bactria: "🐎" };
+  const ROLE_ICON = { commander: "⚔️", statesman: "🏛️", sage: "📜", builder: "🏗️", navigator: "⚓" };
+
+  // Effect vocabulary → engine hooks. TODAY the engine only supports a flat
+  // per-turn `perks` bonus (gold/science to the pool, food/production to the
+  // capital). Only capital/city yields map; everything else is flagged.
+  const YIELD_KEY = { food: "food", gold: "gold", science: "science", labour: "production", production: "production" };
+  function effectToPerks(effect) {
+    const perks = {};
+    const add = (src) => { if (!src) return; for (const k in src) { const t = YIELD_KEY[k]; if (t) perks[t] = (perks[t] || 0) + src[k]; } }; // stability deliberately dropped
+    add(effect && effect.capitalYield);
+    add(effect && effect.cityYield); // NOTE: per-city approximated as flat until a per-city card hook exists
+    return perks;
+  }
+  // Effect keys the engine does NOT yet implement (surfaced to the user / handoff).
+  function effectFlags(effect) {
+    if (!effect) return [];
+    const flags = [];
+    for (const k in effect) {
+      if (k === "capitalYield" || k === "cityYield") { if (effect[k] && effect[k].stability) flags.push("stability"); }
+      else if (k === "atkPct" || k === "defPct") { /* combat % — needs a hook */ flags.push(k); }
+      else flags.push(k); // unitCostPct, buildFasterPct, researchCostPct, movePlus, healPlus, plunderPct, tradeRouteGold, special, instant, unitPct, filters…
+    }
+    return flags;
+  }
+  const YICON = { food: "🌾", gold: "🪙", science: "🧪", production: "⚒️", labour: "⚒️", stability: "☮" };
+  function yieldStr(y) { return Object.keys(y).map((k) => (y[k] > 0 ? "+" : "") + y[k] + " " + (YICON[k] || k)).join(", "); }
+  // A short, human-readable line describing a card's effect.
+  function effectSummary(effect) {
+    if (!effect) return "";
+    const p = [];
+    if (effect.cityYield) p.push(yieldStr(effect.cityYield) + "/city");
+    if (effect.capitalYield) p.push(yieldStr(effect.capitalYield) + " capital");
+    if (effect.atkPct) p.push("+" + effect.atkPct + "% attack");
+    if (effect.defPct) p.push("+" + effect.defPct + "% defence" + (effect.inOwnTerritory ? " at home" : ""));
+    if (effect.vs && effect.vs.atkPct) p.push("+" + effect.vs.atkPct + "% vs " + (effect.vs.civ || effect.vs.cat || "target"));
+    if (effect.unitPct) p.push("+" + (effect.unitPct.atkPct || 0) + "% " + effect.unitPct.unit + (effect.unitPct.costPct ? " (" + effect.unitPct.costPct + "% cost)" : ""));
+    if (effect.unitCatPct) p.push("+" + (effect.unitCatPct.atkPct || effect.unitCatPct.defPct || 0) + "% " + effect.unitCatPct.cat);
+    if (effect.researchCostPct) p.push(effect.researchCostPct + "% research");
+    if (effect.unitCostPct) p.push(effect.unitCostPct + "% unit cost");
+    if (effect.buildFasterPct) p.push("+" + effect.buildFasterPct + "% build speed");
+    if (effect.wonderCostPct) p.push(effect.wonderCostPct + "% wonders");
+    if (effect.tradeRouteGold) p.push("+" + effect.tradeRouteGold + " gold/route");
+    if (effect.movePlus || effect.navalMovePlus || (effect.unitCatPct && effect.unitCatPct.movePlus)) p.push("+" + (effect.movePlus || effect.navalMovePlus || effect.unitCatPct.movePlus) + " move");
+    if (effect.navalAtkPct) p.push("+" + effect.navalAtkPct + "% naval");
+    if (effect.plunderPct) p.push("+" + effect.plunderPct + "% plunder");
+    if (effect.veterancyRatePct) p.push("+" + effect.veterancyRatePct + "% veterancy");
+    if (effect.special) p.push(String(effect.special).replace(/-/g, " "));
+    if (effect.instant) p.push(String(effect.instant).replace(/-/g, " "));
+    return p.join(" · ");
+  }
+
+  const COSMETICS = [
     { id: "crown-laurel", type: "cosmetic", slot: "crown", rarity: "common", name: "Laurel Wreath", icon: "🌿" },
     { id: "crown-gold", type: "cosmetic", slot: "crown", rarity: "rare", name: "Gold Diadem", icon: "👑" },
     { id: "crown-iron", type: "cosmetic", slot: "crown", rarity: "epic", name: "Iron Crown", icon: "⚜️" },
@@ -3233,11 +3257,38 @@
     { id: "title-wise", type: "cosmetic", slot: "title", rarity: "rare", name: "the Wise", icon: "📜" },
     { id: "title-great", type: "cosmetic", slot: "title", rarity: "legendary", name: "the Great", icon: "🌟" }
   ];
+
+  // Assemble the full collection: CIV cards + LEGENDS + EDICTS + EVENTS + cosmetics.
+  const CARDS = [];
+  for (const c of V2.CIV_CARDS) {
+    CARDS.push({ id: "civ-" + c.id, type: "civ", civ: c.id, rarity: c.rarity, name: c.name, icon: CIV_ICON[c.id] || "🏳️", playable: c.playable !== false, wave: c.wave || 1 });
+  }
+  for (const l of V2.LEGENDS) {
+    CARDS.push({ id: l.id, type: "legend", civ: l.civ, role: l.role, rarity: l.rarity, name: l.name, icon: ROLE_ICON[l.role] || "⭐", effect: l.effect, blurb: l.blurb, benefit: effectSummary(l.effect), flags: effectFlags(l.effect) });
+  }
+  for (const e of V2.EDICTS) {
+    CARDS.push({ id: e.id, type: "edict", civ: e.civ || null, rarity: e.rarity, name: e.name, icon: "📜", effect: e.effect, benefit: effectSummary(e.effect), flags: effectFlags(e.effect) });
+  }
+  for (const e of V2.EVENT_CARDS) {
+    CARDS.push({ id: e.id, type: "event", civ: e.civ || null, rarity: e.rarity, name: e.name, icon: "✨", effect: e.effect, benefit: effectSummary(e.effect), flags: effectFlags(e.effect) });
+  }
+  for (const c of COSMETICS) CARDS.push(c);
+
   const CARDS_BY_ID = {};
   const CARDS_BY_RARITY = {};
   for (const c of CARDS) {
     CARDS_BY_ID[c.id] = c;
     (CARDS_BY_RARITY[c.rarity] = CARDS_BY_RARITY[c.rarity] || []).push(c);
+  }
+  // Loadout slots (v2): exactly one Legend + one Edict + one Event, all civ-matched.
+  const LOADOUT_SLOTS = ["legend", "edict", "event"];
+  function civCardOk(card, civId) { return !!card && (card.civ == null || card.civ === civId); }
+  function normalizeLoadout(l) {
+    const out = { legend: null, edict: null, event: null };
+    if (l && typeof l === "object" && !Array.isArray(l)) {
+      for (const s of LOADOUT_SLOTS) if (typeof l[s] === "string") out[s] = l[s];
+    }
+    return out; // old array loadouts (generals) simply reset — those cards are gone
   }
 
   function rollRarity(weights) {
@@ -3265,7 +3316,7 @@
       const card = pool[Math.floor(Math.random() * pool.length)];
       const isNew = !p.cards[card.id];
       p.cards[card.id] = (p.cards[card.id] || 0) + 1;
-      if (card.type === "civ" && p.unlockedCivs.indexOf(card.civ) === -1) p.unlockedCivs.push(card.civ);
+      if (card.type === "civ" && card.playable && p.unlockedCivs.indexOf(card.civ) === -1) p.unlockedCivs.push(card.civ);
       gained.push({ card: card, isNew: isNew });
     }
     saveProfile(p);
@@ -3306,10 +3357,16 @@
     saveProfile(p);
   }
   // ===== Playing-card face, shared by the hand and the collection =====
-  const CARD_TYPE_LABEL = { civ: "Civilization", general: "General", event: "Event", wonder: "Wonder", enhance: "Enhancer", cosmetic: "Cosmetic" };
+  const CARD_TYPE_LABEL = { civ: "Civilization", legend: "Legend", edict: "Edict", event: "Event", cosmetic: "Cosmetic" };
+  const ROLE_LABEL = { commander: "Commander", statesman: "Statesman", sage: "Sage", builder: "Builder", navigator: "Navigator" };
   function cardBenefit(c) {
+    // Legends/Edicts/Events lead with their EFFECT; the blurb is the history line.
+    if (c.type === "legend" || c.type === "edict" || c.type === "event") {
+      const eff = c.benefit || effectSummary(c.effect);
+      return (eff ? eff + (c.blurb ? " — " : "") : "") + (c.blurb || "");
+    }
     if (c.blurb) return c.blurb;
-    if (c.type === "civ") return "Take the field as the " + c.name + " this age.";
+    if (c.type === "civ") return c.playable ? "Play as " + c.name + "." : "Collectible — playable in a later wave.";
     if (c.type === "cosmetic") {
       const where = c.slot === "title" ? "a title after your name" : c.slot === "crown" ? "a crown before your name" : "your profile emblem";
       return "Cosmetic — worn as " + where + ".";
@@ -3320,8 +3377,9 @@
   // emoji stands in for now), the name, and the benefit text.
   function cardFaceHtml(c, locked) {
     const rar = (RARITY[c.rarity] && RARITY[c.rarity].name) || c.rarity;
+    const banner = (c.type === "legend" && ROLE_LABEL[c.role]) || CARD_TYPE_LABEL[c.type] || c.type;
     return (
-      '<div class="pcard-banner"><span>' + (CARD_TYPE_LABEL[c.type] || c.type) + "</span><span>" + rar + "</span></div>" +
+      '<div class="pcard-banner"><span>' + banner + "</span><span>" + rar + "</span></div>" +
       '<div class="pcard-art"><span class="pcard-emoji">' + (locked ? "🔒" : c.icon) + "</span></div>" +
       '<div class="pcard-name">' + c.name + "</div>" +
       '<div class="pcard-desc">' + (cardBenefit(c) || "&nbsp;") + "</div>"
@@ -3334,94 +3392,97 @@
     let foot = "";
     if (action === "play") foot = '<button class="hand-play" data-play="' + c.id + '">Play now</button>';
     else if (action === "played") foot = '<span class="hand-done">✓ Played this campaign</span>';
+    else if (action === "mismatch") foot = '<span class="hand-done">✗ Not your civ — inactive</span>';
     return '<div class="pcard rar-' + c.rarity + " type-" + c.type + '">' + cardFaceHtml(c, false) +
       '<div class="pcard-foot">' + foot + "</div></div>";
   }
   function renderHand() {
     if (!handBodyEl) return;
     const p = loadProfile();
+    const lo = normalizeLoadout(p.loadout);
+    const civId = state ? HUMAN_ID : null; // the civ you're playing this campaign
     const parts = [];
-    const loadout = (p.loadout || []).map((id) => CARDS_BY_ID[id]).filter(Boolean);
+    // Persistent slots: Legend + Edict.
     parts.push('<h3 class="hand-h">In play every turn</h3>');
-    if (loadout.length) {
+    const persistent = [lo.legend, lo.edict].map((id) => CARDS_BY_ID[id]).filter((c) => c && p.cards[c.id]);
+    if (persistent.length) {
       parts.push('<div class="hand-grid">');
-      for (const c of loadout) parts.push(handCardHtml(c, null));
+      for (const c of persistent) parts.push(handCardHtml(c, civId && !civCardOk(c, civId) ? "mismatch" : null));
       parts.push("</div>");
-    } else parts.push('<div class="hand-empty">No generals or wonders equipped — open 🃏 My Deck to equip up to 3.</div>');
-    const events = CARDS.filter((c) => c.type === "event" && p.cards[c.id]);
+    } else parts.push('<div class="hand-empty">No Legend or Edict slotted — open 🃏 My Deck to bring one of each.</div>');
+    // One-use slot: the equipped Event.
     parts.push('<h3 class="hand-h">Play once this campaign</h3>');
-    if (events.length) {
+    const ev = CARDS_BY_ID[lo.event];
+    if (ev && p.cards[ev.id]) {
+      const played = state && state.playedEvents && state.playedEvents[ev.id];
       parts.push('<div class="hand-grid">');
-      for (const c of events) parts.push(handCardHtml(c, (state.playedEvents&&state.playedEvents[c.id]) ? "played" : "play"));
+      parts.push(handCardHtml(ev, civId && !civCardOk(ev, civId) ? "mismatch" : played ? "played" : "play"));
       parts.push("</div>");
-    } else parts.push('<div class="hand-empty">No event cards yet — find them in card packs.</div>');
+    } else parts.push('<div class="hand-empty">No Event slotted — bring one in 🃏 My Deck.</div>');
     handBodyEl.innerHTML = parts.join("");
     const btns = handBodyEl.querySelectorAll("[data-play]");
     for (const b of btns) b.addEventListener("click", function () { playEvent(b.getAttribute("data-play")); });
   }
   function openHand() { if (handModalEl) { renderHand(); handModalEl.classList.remove("hidden"); } }
   function handHasCards() {
-    const p = loadProfile();
-    if ((p.loadout || []).length) return true;
-    return CARDS.some((c) => c.type === "event" && p.cards[c.id]);
+    const lo = normalizeLoadout(loadProfile().loadout);
+    return !!(lo.legend || lo.edict || lo.event);
   }
-  // Apply a one-use event card's effect to the current game.
+  // Apply a one-use (v2) event card. Only the instants the engine can do today are
+  // applied; the rest are flagged (they need combat/turn/spawn/stability hooks) and
+  // NOT consumed, so a card is never wasted on a no-op.
   function playEvent(id) {
-    if (!state) return; if ((state.playedEvents||{})[id]) return;
+    if (!state) return; if ((state.playedEvents || {})[id]) return;
     const p = loadProfile();
     if (!p.cards[id]) return; // must own it
+    const card = CARDS_BY_ID[id];
+    if (!card || card.type !== "event") return;
+    if (!civCardOk(card, HUMAN_ID)) { showCombatToast("✗ " + card.name + " only works for its own civilization.", "loss"); return; }
     const me = human();
+    const eff = (card.effect && card.effect.instant) || "";
     let msg = "";
-    if (id === "ev-goldenage") { me.gold += 60; me.science += 40; msg = "✨ Golden Age — +60 gold, +40 science."; }
-    else if (id === "ev-nile") {
-      let n = 0;
-      for (const c of Object.values(state.map.cities)) if (c.ownerId === HUMAN_ID) { const need = 8 + c.population * 6; c.food = (c.food || 0) + Math.ceil(need * 0.5); n += 1; }
-      msg = "🌊 The Nile floods — " + n + " of your cities surge toward growth.";
-    } else if (id === "ev-levy") {
-      let n = 0;
-      for (const u of Object.values(state.map.units)) if (u.ownerId === HUMAN_ID && u.hp < u.maxHp) { u.hp = u.maxHp; n += 1; }
-      msg = "🎖️ Fresh levies — " + n + " of your units restored to full.";
-    } else if (id === "ev-plague") {
-      let target = null;
-      for (const c of Object.values(state.map.cities)) if (c.ownerId !== HUMAN_ID) { if (!target || c.population > target.population) target = c; }
-      if (target) { target.population = Math.max(1, target.population - 1); target.hp = Math.max(1, Math.floor(target.hp * 0.55)); msg = "☠️ Plague ravages " + cityDisplayName(target) + "!"; }
-      else msg = "☠️ No enemy city to strike.";
-    } else if (id === "ev-vesuvius") {
-      let n = 0;
-      for (const c of Object.values(state.map.cities)) {
-        if (c.ownerId === HUMAN_ID) continue;
-        const near = AXIAL_DIRS.some((d) => { const t = state.map.tiles[(c.position.q + d[0]) + "," + (c.position.r + d[1])]; return t && t.terrain === "mountains"; });
-        if (near) { c.hp = Math.max(1, Math.floor(c.hp * 0.5)); n += 1; }
-      }
-      msg = n ? "🌋 Vesuvius erupts — " + n + " enemy cities scorched." : "🌋 No enemy city lies near a mountain.";
-    } else return;
+    if (eff === "capital+10food") {
+      const cap = Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) || Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
+      if (cap) cap.food = (cap.food || 0) + 10;
+      msg = "🌾 " + card.name + " — +10 food in your capital.";
+    } else if (eff === "+15science") {
+      me.science += 15;
+      msg = "📜 " + card.name + " — +15 science.";
+    } else {
+      // Needs an engine hook that doesn't exist yet — flag and DON'T consume.
+      showCombatToast("⚑ " + card.name + " isn't wired to the engine yet — flagged (" + eff + ").", "");
+      return;
+    }
     state.playedEvents = state.playedEvents || {}; state.playedEvents[id] = 1;
     logAction(msg);
-    showCombatToast(msg, id === "ev-plague" || id === "ev-vesuvius" ? "win" : "");
+    showCombatToast(msg, "");
     render();
     saveGame();
     renderHand();
   }
 
-  function equipGeneral(id) {
+  // Equip a Legend / Edict / Event into its one slot (toggle off if already there).
+  function equipSlot(id) {
     const card = CARDS_BY_ID[id];
-    if (!card || (card.type !== "general" && card.type !== "wonder")) return;
+    if (!card || LOADOUT_SLOTS.indexOf(card.type) === -1) return;
     const p = loadProfile();
     if (!p.cards[id]) return;
-    const i = p.loadout.indexOf(id);
-    if (i !== -1) p.loadout.splice(i, 1);
-    else if (p.loadout.length < 3) p.loadout.push(id);
+    p.loadout = normalizeLoadout(p.loadout);
+    p.loadout[card.type] = p.loadout[card.type] === id ? null : id;
     saveProfile(p);
   }
-  // Sum the equipped generals'/wonders' perks into { food, production, gold, science }.
-  function loadoutPerks() {
+  // The persistent perks the equipped Legend + Edict grant THIS campaign — only the
+  // slots whose card matches the played civ (or is universal), and only the flat
+  // per-turn yields the engine can apply today (everything else is flagged).
+  function loadoutPerks(civId) {
     const p = loadProfile();
+    const lo = normalizeLoadout(p.loadout);
     const perks = {};
-    for (const id of p.loadout || []) {
-      const g = CARDS_BY_ID[id];
-      if (g && (g.type === "general" || g.type === "wonder") && p.cards[id] && g.perk) {
-        for (const k of Object.keys(g.perk)) perks[k] = (perks[k] || 0) + g.perk[k];
-      }
+    for (const slot of ["legend", "edict"]) {
+      const c = CARDS_BY_ID[lo[slot]];
+      if (!c || !p.cards[c.id] || !civCardOk(c, civId)) continue;
+      const e = effectToPerks(c.effect);
+      for (const k in e) perks[k] = (perks[k] || 0) + e[k];
     }
     return perks;
   }
@@ -3457,7 +3518,7 @@
       // Starters are always free; card-unlocked civs accumulate on top.
       unlockedCivs: Array.from(new Set(STARTER_CIVS.concat(Array.isArray(p.unlockedCivs) ? p.unlockedCivs : []))),
       equipped: p.equipped || {},
-      loadout: Array.isArray(p.loadout) ? p.loadout.slice(0, 3) : [] // up to 3 generals
+      loadout: normalizeLoadout(p.loadout) // { legend, edict, event } — v2 3-slot
     };
   }
   function saveProfile(p) {
@@ -3778,23 +3839,28 @@
       "</div>"
     );
     parts.push('<div id="cd-reveal" class="cd-reveal"></div>');
-    parts.push('<div class="cd-note">Coins are earned by playing (win = ' + COINS_WIN + ', loss = ' + COINS_LOSS + '); spend them on Bronze/Silver/Gold packs, or claim the free daily Standard. A better tier tilts the odds toward good cards. Everything is cosmetic or a small, always-earnable edge — never pay-to-win. Click an owned cosmetic to wear it, or a General to bring it to battle.</div>');
+    parts.push('<div class="cd-note">Coins are earned by playing (win = ' + COINS_WIN + ', loss = ' + COINS_LOSS + '); spend them on Bronze/Silver/Gold packs, or claim the free daily Standard. A better tier tilts the odds toward good cards. Everything is cosmetic or a small, always-earnable edge — never pay-to-win. Click an owned cosmetic to wear it, or a Legend / Edict / Event to slot it for your next campaign.</div>');
 
-    // Loadout: the generals you'll take into your next campaign (max 3).
-    const perks = loadoutPerks();
+    // Loadout: one Legend + one Edict + one Event, brought into your next campaign.
+    // (They only take effect when you play their civilization — universal cards
+    // always apply.)
+    const lo = normalizeLoadout(p.loadout);
+    const perks = {};
+    for (const slot of ["legend", "edict"]) { const c = CARDS_BY_ID[lo[slot]]; if (c && p.cards[c.id]) { const e = effectToPerks(c.effect); for (const k in e) perks[k] = (perks[k] || 0) + e[k]; } }
     const perkStr = [];
     if (perks.food) perkStr.push("+" + perks.food + " 🌾");
     if (perks.production) perkStr.push("+" + perks.production + " ⚒️");
     if (perks.gold) perkStr.push("+" + perks.gold + " 🪙");
     if (perks.science) perkStr.push("+" + perks.science + " 🧪");
-    const loSlots = (p.loadout || []).map(function (id) {
-      const g = CARDS_BY_ID[id];
-      return g ? '<span class="cd-lo-ico" title="' + g.name + '">' + g.icon + " " + g.name + "</span>" : "";
+    const loSlots = LOADOUT_SLOTS.map(function (slot) {
+      const c = CARDS_BY_ID[lo[slot]];
+      const label = c ? (c.icon + " " + c.name) : "<i>empty</i>";
+      return '<span class="cd-lo-slot"><b>' + slot.charAt(0).toUpperCase() + slot.slice(1) + ":</b> " + label + "</span>";
     }).join("");
     parts.push(
-      '<div class="cd-loadout"><span class="cd-lo-label">⚔ Generals for your next campaign <b>' + (p.loadout || []).length + "/3</b></span>" +
-      '<span class="cd-lo-slots">' + (loSlots || '<span class="cd-lo-empty">none — click a General below</span>') + "</span>" +
-      (perkStr.length ? '<span class="cd-lo-perk">' + perkStr.join(" · ") + " each turn</span>" : "") +
+      '<div class="cd-loadout"><span class="cd-lo-label">⚔ Campaign loadout — one Legend · Edict · Event (civ-matched)</span>' +
+      '<span class="cd-lo-slots">' + loSlots + "</span>" +
+      (perkStr.length ? '<span class="cd-lo-perk">' + perkStr.join(" · ") + " each turn (matching-civ yields)</span>" : "") +
       "</div>"
     );
 
@@ -3803,7 +3869,7 @@
       const count = p.cards[card.id] || 0;
       const has = count > 0;
       const r = RARITY[card.rarity];
-      const inLoadout = card.type === "general" && (p.loadout || []).indexOf(card.id) !== -1;
+      const inLoadout = LOADOUT_SLOTS.indexOf(card.type) !== -1 && lo[card.type] === card.id;
       const equipped = (card.type === "cosmetic" && p.equipped && p.equipped[card.slot] === card.id) || inLoadout;
       const foot = inLoadout
         ? '<span class="pcard-eq">✓ in loadout</span>'
@@ -3858,9 +3924,9 @@
       if (card.type === "cosmetic") {
         el.classList.add("clickable");
         el.addEventListener("click", function () { equipCard(id); renderCards(); });
-      } else if (card.type === "general") {
+      } else if (LOADOUT_SLOTS.indexOf(card.type) !== -1) {
         el.classList.add("clickable");
-        el.addEventListener("click", function () { equipGeneral(id); renderCards(); });
+        el.addEventListener("click", function () { equipSlot(id); renderCards(); });
       }
     });
   }

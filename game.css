@@ -1435,6 +1435,8 @@ button:hover:not(:disabled) {
 .pcard-locked-tag { color: #7a8698; }
 
 /* Rarity accents */
+.pcard.rar-starter { border-color: #5f9e52; }
+.pcard.rar-starter .pcard-banner { background: linear-gradient(90deg, rgba(95, 158, 82, 0.32), rgba(0, 0, 0, 0.3)); }
 .pcard.rar-common { border-color: #6c7a89; }
 .pcard.rar-rare { border-color: #4a90d9; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(74, 144, 217, 0.35); }
 .pcard.rar-epic { border-color: #a25ddc; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(162, 93, 220, 0.4); }

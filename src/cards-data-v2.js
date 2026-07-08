@@ -1,0 +1,328 @@
+// HEGEMON — Cards data v2 (Legends / Edicts / Events / Civ cards)
+// Companion to HEGEMON-CIVS-CARDS-v2.md. Drop-in data module: no engine logic
+// here, only declarative card definitions. Effects use a small vocabulary that
+// game.js/engine maps to real modifiers (see EFFECT KEYS below).
+//
+// EFFECT KEYS (proposed):
+//   atkPct, defPct           — % combat modifiers (optional filters: vsCat, unitCat, terrain, inOwnTerritory, inEnemyTerritory)
+//   cityYield {food,gold,science,labour,stability} — flat per-city
+//   capitalYield {...}       — flat, capital only
+//   unitCostPct, buildFasterPct, researchCostPct    — % discounts (negative = cheaper)
+//   movePlus, healPlus, veterancyRatePct, plunderPct
+//   tradeRouteGold, special  — special = named hook implemented in engine
+//
+// NOT PAY-TO-WIN: legendary cards are distinct, some carry drawbacks.
+
+export const RARITY = ["common", "rare", "epic", "legendary"];
+
+export const CIV_CARDS = [
+  // wave 1 — playable
+  { id: "rome",      name: "Rome",              rarity: "starter", playable: true },
+  { id: "greece",    name: "Athens",            rarity: "starter", playable: true }, // display renamed; id kept for saves
+  { id: "egypt",     name: "Egypt",             rarity: "starter", playable: true },
+  { id: "carthage",  name: "Carthage",          rarity: "rare",    playable: true },
+  { id: "gaul",      name: "Gaul",              rarity: "rare",    playable: true },
+  { id: "parthia",   name: "Parthia",           rarity: "rare",    playable: true },
+  // wave 2 — next playable
+  { id: "sparta",    name: "Sparta",            rarity: "rare",    playable: false, wave: 2 },
+  { id: "macedon",   name: "Macedon",           rarity: "epic",    playable: false, wave: 2 },
+  { id: "persia",    name: "Achaemenid Persia", rarity: "epic",    playable: false, wave: 2 },
+  { id: "han",       name: "Han China",         rarity: "epic",    playable: false, wave: 2 },
+  { id: "maurya",    name: "Maurya India",      rarity: "epic",    playable: false, wave: 2 },
+  { id: "scythia",   name: "Scythia",           rarity: "epic",    playable: false, wave: 2 },
+  // wave 3 — collectible scenario powers
+  { id: "phoenicia", name: "Phoenicia",         rarity: "rare",      playable: false, wave: 3 },
+  { id: "etruria",   name: "Etruria",           rarity: "rare",      playable: false, wave: 3 },
+  { id: "thrace",    name: "Thrace",            rarity: "rare",      playable: false, wave: 3 },
+  { id: "ptolemies", name: "Ptolemaic Egypt",   rarity: "epic",      playable: false, wave: 3 },
+  { id: "seleucids", name: "Seleucid Empire",   rarity: "epic",      playable: false, wave: 3 },
+  { id: "numidia",   name: "Numidia",           rarity: "epic",      playable: false, wave: 3 },
+  { id: "epirus",    name: "Epirus",            rarity: "epic",      playable: false, wave: 3 },
+  { id: "pontus",    name: "Pontus",            rarity: "legendary", playable: false, wave: 3 },
+  { id: "armenia",   name: "Armenia",           rarity: "epic",      playable: false, wave: 3 },
+  { id: "judea",     name: "Judea",             rarity: "epic",      playable: false, wave: 3 },
+  { id: "kush",      name: "Kush",              rarity: "legendary", playable: false, wave: 3 },
+  { id: "celtiberia",name: "Celtiberia",        rarity: "epic",      playable: false, wave: 3 },
+  { id: "germania",  name: "Germania",          rarity: "epic",      playable: false, wave: 3 },
+  { id: "britannia", name: "Britannia",         rarity: "epic",      playable: false, wave: 3 },
+  { id: "dacia",     name: "Dacia",             rarity: "legendary", playable: false, wave: 3 },
+  { id: "illyria",   name: "Illyria",           rarity: "legendary", playable: false, wave: 3 },
+  { id: "pergamon",  name: "Pergamon",          rarity: "legendary", playable: false, wave: 3 },
+  { id: "bactria",   name: "Greco-Bactria",     rarity: "legendary", playable: false, wave: 3 },
+];
+
+// ---------------------------------------------------------------- LEGENDS
+// role: commander | statesman | sage | builder | navigator
+export const LEGENDS = [
+  // ROME
+  { id:"rome-scipio",    civ:"rome", name:"Scipio Africanus", role:"commander", rarity:"epic",
+    effect:{ atkPct:10, vs:{ civ:"carthage", atkPct:15 } },
+    blurb:"Victor of Zama, 202 BC. He beat Hannibal at his own game." },
+  { id:"rome-caesar",    civ:"rome", name:"Julius Caesar", role:"commander", rarity:"legendary",
+    effect:{ atkPct:15, special:"captured-city-stability+1", cityYield:{ gold:-1 } },
+    blurb:"Conqueror of Gaul. Glory has a price — his debts were legendary too." },
+  { id:"rome-augustus",  civ:"rome", name:"Augustus", role:"statesman", rarity:"epic",
+    effect:{ cityYield:{ gold:1, stability:1 } },
+    blurb:"First citizen. He found Rome brick and left it marble." },
+  { id:"rome-cato",      civ:"rome", name:"Cato the Elder", role:"statesman", rarity:"rare",
+    effect:{ tradeRouteGold:2, special:"farms+1food" },
+    blurb:"Author of De Agri Cultura — and of 'Carthage must be destroyed.'" },
+  { id:"rome-cicero",    civ:"rome", name:"Cicero", role:"sage", rarity:"rare",
+    effect:{ researchCostPct:-10, filter:"civic" },
+    blurb:"The republic's greatest voice." },
+  { id:"rome-agrippa",   civ:"rome", name:"Marcus Agrippa", role:"builder", rarity:"rare",
+    effect:{ buildFasterPct:30, filter:["aqueduct","harbor"], navalAtkPct:10 },
+    blurb:"Augustus' engineer and admiral. Actium was his." },
+
+  // CARTHAGE
+  { id:"carthage-hannibal",  civ:"carthage", name:"Hannibal Barca", role:"commander", rarity:"legendary",
+    effect:{ unitPct:{ unit:"war-elephant", atkPct:25 }, special:"mountains-passable-cost+1" },
+    blurb:"He brought elephants over the Alps. Rome never forgot." },
+  { id:"carthage-hamilcar",  civ:"carthage", name:"Hamilcar Barca", role:"commander", rarity:"epic",
+    effect:{ atkPct:15, inEnemyTerritory:true },
+    blurb:"The Thunderbolt. Sicily, Iberia, and an oath sworn by his son." },
+  { id:"carthage-hasdrubal", civ:"carthage", name:"Hasdrubal the Fair", role:"statesman", rarity:"rare",
+    effect:{ special:"new-city-pop+1" },
+    blurb:"Founder of New Carthage, diplomat of the Barcids." },
+  { id:"carthage-hanno",     civ:"carthage", name:"Hanno the Navigator", role:"navigator", rarity:"epic",
+    effect:{ navalMovePlus:2, special:"storm-immune" },
+    blurb:"Sailed beyond the Pillars, down coasts no Carthaginian had seen." },
+  { id:"carthage-mago",      civ:"carthage", name:"Mago the Agronomist", role:"sage", rarity:"rare",
+    effect:{ special:"farm+1food-vineyard+1gold" },
+    blurb:"His 28 books on farming were the one Punic work Rome chose to save." },
+  { id:"carthage-himilco",   civ:"carthage", name:"Himilco", role:"navigator", rarity:"rare",
+    effect:{ special:"deep-sea-cost-1", navalVisionPlus:1 },
+    blurb:"First from the Mediterranean to report the cold northern Atlantic." },
+
+  // ATHENS (civ id 'greece')
+  { id:"athens-pericles",     civ:"greece", name:"Pericles", role:"statesman", rarity:"legendary",
+    effect:{ special:"temple-academy-city+1sci+1gold", wonderCostPct:-20 },
+    blurb:"The first citizen of Athens. The Parthenon rose on his watch." },
+  { id:"athens-themistocles", civ:"greece", name:"Themistocles", role:"navigator", rarity:"epic",
+    effect:{ unitPct:{ unit:"trireme", atkPct:20, costPct:-20 } },
+    blurb:"He read the oracle's 'wooden walls' as ships — and won Salamis." },
+  { id:"athens-solon",        civ:"greece", name:"Solon", role:"statesman", rarity:"rare",
+    effect:{ cityYield:{ stability:1 }, special:"unrest-halved" },
+    blurb:"He gave Athens laws instead of a tyrant." },
+  { id:"athens-plato",        civ:"greece", name:"Plato", role:"sage", rarity:"epic",
+    effect:{ special:"academy+2sci" },
+    blurb:"The Academy outlived every empire on this map." },
+  { id:"athens-phidias",      civ:"greece", name:"Phidias", role:"builder", rarity:"rare",
+    effect:{ buildFasterPct:25, filter:["temple","wonder"] },
+    blurb:"Sculptor of the Athena Parthenos and the Zeus at Olympia." },
+  { id:"athens-demosthenes",  civ:"greece", name:"Demosthenes", role:"sage", rarity:"rare",
+    effect:{ researchCostPct:-15, filter:"military-doctrine" },
+    blurb:"He saw Philip coming when no one else would listen." },
+
+  // EGYPT (native)
+  { id:"egypt-psamtik",   civ:"egypt", name:"Psamtik I", role:"statesman", rarity:"legendary",
+    effect:{ capitalYield:{ food:1, gold:1, science:1, labour:1 }, special:"gold-units-cost-20" },
+    blurb:"He stitched Egypt back together in 664 BC — with Greek spears on the payroll." },
+  { id:"egypt-necho",     civ:"egypt", name:"Necho II", role:"navigator", rarity:"epic",
+    effect:{ special:"harbour+2gold, river-embark-without-sailing" },
+    blurb:"Cut a canal toward the Red Sea; his Phoenicians rounded Africa." },
+  { id:"egypt-amasis",    civ:"egypt", name:"Amasis II", role:"statesman", rarity:"rare",
+    effect:{ tradeRouteGold:2, foreignOnly:true },
+    blurb:"The commoner pharaoh who made Naucratis rich." },
+  { id:"egypt-nectanebo", civ:"egypt", name:"Nectanebo II", role:"commander", rarity:"rare",
+    effect:{ defPct:25, inOwnTerritory:true },
+    blurb:"The last native pharaoh. The Nile was his fortress." },
+  { id:"egypt-manetho",   civ:"egypt", name:"Manetho", role:"sage", rarity:"rare",
+    effect:{ special:"temple+1sci" },
+    blurb:"The priest who wrote Egypt's three thousand years for the Greeks." },
+  { id:"egypt-apries",    civ:"egypt", name:"Wahibre (Apries)", role:"commander", rarity:"rare",
+    effect:{ unitCatPct:{ cat:"spear", atkPct:15 }, navalAtkPct:10 },
+    blurb:"Pharaoh of Levantine wars and a restless army." },
+
+  // GAUL
+  { id:"gaul-vercingetorix", civ:"gaul", name:"Vercingetorix", role:"commander", rarity:"legendary",
+    effect:{ atkPct:20, special:"besieged-city-territory-units+25" },
+    blurb:"He united the tribes and beat Caesar at Gergovia. Alesia was the price." },
+  { id:"gaul-brennus",       civ:"gaul", name:"Brennus", role:"commander", rarity:"epic",
+    effect:{ plunderPct:30 },
+    blurb:"Sacked Rome in 390 BC. 'Vae victis' — woe to the vanquished." },
+  { id:"gaul-ambiorix",      civ:"gaul", name:"Ambiorix", role:"commander", rarity:"rare",
+    effect:{ atkPct:25, condition:"forest-or-fog" },
+    blurb:"Lured a legion and a half to its end in the forests of the north." },
+  { id:"gaul-diviciacus",    civ:"gaul", name:"Diviciacus", role:"sage", rarity:"rare",
+    effect:{ cityYield:{ science:1 } },
+    blurb:"The only druid history knows by name — Cicero's houseguest." },
+  { id:"gaul-dumnorix",      civ:"gaul", name:"Dumnorix", role:"statesman", rarity:"rare",
+    effect:{ special:"trade-post+2gold" },
+    blurb:"He held the river tolls and answered to no one." },
+  { id:"gaul-commius",       civ:"gaul", name:"Commius", role:"statesman", rarity:"rare",
+    effect:{ cityYield:{ stability:1 }, special:"captured-city-converts-faster" },
+    blurb:"Caesar's agent, then his enemy — king on both sides of the Channel." },
+
+  // PARTHIA
+  { id:"parthia-surena",      civ:"parthia", name:"Surena", role:"commander", rarity:"legendary",
+    effect:{ unitPct:{ unit:"horse-archer", atkPct:25 }, special:"mounted-field-heal+2" },
+    blurb:"Carrhae, 53 BC. A thousand camels of arrows, and Crassus fell." },
+  { id:"parthia-arsaces",     civ:"parthia", name:"Arsaces I", role:"statesman", rarity:"epic",
+    effect:{ special:"new-city-pop+1", unitCatCostPct:{ cat:"mounted", costPct:-15 } },
+    blurb:"From steppe chieftain to founder of a dynasty of kings." },
+  { id:"parthia-mithridates", civ:"parthia", name:"Mithridates I", role:"statesman", rarity:"epic",
+    effect:{ cityYield:{ gold:1, science:1 } },
+    blurb:"He took Mesopotamia and wore two crowns' worth of cultures." },
+  { id:"parthia-orodes",      civ:"parthia", name:"Orodes II", role:"commander", rarity:"rare",
+    effect:{ defPct:15, special:"enemy-siege-20" },
+    blurb:"The king whose realm swallowed a Roman army whole." },
+  { id:"parthia-vologases",   civ:"parthia", name:"Vologases I", role:"statesman", rarity:"rare",
+    effect:{ tradeRouteGold:3 },
+    blurb:"He made the Silk Road pay its tolls to Ctesiphon." },
+
+  // SPARTA (wave 2)
+  { id:"sparta-leonidas",  civ:"sparta", name:"Leonidas I", role:"commander", rarity:"legendary",
+    effect:{ unitCatPct:{ cat:"spear", defPct:30 }, special:"hills-pass-def+60" },
+    blurb:"Three hundred at the Hot Gates. Come and take them." },
+  { id:"sparta-brasidas",  civ:"sparta", name:"Brasidas", role:"commander", rarity:"epic",
+    effect:{ infantryMovePlus:1, atkPct:15 },
+    blurb:"Fast, persuasive, un-Spartan — and Sparta's best." },
+  { id:"sparta-lysander",  civ:"sparta", name:"Lysander", role:"navigator", rarity:"rare",
+    effect:{ navalAtkPct:15, tradeRouteGold:2, navalOnly:true },
+    blurb:"He ended a 27-year war in one afternoon at Aegospotami." },
+  { id:"sparta-agesilaus", civ:"sparta", name:"Agesilaus II", role:"commander", rarity:"rare",
+    effect:{ atkPct:15, inEnemyTerritory:true },
+    blurb:"The lame king who marched into Asia itself." },
+  { id:"sparta-lycurgus",  civ:"sparta", name:"Lycurgus", role:"statesman", rarity:"rare",
+    effect:{ unitCostPct:-15, cityYield:{ gold:-1 } },
+    blurb:"The lawgiver — if he lived at all. Iron money, iron men. (Historicity debated; the laws were real.)" },
+  { id:"sparta-chilon",    civ:"sparta", name:"Chilon", role:"sage", rarity:"rare",
+    effect:{ cityYield:{ stability:1 } },
+    blurb:"One of the Seven Sages. 'Nothing in excess.'" },
+
+  // MACEDON (wave 2)
+  { id:"macedon-alexander", civ:"macedon", name:"Alexander III", role:"commander", rarity:"legendary",
+    effect:{ atkPct:20, special:"full-heal-on-city-capture" },
+    blurb:"Undefeated from the Granicus to the Hydaspes." },
+  { id:"macedon-philip",    civ:"macedon", name:"Philip II", role:"commander", rarity:"epic",
+    effect:{ special:"combined-arms-doubled", unitCatPct:{ cat:"siege", atkPct:20 } },
+    blurb:"He built the machine his son drove across the world." },
+  { id:"macedon-parmenion", civ:"macedon", name:"Parmenion", role:"commander", rarity:"rare",
+    effect:{ special:"stack2plus+10" },
+    blurb:"The steady left wing at every great battle — until Ecbatana." },
+  { id:"macedon-antipater", civ:"macedon", name:"Antipater", role:"statesman", rarity:"rare",
+    effect:{ cityYield:{ stability:1 }, special:"home-gold+1-while-at-war" },
+    blurb:"He held Macedon while the army was a continent away." },
+  { id:"macedon-aristotle", civ:"macedon", name:"Aristotle", role:"sage", rarity:"epic",
+    effect:{ researchCostPct:-15, special:"academy+1sci" },
+    blurb:"Tutor at Mieza. His student conquered the world; his books outlasted it." },
+  { id:"macedon-craterus",  civ:"macedon", name:"Craterus", role:"commander", rarity:"rare",
+    effect:{ veterancyRatePct:50 },
+    blurb:"The soldiers' general — the men loved him best." },
+
+  // ACHAEMENID PERSIA (wave 2)
+  { id:"persia-cyrus",     civ:"persia", name:"Cyrus II the Great", role:"statesman", rarity:"legendary",
+    effect:{ special:"captured-city-keeps-buildings-instant-convert" },
+    blurb:"He conquered by mercy as much as by arms. The Cylinder still speaks." },
+  { id:"persia-darius",    civ:"persia", name:"Darius I", role:"builder", rarity:"epic",
+    effect:{ special:"roads-free", cityYield:{ gold:1 } },
+    blurb:"The Royal Road, the daric, the satrapies — an empire made administrative." },
+  { id:"persia-xerxes",    civ:"persia", name:"Xerxes I", role:"commander", rarity:"rare",
+    effect:{ atkPct:15, condition:"outnumber" },
+    blurb:"He bridged the Hellespont and drank rivers dry." },
+  { id:"persia-artemisia", civ:"persia", name:"Artemisia I", role:"navigator", rarity:"epic",
+    effect:{ navalAtkPct:15, special:"naval-retreat-after-round" },
+    blurb:"The one commander Xerxes said fought like a man at Salamis." },
+  { id:"persia-mardonius", civ:"persia", name:"Mardonius", role:"commander", rarity:"rare",
+    effect:{ atkPct:10, special:"fallen-unit-refund-25" },
+    blurb:"He kept the great invasion alive until Plataea." },
+
+  // HAN CHINA (wave 2)
+  { id:"han-wudi",     civ:"han", name:"Emperor Wu", role:"statesman", rarity:"legendary",
+    effect:{ cityYield:{ science:1 }, unitCatPct:{ cat:"mounted", atkPct:15 } },
+    blurb:"Fifty-four years on the throne; the Han at its greatest reach." },
+  { id:"han-gaozu",    civ:"han", name:"Liu Bang (Gaozu)", role:"statesman", rarity:"epic",
+    effect:{ cityYield:{ stability:1 }, special:"siege-recovery-2x" },
+    blurb:"A village constable who outlasted every rival to found the Han." },
+  { id:"han-weiqing",  civ:"han", name:"Wei Qing", role:"commander", rarity:"rare",
+    effect:{ unitCatPct:{ cat:"mounted", atkPct:20, vsCat:"mounted" } },
+    blurb:"Seven campaigns north; the Xiongnu learned his name." },
+  { id:"han-zhangqian",civ:"han", name:"Zhang Qian", role:"navigator", rarity:"epic",
+    effect:{ tradeRouteGold:3, special:"trade-route+1sci" },
+    blurb:"Thirteen years, two captivities, and the road west lay open." },
+  { id:"han-simaqian", civ:"han", name:"Sima Qian", role:"sage", rarity:"rare",
+    effect:{ researchCostPct:-10, special:"event-reward+1" },
+    blurb:"He chose disgrace over silence and wrote history itself." },
+  { id:"han-cailun",   civ:"han", name:"Cai Lun", role:"builder", rarity:"rare",
+    effect:{ special:"library-academy+1sci-build30faster" },
+    blurb:"Paper, AD 105. Every scroll after him owes the debt." },
+
+  // MAURYA INDIA (wave 2)
+  { id:"maurya-ashoka",       civ:"maurya", name:"Ashoka", role:"statesman", rarity:"legendary",
+    effect:{ cityYield:{ stability:2 }, special:"temple+1sci, first-war-costs-2-stability" },
+    blurb:"After Kalinga, he carved remorse into rock across a subcontinent." },
+  { id:"maurya-chandragupta", civ:"maurya", name:"Chandragupta", role:"commander", rarity:"epic",
+    effect:{ atkPct:15, unitPct:{ unit:"war-elephant", costPct:-20 } },
+    blurb:"He faced Seleucus and the price of peace was 500 elephants — paid to him." },
+  { id:"maurya-chanakya",     civ:"maurya", name:"Chanakya", role:"sage", rarity:"epic",
+    effect:{ cityYield:{ gold:1 }, special:"reveal-enemy-target" },
+    blurb:"The Arthashastra: statecraft, spycraft, and the price of everything." },
+  { id:"maurya-bindusara",    civ:"maurya", name:"Bindusara", role:"statesman", rarity:"rare",
+    effect:{ tradeRouteGold:2 },
+    blurb:"'Slayer of enemies.' He kept what his father won and asked Greece for figs, wine, and a philosopher." },
+  { id:"maurya-panini",       civ:"maurya", name:"Panini", role:"sage", rarity:"rare",
+    effect:{ researchCostPct:-10, filter:"civic" },
+    blurb:"Four thousand rules of Sanskrit — the most precise grammar of the ancient world." },
+
+  // SCYTHIA (wave 2)
+  { id:"scythia-idanthyrsus", civ:"scythia", name:"Idanthyrsus", role:"commander", rarity:"legendary",
+    effect:{ special:"mounted-retreat-1hex-when-attacked" },
+    blurb:"Darius invaded the steppe. The steppe simply moved. The king rode home empty-handed." },
+  { id:"scythia-tomyris",     civ:"scythia", name:"Tomyris", role:"commander", rarity:"epic",
+    effect:{ atkPct:25, inOwnTerritory:true },
+    blurb:"Queen of the Massagetae, kin of the steppe. Cyrus the Great did not ride home at all." },
+  { id:"scythia-ateas",       civ:"scythia", name:"Ateas", role:"statesman", rarity:"rare",
+    effect:{ special:"pasture+1food+1gold" },
+    blurb:"He united the tribes and died in battle at ninety — against Philip II." },
+  { id:"scythia-anacharsis",  civ:"scythia", name:"Anacharsis", role:"sage", rarity:"rare",
+    effect:{ cityYield:{ science:1 } },
+    blurb:"The Scythian the Greeks counted among their own Seven Sages." },
+  { id:"scythia-madyes",      civ:"scythia", name:"Madyes", role:"commander", rarity:"rare",
+    effect:{ atkPct:15, plunderPct:20 },
+    blurb:"He led the great ride south, when Scythian hooves reached Egypt's border." },
+];
+
+// ---------------------------------------------------------------- EDICTS
+export const EDICTS = [
+  // universal
+  { id:"edict-grain-dole",     name:"Grain Dole",       rarity:"common", civ:null, effect:{ capitalYield:{ food:2 } } },
+  { id:"edict-corvee",         name:"Corvée Labour",    rarity:"common", civ:null, effect:{ buildFasterPct:25, capitalYield:{ stability:-1 } } },
+  { id:"edict-standing-levy",  name:"Standing Levy",    rarity:"rare",   civ:null, effect:{ unitCostPct:-10 } },
+  { id:"edict-coastal-patrol", name:"Coastal Patrols",  rarity:"common", civ:null, effect:{ special:"coast-vision+1-ship-def+1" } },
+  { id:"edict-census",         name:"Census & Registry",rarity:"rare",   civ:null, effect:{ cityYield:{ gold:1 } } },
+  { id:"edict-sacred-truce",   name:"Sacred Truce",     rarity:"rare",   civ:null, effect:{ cityYield:{ stability:2 }, special:"no-first-war-20-turns" } },
+  // civ-specific
+  { id:"edict-cursus",        name:"Cursus Publicus",       rarity:"epic", civ:"rome",     effect:{ special:"roads-extra-half-move" } },
+  { id:"edict-mercenary",     name:"Mercenary Contracts",   rarity:"epic", civ:"carthage", effect:{ special:"buy-units-gold+25pct" } },
+  { id:"edict-delian",        name:"Delian Tribute",        rarity:"epic", civ:"greece",   effect:{ special:"gold-per-allied-city" } },
+  { id:"edict-inundation",    name:"Nile Inundation",       rarity:"epic", civ:"egypt",    effect:{ special:"river-farm+2food" } },
+  { id:"edict-oppida",        name:"Oppida Network",        rarity:"epic", civ:"gaul",     effect:{ special:"hill-city+2prod+25def" } },
+  { id:"edict-silk-tolls",    name:"Silk Road Tolls",       rarity:"epic", civ:"parthia",  effect:{ special:"foreign-route-crossing+2gold" } },
+  { id:"edict-agoge",         name:"The Agoge",             rarity:"epic", civ:"sparta",   effect:{ special:"melee-spawn-vet1" } },
+  { id:"edict-companions",    name:"Companion Cavalry",     rarity:"epic", civ:"macedon",  effect:{ unitCatPct:{ cat:"mounted", movePlus:1 } } },
+  { id:"edict-royal-road",    name:"Royal Road",            rarity:"epic", civ:"persia",   effect:{ special:"roads-grant-vision+1" } },
+  { id:"edict-examination",   name:"Imperial Examination",  rarity:"epic", civ:"han",      effect:{ special:"library-city+1sci" } },
+  { id:"edict-arthashastra",  name:"Arthashastra Statecraft", rarity:"epic", civ:"maurya", effect:{ special:"see-enemy-gold-science" } },
+  { id:"edict-wagon-camps",   name:"Wagon Camps",           rarity:"epic", civ:"scythia",  effect:{ special:"heal-in-neutral-territory" } },
+];
+
+// ---------------------------------------------------------------- EVENTS (one-use)
+export const EVENT_CARDS = [
+  { id:"event-harvest",   name:"Bumper Harvest",     rarity:"common", civ:null, effect:{ instant:"capital+10food" } },
+  { id:"event-omens",     name:"Favourable Omens",   rarity:"common", civ:null, effect:{ instant:"next-battle+20atk" } },
+  { id:"event-defection", name:"Defection",          rarity:"epic",   civ:null, effect:{ instant:"adjacent-damaged-enemy-joins" } },
+  { id:"event-storm",     name:"Storm Averted",      rarity:"rare",   civ:null, effect:{ instant:"ignore-weather-3-turns" } },
+  { id:"event-march",     name:"Forced March",       rarity:"rare",   civ:null, effect:{ instant:"all-units+2move-1turn" } },
+  { id:"event-visit",     name:"Philosopher's Visit",rarity:"common", civ:null, effect:{ instant:"+15science" } },
+  { id:"event-rubicon",   name:"Crossing the Rubicon", rarity:"legendary", civ:"rome",     effect:{ instant:"+25atk-3turns, -2stability" } },
+  { id:"event-oath",      name:"Oath of Hamilcar",     rarity:"legendary", civ:"carthage", effect:{ instant:"pick-enemy-civ, +15pct-vs-them-permanent" } },
+  { id:"event-horses",    name:"Heavenly Horses",      rarity:"legendary", civ:"han",      effect:{ instant:"spawn-2-horsemen-capital" } },
+];
+
+export const PACK_ECONOMY = {
+  dropRates: { common:0.70, rare:0.20, epic:0.08, legendary:0.02 },
+  pity: { everyNPacks:10, guarantees:"epic+" },
+  duplicates: "shards", // craft any card; legendary ≈ 3–4 dup legendaries
+  monetization: "money-buys-packs-only; every card earnable via coins/daily/achievements",
+};
