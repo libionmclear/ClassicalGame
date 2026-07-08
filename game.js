@@ -738,7 +738,7 @@
       const reqTech = b.requiresTech;
       const hasTech = !reqTech || player.techs.includes(reqTech);
       const needsCoast = b.coastalOnly && !coastal;
-      const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
+      const techName = reqTech ? techMeta(reqTech).name : "";
       const bCost = itemCost(id); // discounted if you hold the needed resource
       const bDiscounted = bCost < b.cost;
       const bRes = (engine.BUILD_RESOURCE || {})[id];
@@ -788,7 +788,7 @@
       const reqTech = def.requiresTech;
       const hasTech = !reqTech || player.techs.includes(reqTech);
       const needsCoast = def.domain === "naval" && !coastal;
-      const techName = reqTech ? (TECH_INFO[reqTech] && TECH_INFO[reqTech].name) || reqTech : "";
+      const techName = reqTech ? techMeta(reqTech).name : "";
       const discRes = (engine.BUILD_RESOURCE || {})[type];
       const discGlyph = discRes && engine.RESOURCES && engine.RESOURCES[discRes] ? engine.RESOURCES[discRes].glyph : "";
 
@@ -2527,6 +2527,14 @@
     })(id);
   }
 
+  // Name/note for a tech: the curated TECH_INFO entry, else the engine's merged
+  // data (the v2 civ-unique branch techs carry their own name/note there).
+  function techMeta(id) {
+    if (TECH_INFO[id]) return TECH_INFO[id];
+    const t = (engine.TECHS && engine.TECHS[id]) || null;
+    return { name: (t && t.name) || id, note: (t && t.note) || "" };
+  }
+
   function renderTechTree(victory) {
     if (!techTreeEl) return;
     const techs = engine.TECHS || {};
@@ -2554,7 +2562,7 @@
 
       for (const id of ids) {
         const rule = techs[id];
-        const info = TECH_INFO[id] || { name: id, note: "" };
+        const info = techMeta(id);
         const researched = player.techs.includes(id);
         const available = !researched && canResearchSafe(player, id);
         const forkClosed =
@@ -2564,7 +2572,7 @@
         const affordable = player.science >= cost;
 
         const prereqs = (rule.prerequisites || []).map(function (p) {
-          return { name: (TECH_INFO[p] && TECH_INFO[p].name) || p, have: player.techs.includes(p) };
+          return { name: techMeta(p).name, have: player.techs.includes(p) };
         });
         const needsHtml = prereqs.length && !researched && !available
           ? '<span class="tech-needs">needs ' + prereqs.map(function (p) {
@@ -2573,7 +2581,11 @@
           : "";
 
         const card = document.createElement("button");
-        card.className = "tech-card " + (researched ? "done" : available ? "avail" : forkClosed ? "closed" : "locked") + (rule.forkGroup ? " is-fork" : "");
+        card.className = "tech-card " + (researched ? "done" : available ? "avail" : forkClosed ? "closed" : "locked") +
+          (rule.forkGroup ? " is-fork" : "") + (rule.civ ? " is-branch" : "") + (rule.capstone ? " is-capstone" : "");
+        // v2: tint a civ-unique branch tech with its people's colour (a light-touch
+        // preview of the branch band; the full tech-tree UI is Phase 7).
+        if (rule.civ && CIV_COLORS[rule.civ]) card.style.borderLeftColor = CIV_COLORS[rule.civ];
         card.disabled = !(available && affordable && canAct);
         card.dataset.tech = id;
         card.title = info.name + " — " + info.note +
@@ -2581,7 +2593,7 @@
 
         const badge = researched ? "✓" : available ? (cost + " 🧪" + (affordable ? (rule.forkGroup ? " ⑂" : "") : " ⏳")) : forkClosed ? "closed" : "🔒";
         card.innerHTML =
-          '<span class="tech-ico">' + (TECH_ICONS[id] || "🔬") + "</span>" +
+          '<span class="tech-ico">' + (TECH_ICONS[id] || (rule.capstone ? "👑" : "🔬")) + "</span>" +
           '<span class="tech-body"><span class="tech-name">' + info.name + "</span>" + needsHtml + "</span>" +
           '<span class="tech-state">' + badge + "</span>";
 
@@ -3003,7 +3015,7 @@
       parts.push('<h4>' + (AGE_LABELS[age] || "Age " + age) + "</h4>");
       for (const id of Object.keys(engine.TECHS || {})) {
         if (engine.TECHS[id].age !== age) continue;
-        const info = TECH_INFO[id] || { name: id, note: "" };
+        const info = techMeta(id);
         parts.push('<div class="cdx-entry"><b>' + info.name + '</b><div class="cdx-note">' + info.note + "</div></div>");
       }
     }

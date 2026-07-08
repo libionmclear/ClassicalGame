@@ -157,13 +157,29 @@ into the tile**. Cities have HP and repair when not besieged.
 - **Roads & Logistics** tech gives every land unit +1 movement.
 
 ### Research / tech tree (see §6 for the full list)
+- **Shared trunk + civ‑unique BRANCHES (v2, `docs/HEGEMON-TECHTREE-v2.md`).** The
+  shared trunk (bronze, writing, irrigation, philosophy, forks, …) is unchanged.
+  On top, each civ has a named **branch** of ~10 techs ending in a **capstone
+  doctrine** (Rome *Via Romana* → Testudo, Athens *School of Hellas* → Wooden Walls,
+  etc.), interleaved with the trunk via prerequisites (e.g. `legionary-system`
+  needs trunk `iron-working` + branch `castra`). Branches are hidden from rival
+  civs. The 12 signature unit/doctrine techs were **absorbed** into their branch
+  (same ids, new prereq edges → old saves still load). Data of record:
+  `src/techs-v2.js` → generated into typed `src/engine/branch-data.ts` by
+  `scripts/gen-branch-data.mjs`, merged into `TECHS` at `data.ts` load.
 - Deep tree across 3 ages (Villages / Kingdoms / Empires) with prerequisites and a
-  few **forks** (pick one branch). Base costs by age **20 / 46 / 82**, ×`costScale`.
-  `rhetoric` cuts a player's research cost 15%.
-- **Every tech has a concrete effect** — a unit/building/improvement unlock, a
-  movement/heal ability, a combat doctrine, or a **per‑city yield** (`TECH_CITY_YIELD`).
-- The UI tech tree (`game.js`) has per‑tech **icon + description of the EFFECT**,
-  prereq chains on hover, and hides other civs' unique techs.
+  few **forks**. Base costs by age **20 / 46 / 82**, ×`costScale`. `rhetoric` −15%.
+- **Effects:** trunk techs and the six existing doctrines all have concrete engine
+  effects. For the ~90 new branch techs, **only `cityYield` is wired** (into
+  `TECH_CITY_YIELD`, with `stability` STUBBED as `+gold` until the stat ships in
+  Phase 5); `unlocks` gate units/buildings via `requiresTech`. **Combat %,
+  `capitalYield`, `buildingBoost`, `upkeepPct` and every `special:` hook are
+  FLAGGED, not built** (their `effect` block is carried on the tech for later
+  wiring). The AI research picker (`ai.ts`) is **branch‑aware** (own branch ×1.5,
+  economy trunk early, capstone only with a real army).
+- The UI tech tree (`game.js`) reads a tech's name/note from `TECH_INFO` or falls
+  back to the engine's merged data; branch techs get a civ‑colour edge, capstones a
+  gold glow. The full tech‑tree UI redesign is Phase 7.
 
 ### Economy
 - Cities produce food/production(labour)/gold/science each turn from terrain, pop,
@@ -300,6 +316,17 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **HEGEMON v2 — PHASE 2 (Tech‑tree data merge).** Per `HEGEMON-TECHTREE-v2.md` §3:
+  merged the **12 civ‑unique branches (121 techs)** into `TECHS` (via generated
+  `src/engine/branch-data.ts`), **absorbed** the 12 signature ids with new branch
+  prereqs (old saves load), reassigned **phalanx‑wall → Sparta** and gave **Athens
+  a new capstone `wooden-walls`**, added the **5 branch units** (cataphract wave‑1;
+  spartiate/phalangite/immortal/crossbowman gated to wave‑2 civs) + the **forum**
+  building, wired branch **`cityYield`** (stability→gold stub) and `unlocks`, made
+  the **AI branch‑aware**, and adapted the tech‑tree UI (name/note fallback + branch
+  colour + capstone glow). New `test/branches.test.ts` (§3.10 validity). *Combat %,
+  capitalYield, buildingBoost, upkeepPct and all `special:` hooks are FLAGGED, not
+  built. Phases 3–5 (units roster/models, cities, real stability) NOT started.*
 - **HEGEMON v2 — PHASE 1 (Cards migration).** Per `docs/HEGEMON-CIVS-CARDS-v2.md`
   §7 and the `CLAUDE-CODE-HANDOFF.md` five‑phase plan: **Generals → Legends** (68) +
   new **Edicts** (18), v2 **Events** (9) and **30 civ cards** (waves 1–3); the

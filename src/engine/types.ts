@@ -72,6 +72,12 @@ export interface TechRule {
   civ?: string;
   /** Explicit science cost; when omitted the cost is derived from the age. */
   cost?: number;
+  /** v2 civ-unique branch techs carry a display name, history note, effect block,
+   *  and a capstone flag (the branch's terminal doctrine). */
+  name?: string;
+  note?: string;
+  capstone?: boolean;
+  effect?: Record<string, unknown>;
 }
 
 export interface Unit {

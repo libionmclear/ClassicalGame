@@ -133,10 +133,11 @@ test("civ-unique tech and unit are gated to their people", () => {
   const state = buildState();
   const rome = state.playersById.p1; // civ "Rome"
   const carthage = state.playersById.p2; // civ "Carthage"
-  rome.techs.push("iron-working");
-  carthage.techs.push("iron-working");
+  // v2: legionary-system now anchors on the Via Romana branch (iron-working + castra).
+  rome.techs.push("iron-working", "castra");
+  carthage.techs.push("iron-working", "castra");
 
-  // Only Rome may research the Legionary System, even with the prerequisite met.
+  // Only Rome may research the Legionary System, even with the prerequisites met.
   assert.equal(canResearch(rome, "legionary-system"), true);
   assert.equal(canResearch(carthage, "legionary-system"), false);
 

@@ -123,8 +123,19 @@ function enemyCavalryNear(state: GameState, player: Player): boolean {
   return false;
 }
 
-function firstBuildableTech(player: Player): string | null {
-  for (const techId of RESEARCH_PRIORITY) {
+// Branch-aware research pick (HEGEMON-TECHTREE-v2 §3.8): consider EVERY buildable
+// tech (so the new civ-unique branch techs — absent from the old priority list —
+// are actually researched), weight your own branch ×1.5, keep the economy trunk
+// flowing early, and hold the capstone until the war machine is real.
+const RESEARCH_BASE: Record<string, number> = {};
+RESEARCH_PRIORITY.forEach((id, i) => { RESEARCH_BASE[id] = RESEARCH_PRIORITY.length - i; });
+const ECON_TRUNK = new Set(["irrigation", "animal-husbandry", "pottery", "writing", "masonry", "coinage", "currency-reform", "mathematics", "aqueducts"]);
+
+function bestBuildableTech(state: GameState, player: Player): string | null {
+  const military = unitsOf(state, player).filter((u) => (UNITS[u.type]?.attack ?? 0) > 0).length;
+  let best: string | null = null;
+  let bestScore = -Infinity;
+  for (const techId of Object.keys(TECHS)) {
     if (player.techs.includes(techId)) continue;
     const tech = TECHS[techId];
     if (!tech) continue;
@@ -134,9 +145,14 @@ function firstBuildableTech(player: Player): string | null {
       const chosen = player.forkChoices[tech.forkGroup];
       if (chosen && chosen !== tech.forkBranch) continue;
     }
-    return techId;
+    let score = RESEARCH_BASE[techId] ?? 8; // branch techs missing from the old list get a mid base
+    if (tech.civ) score *= 1.5;             // your own unique branch is a priority
+    if (ECON_TRUNK.has(techId)) score += 6; // keep the economy moving early
+    if (tech.capstone) { if (military < 4) continue; score += 4; } // capstone only with a real army
+    score -= (tech.age - 1) * 0.1;          // tiny tie-break toward cheaper, earlier techs
+    if (score > bestScore) { bestScore = score; best = techId; }
   }
-  return null;
+  return best;
 }
 
 // --- Actions -------------------------------------------------------------
@@ -523,7 +539,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => navalManeuverAction(state, player),
     () => settlerMoveAction(state, player),
     () => {
-      const techId = firstBuildableTech(player);
+      const techId = bestBuildableTech(state, player);
       if (!techId || player.science < researchCost(techId)) return null;
       return { type: "RESEARCH_TECH", playerId, techId };
     }

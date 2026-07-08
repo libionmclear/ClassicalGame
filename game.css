@@ -1931,6 +1931,11 @@ details.panel-collapse > summary {
 }
 
 .tech-card.is-fork { border-left: 3px solid #b98bd8; }
+/* v2: civ-unique branch techs carry a coloured left edge (inline colour = civ),
+   and the branch capstone gets a gold glow. Full tech-tree UI is Phase 7. */
+.tech-card.is-branch { border-left-width: 3px; border-left-style: solid; }
+.tech-card.is-capstone { box-shadow: 0 0 0 1px rgba(242, 160, 61, 0.55), 0 0 10px rgba(242, 160, 61, 0.3); }
+.tech-card.is-capstone .tech-name { color: #f2cc69; }
 
 .tech-card.done { background: #22331f; }
 .tech-card.done .tech-ico { filter: none; }

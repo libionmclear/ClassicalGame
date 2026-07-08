@@ -1,4 +1,5 @@
 import type { TechRule, TerrainRule, UnitRule } from "./types";
+import { UNIQUE_TECHS } from "./branch-data";
 
 export const TERRAIN: Record<string, TerrainRule> = {
   plains: { moveCost: 1, yields: { food: 2, production: 0, gold: 0 }, defense: 0, vision: 0 },
@@ -152,6 +153,44 @@ export const TECH_CITY_YIELD: Record<string, { food?: number; production?: numbe
   "nile-bureaucracy": { food: 1, science: 1 } // Egypt's civ bonus
 };
 
+// ===== v2: merge the civ-unique BRANCH techs (docs/HEGEMON-TECHTREE-v2.md §3) =====
+// Absorbed doctrine/unit techs (same ids) are OVERWRITTEN with their new branch
+// prerequisites — save compatibility: ids unchanged, prereq edges new. Branch
+// techs use the shared age-derived costs (no explicit cost). The doctrine
+// reassignment (phalanx-wall→sparta, new wooden-walls→Athens) rides in via the
+// data. Effects: only cityYield maps today (added to TECH_CITY_YIELD below, with
+// stability STUBBED as gold per §3.6 / cards v2 §7.3, labour→production). Combat
+// %, capitalYield, buildingBoost, upkeepPct and every `special:` hook are FLAGGED
+// (not wired) except the six existing doctrines, whose combat effects are already
+// hardcoded in index.ts and keep working.
+for (const t of UNIQUE_TECHS) {
+  const prior = TECHS[t.id];
+  TECHS[t.id] = {
+    age: t.age,
+    prerequisites: t.prereq.slice(),
+    civ: t.civ,
+    name: t.name,
+    note: t.note,
+    capstone: t.capstone,
+    effect: t.effect,
+    ...(prior && prior.forkGroup ? { forkGroup: prior.forkGroup, forkBranch: prior.forkBranch } : {})
+  };
+  const cy = (t.effect as { cityYield?: Record<string, number> }).cityYield;
+  if (cy) {
+    // Build fresh from the branch data (the source of truth) — do NOT add on top
+    // of an existing entry, or absorbed doctrines like nile-bureaucracy double.
+    const y: { food?: number; production?: number; gold?: number; science?: number } = {};
+    for (const k of Object.keys(cy)) {
+      const v = cy[k];
+      if (k === "food") y.food = (y.food ?? 0) + v;
+      else if (k === "science") y.science = (y.science ?? 0) + v;
+      else if (k === "gold" || k === "stability") y.gold = (y.gold ?? 0) + v; // stability STUB → gold
+      else if (k === "labour" || k === "production") y.production = (y.production ?? 0) + v;
+    }
+    TECH_CITY_YIELD[t.id] = y;
+  }
+}
+
 // Classical rock-paper-scissors, both when attacking and defending:
 //   spears beat cavalry; cavalry runs down skirmishers & light foot;
 //   heavy infantry grinds spears and closes on skirmishers; archers strike
@@ -215,6 +254,38 @@ export const UNITS: Record<string, UnitRule> = {
     domain: "land", movement: 4, attack: 20, defense: 14, maxHp: 18, range: 2, upkeep: 2, mounted: true,
     requiresTech: "horse-archery", civ: "parthia", category: "mounted", counters: { infantry: 0.25, spear: 0.3 },
     upgradesFrom: "horseman"
+  },
+
+  // --- v2 branch units (stats derived from NEW_UNITS basedOn+tweak; 3D models &
+  //     the wider roster are Phase 3). Cataphract is the only WAVE-1 addition;
+  //     the other four are gated to wave-2 civs (not yet playable) and exist so
+  //     their branch `unlocks` resolve. Two carry a `special` this note flags:
+  //     immortal's 50%-cost-refund-on-death and crossbowman's terrain-def bypass
+  //     are STUBBED (base stats only) until the hooks ship.
+  cataphract: {
+    domain: "land", movement: 2, attack: 26, defense: 26, maxHp: 28, range: 1, upkeep: 2, mounted: true,
+    requiresTech: "cataphract-armouries", civ: "parthia", category: "mounted", counters: { ranged: 0.5, infantry: 0.2 },
+    upgradesFrom: "horseman"
+  },
+  spartiate: {
+    domain: "land", movement: 2, attack: 26, defense: 34, maxHp: 26, range: 1, upkeep: 2,
+    requiresTech: "spartiate-corps", civ: "sparta", category: "spear", counters: { mounted: 0.7 },
+    upgradesFrom: "hoplite"
+  },
+  phalangite: {
+    domain: "land", movement: 2, attack: 20, defense: 24, maxHp: 20, range: 1, upkeep: 2,
+    requiresTech: "sarissa-phalanx", civ: "macedon", category: "spear", counters: { mounted: 0.6, infantry: 0.2 },
+    upgradesFrom: "spearman"
+  },
+  immortal: {
+    domain: "land", movement: 2, attack: 20, defense: 24, maxHp: 22, range: 1, upkeep: 1,
+    requiresTech: "immortals", civ: "persia", category: "spear", counters: { mounted: 0.5 },
+    upgradesFrom: "spearman"
+  },
+  crossbowman: {
+    domain: "land", movement: 1, attack: 22, defense: 12, maxHp: 18, range: 2, upkeep: 1,
+    requiresTech: "crossbow-production", civ: "han", category: "ranged",
+    upgradesFrom: "archer"
   }
 };
 
@@ -316,6 +387,15 @@ export const BUILDINGS: Record<string, BuildingRule> = {
     requiresTech: "rhetoric",
     yields: { gold: 2, science: 1 },
     note: "Theatre and arena — the games and rhetoric that bound a populace to the state, from the Theatre of Dionysus to the Colosseum. Effect: +2 gold, +1 science."
+  },
+  // Rome-only (v2 Via Romana branch): unlocked by The Senate (res-publica), the
+  // civic square. Its stability yield is STUBBED as gold until the stat ships.
+  forum: {
+    name: "Forum",
+    cost: 16,
+    requiresTech: "res-publica",
+    yields: { gold: 2 },
+    note: "Market, court and rostra in one square — the civic engine of a Roman town. Effect: +2 gold (Forums research adds more)."
   }
 };
 
@@ -514,5 +594,11 @@ export const UNIT_BUILD_COSTS: Record<string, number> = {
   "war-elephant": 24,
   "war-chariot": 24,
   gaesatae: 20,
-  "horse-archer": 24
+  "horse-archer": 24,
+  // v2 branch units
+  cataphract: 28,
+  spartiate: 26,
+  phalangite: 24,
+  immortal: 22,
+  crossbowman: 22
 };
