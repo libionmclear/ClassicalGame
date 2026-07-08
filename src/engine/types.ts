@@ -285,6 +285,12 @@ export interface RenameCityAction {
   name: string;
 }
 
+export interface DisbandUnitAction {
+  type: "DISBAND_UNIT";
+  playerId: string;
+  unitId: string;
+}
+
 export interface ImproveTileAction {
   type: "IMPROVE_TILE";
   playerId: string;
@@ -312,6 +318,7 @@ export type GameAction =
   | EstablishTradeRouteAction
   | ImproveTileAction
   | UpgradeUnitAction
+  | DisbandUnitAction
   | RenameCityAction;
 
 export interface VictoryStatus {

@@ -18,7 +18,7 @@ import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction } from "./types";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -241,12 +241,17 @@ function applyMovement(state: GameState, action: MoveUnitAction): void {
     totalCost += step;
   }
 
-  if (totalCost > unit.movementRemaining) {
+  // A unit with its FULL movement may always take a single step onto an adjacent
+  // passable tile, even when the terrain costs more than it has — otherwise a slow
+  // unit (a siege engine with 1 move) gets permanently boxed in by rough ground.
+  const oneStep = path.length === 2;
+  const fresh = unit.movementRemaining >= unitDef.movement;
+  if (totalCost > unit.movementRemaining && !(oneStep && fresh)) {
     throw new Error(`Insufficient movement: needs ${totalCost}, has ${unit.movementRemaining}`);
   }
 
   unit.position = destination;
-  unit.movementRemaining -= totalCost;
+  unit.movementRemaining = Math.max(0, unit.movementRemaining - totalCost);
 
   const destinationTile = tileAt(state, destination);
   if (destinationTile.terrain === "desert" && !state.playersById[unit.ownerId].techs.includes("caravan-logistics")) {
@@ -1321,6 +1326,19 @@ function applyUpgradeUnit(state: GameState, action: { playerId: string; unitId: 
   unit.hp = Math.max(1, Math.round(rule.maxHp * frac));
 }
 
+// Retire one of your own units. Its upkeep stops and a quarter of its build cost
+// comes back as scrap coin.
+function applyDisbandUnit(state: GameState, action: DisbandUnitAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const player = state.playersById[action.playerId];
+  const unit = state.map.units[action.unitId];
+  if (!unit) throw new Error(`Unknown unit ${action.unitId}`);
+  if (unit.ownerId !== action.playerId) throw new Error("Cannot disband another player's unit");
+  player.gold += Math.round(productionItemCost(unit.type) * 0.25);
+  delete state.map.units[action.unitId];
+  syncOwnershipIndexes(state);
+}
+
 function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   assertPlayerTurn(state, action.playerId);
   const city = cityAt(state, action.cityId);
@@ -1569,6 +1587,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "UPGRADE_UNIT":
       applyUpgradeUnit(state, action);
+      break;
+    case "DISBAND_UNIT":
+      applyDisbandUnit(state, action);
       break;
     case "RENAME_CITY":
       applyRenameCity(state, action);

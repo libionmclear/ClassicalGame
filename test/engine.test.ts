@@ -551,6 +551,45 @@ test("a mine needs an ore deposit and a quarry needs stone", () => {
   );
 });
 
+test("a slow unit can always take one step, even onto ground it can't afford", () => {
+  const tiles: Record<string, { terrain: string; region: string }> = {
+    "0,0": { terrain: "plains", region: "r" },
+    "1,0": { terrain: "hills", region: "r" },
+    "1,1": { terrain: "plains", region: "r" },
+    "2,1": { terrain: "hills", region: "r" }
+  };
+  let s = createInitialGameState({
+    seed: "siege",
+    players: [{ id: "a", civ: "A", techs: ["siegecraft"] }],
+    map: {
+      width: 3, height: 2, regions: ["r"], tiles: tiles as never,
+      cities: { c: { id: "c", ownerId: "a", position: { q: 0, r: 0 }, population: 2 } },
+      units: { sg: { id: "sg", type: "siege", ownerId: "a", position: { q: 1, r: 1 } } as never }
+    }
+  });
+  const sg = s.map.units.sg;
+  assert.equal(sg.movementRemaining, 1, "a fresh siege has 1 movement");
+  const step = movementCost(s, { ownerId: "a", domain: "land" }, { q: 1, r: 1 }, { q: 2, r: 1 });
+  assert.ok(step > 1, "the hills step costs more than it has");
+  s = applyAction(s, { type: "MOVE_UNIT", playerId: "a", unitId: "sg", destination: { q: 2, r: 1 } });
+  assert.deepEqual(s.map.units.sg.position, { q: 2, r: 1 }, "it still moves the one tile");
+  assert.equal(s.map.units.sg.movementRemaining, 0, "spending all its movement");
+});
+
+test("disbanding a unit removes it, refunds scrap gold, and can't touch enemies", () => {
+  const s = buildState();
+  assert.ok(s.map.units.u1, "the unit exists");
+  const goldBefore = s.playersById.p1.gold;
+  const after = applyAction(s, { type: "DISBAND_UNIT", playerId: "p1", unitId: "u1" });
+  assert.equal(after.map.units.u1, undefined, "the disbanded unit is gone");
+  assert.ok(after.playersById.p1.gold >= goldBefore, "some scrap gold comes back");
+  // You can't disband an enemy's unit (u3 belongs to p2).
+  assert.throws(
+    () => applyAction(buildState(), { type: "DISBAND_UNIT", playerId: "p1", unitId: "u3" }),
+    /another player/
+  );
+});
+
 test("an idle city sells surplus labour for coin instead of hoarding it", () => {
   const tiles: Record<string, { terrain: string; region: string }> = {};
   for (let r = 0; r < 2; r += 1) for (let q = 0; q < 2; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "r" };

@@ -2081,6 +2081,15 @@ details.panel-collapse > summary {
   color: var(--text);
 }
 
+.danger-btn {
+  border-color: #7a2f28;
+  color: #e08b7f;
+}
+.danger-btn:hover:not(:disabled) {
+  background: #3a1512;
+  color: #ffd9d0;
+}
+
 .codex-card {
   width: min(720px, 100%);
   max-height: 86vh;

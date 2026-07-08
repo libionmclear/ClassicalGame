@@ -23,6 +23,7 @@
   const foundCityBtn = document.getElementById("found-city-btn");
   const tradeRouteBtn = document.getElementById("trade-route-btn");
   const upgradeBtn = document.getElementById("upgrade-btn");
+  const disbandBtn = document.getElementById("disband-btn");
   const controlPanelEl = document.getElementById("control-panel");
   const cpCloseBtn = document.getElementById("cp-close");
   const cityTabsEl = document.getElementById("city-tabs");
@@ -1094,8 +1095,11 @@
         // Friendly-occupied tiles ARE reachable now — moving there stacks the
         // units into one army (the engine already fights them as a combined
         // force). Only enemy-occupied tiles are blocked (those are attacks).
+        // A fresh unit may always take one step (matches the engine rule), so a
+        // slow siege engine on rough ground still has somewhere to go.
         const occupiedByEnemyUnit = getUnitsAt(q, r).some((u) => u.ownerId !== unit.ownerId);
-        if (totalCost <= unit.movementRemaining && !occupiedByEnemyUnit) {
+        const freshOneStep = path.length === 2 && unit.movementRemaining >= (unitDef.movement || 1);
+        if ((totalCost <= unit.movementRemaining || freshOneStep) && !occupiedByEnemyUnit) {
           hints.reachable.add(key);
         }
       }
@@ -1462,7 +1466,12 @@
       cost = 0;
       for (let i = 0; i < path.length - 1; i += 1) cost += engine.movementCost(state, moveCtx, path[i], path[i + 1]);
     }
-    const reachable = Boolean(path) && path.length >= 2 && Number.isFinite(cost) && cost <= selected.movementRemaining;
+    // A fresh unit (full movement) may always take one step onto an adjacent tile,
+    // even if the terrain costs more than it has — mirrors the engine rule so slow
+    // units aren't boxed in.
+    const fresh = selected.movementRemaining >= (selectedDef.movement || 1);
+    const oneStep = Boolean(path) && path.length === 2 && Number.isFinite(cost);
+    const reachable = (Boolean(path) && path.length >= 2 && Number.isFinite(cost) && cost <= selected.movementRemaining) || (fresh && oneStep);
     const ownUnitHere = clickedUnits.find((u) => u.ownerId === HUMAN_ID);
 
     // Your own city: garrison the unit inside if you can reach it; else select the city.
@@ -1477,11 +1486,17 @@
       return;
     }
 
-    // Another of your own units in the field: re-select it (no accidental stacking).
+    // Another of your own units in the field: if you can reach the tile, MOVE onto
+    // it to combine into one army (that's what you want when stacking); otherwise
+    // just select that unit.
     if (ownUnitHere) {
-      selectedUnitId = ownUnitHere.id;
-      selectedCityId = null;
-      render();
+      if (reachable) {
+        apply({ type: "MOVE_UNIT", playerId: HUMAN_ID, unitId: selected.id, destination: { q, r }, path: path });
+      } else {
+        selectedUnitId = ownUnitHere.id;
+        selectedCityId = null;
+        render();
+      }
       return;
     }
 
@@ -2079,6 +2094,20 @@
           " into a " + tName + " for " + cost + " gold.";
       } else {
         upgradeBtn.style.display = "none";
+      }
+    }
+
+    // Disband: retire your own unit to stop paying its upkeep (a little of its
+    // build cost comes back as scrap gold).
+    if (disbandBtn) {
+      if (selectedUnit && selectedUnit.ownerId === HUMAN_ID) {
+        const refund = Math.round((engine.productionItemCost ? engine.productionItemCost(selectedUnit.type) : 0) * 0.25);
+        disbandBtn.style.display = "";
+        disbandBtn.disabled = !isTurn;
+        disbandBtn.textContent = "✖ Disband" + (refund > 0 ? " (+" + refund + " 🪙)" : "");
+        disbandBtn.title = "Retire this unit and stop its upkeep" + (refund > 0 ? "; recover " + refund + " gold as scrap." : ".");
+      } else {
+        disbandBtn.style.display = "none";
       }
     }
 
@@ -2866,6 +2895,17 @@
       const tName = (UNIT_META[target] && UNIT_META[target].name) || target;
       logAction("⭐ " + (UNIT_META[unit.type] ? UNIT_META[unit.type].name : unit.type) + " upgraded to " + tName);
       apply({ type: "UPGRADE_UNIT", playerId: HUMAN_ID, unitId: unit.id });
+    });
+  }
+
+  if (disbandBtn) {
+    disbandBtn.addEventListener("click", function () {
+      const unit = selectedUnitId ? state.map.units[selectedUnitId] : null;
+      if (!unit || unit.ownerId !== HUMAN_ID) return;
+      const name = (UNIT_META[unit.type] && UNIT_META[unit.type].name) || unit.type;
+      if (!window.confirm("Disband this " + name + "? It will be retired for good.")) return;
+      logAction("✖ " + name + " disbanded.");
+      apply({ type: "DISBAND_UNIT", playerId: HUMAN_ID, unitId: unit.id });
     });
   }
 
