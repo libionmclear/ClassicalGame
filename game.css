@@ -1747,6 +1747,7 @@ details.panel-collapse > summary {
   filter: brightness(1.12);
 }
 
+.build-item .bi-cost.bi-warn { color: #d9a441; }
 .build-item .bi-cost {
   flex: none;
   font-size: 0.72rem;

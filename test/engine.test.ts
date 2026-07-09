@@ -584,13 +584,13 @@ test("a slow unit can always take one step, even onto ground it can't afford", (
   assert.equal(s.map.units.sg.movementRemaining, 0, "spending all its movement");
 });
 
-test("disbanding a unit removes it, refunds scrap gold, and can't touch enemies", () => {
+test("disbanding a full-health citizen unit returns 1 population, and can't touch enemies", () => {
   const s = buildState();
   assert.ok(s.map.units.u1, "the unit exists");
-  const goldBefore = s.playersById.p1.gold;
+  const popBefore = s.map.cities.c1.population; // u1 (warrior) resettles to the nearest own city
   const after = applyAction(s, { type: "DISBAND_UNIT", playerId: "p1", unitId: "u1" });
   assert.equal(after.map.units.u1, undefined, "the disbanded unit is gone");
-  assert.ok(after.playersById.p1.gold >= goldBefore, "some scrap gold comes back");
+  assert.equal(after.map.cities.c1.population, popBefore + 1, "a full-health soldier is a full pop point back");
   // You can't disband an enemy's unit (u3 belongs to p2).
   assert.throws(
     () => applyAction(buildState(), { type: "DISBAND_UNIT", playerId: "p1", unitId: "u3" }),

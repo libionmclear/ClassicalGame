@@ -388,6 +388,20 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Cities v3 — STEP B: population‑based recruitment** (`HEGEMON-CITY-DISTRICTS-v2.md`
+  §1 + `districts-data-v2.js` RECRUITMENT). Training a **citizen unit costs 1
+  population** and a city **can't recruit below pop 2** (the item queues and waits to
+  grow — production stays banked); **settlers cost 1 pop**; **civilians (merchant/
+  engineer) are exempt**. Units store **`homeCityId`** at spawn. **Disband** returns
+  the soldier to its home city prorated by health — a **full pop point at 100% HP**,
+  otherwise the fraction credits **banked food** (`frac × growthCost`); a lost home
+  city resettles to the nearest own city; **mercenaries/civilians and combat death
+  return nothing** (replaces the old 25% gold scrap refund). Engine: `RECRUITMENT` +
+  `unitPopCost` (exported), pop gate in `processCityQueue`, rewritten
+  `applyDisbandUnit`. Client: build menu shows `−1👤` + a "waits below pop 2" hint.
+  New `test/recruitment.test.ts` (§6.6). 133/133 tests. **Flags:** no mercenary HIRE
+  path exists yet (the exemption hook is inert — `unit.mercenary`); AI
+  population‑weighting deferred to **STEP C §6.7**.
 - **Corrections: admin all‑cards + 5‑tier terrain.** (1) The **admin** test account
   now loads with the **entire card collection** + all civs unlocked (in‑memory grant
   in `loadProfile` when `currentAccount.isAdmin`) so every card is testable. (2)

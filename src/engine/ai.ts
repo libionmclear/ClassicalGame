@@ -289,6 +289,9 @@ function buildAction(state: GameState, player: Player): GameAction | null {
     }
     if (!chosen) chosen = militaryPref.find(canBuild) ?? null;
     if (!chosen) continue;
+    // NOTE (v3 §1): the engine enforces "no recruiting below pop 2" (units wait to
+    // spawn). Fuller AI population-weighting (train mercs when pop-tight, value the
+    // pop cost) is deferred to STEP C §6.7.
     return {
       type: "BUILD_UNIT",
       playerId: player.id,

@@ -648,6 +648,26 @@ function growthCost(population: number): number {
   return 8 + population * 6;
 }
 
+// ===== Cities v3 §1 — population-based recruitment =====
+// Mirrors districts-data-v2.js RECRUITMENT. Training a citizen unit spends a point
+// of population; a city can't recruit below `minCityPopToTrain`. Civilians
+// (merchant/engineer) and mercenaries are exempt; settlers ARE people leaving.
+export const RECRUITMENT = {
+  militaryPopCost: 1,
+  minCityPopToTrain: 2,
+  settlerPopCost: 1,
+  civilianPopCost: 0,
+  mercenaryPopCost: 0
+};
+// The population a given queued unit costs to train (0 = exempt).
+export function unitPopCost(id: string): number {
+  const def = UNITS[id];
+  if (!def) return 0;
+  if (id === "settler") return RECRUITMENT.settlerPopCost; // settlers leave the city
+  if (def.domain === "civilian") return RECRUITMENT.civilianPopCost; // merchant/engineer — exempt
+  return RECRUITMENT.militaryPopCost; // any combat unit is a citizen-soldier
+}
+
 // v2.1 §3b — depth-tiered pricing: cheap to ENTER a track, expensive to go DEEP.
 // cost = AGE_BASE[age] × TIER_MULT[tier] × costMod, tier = 1 + longest SAME-AGE
 // prereq chain above the tech (capstones use a fixed steeper multiplier).
@@ -924,7 +944,8 @@ function completeQueueItem(state: GameState, city: City, id: string): void {
       hp: def.maxHp,
       maxHp: def.maxHp,
       movementRemaining: 0,
-      veterancy: "recruit"
+      veterancy: "recruit",
+      homeCityId: city.id // Cities v3 §1 — where a disbanded citizen returns
     };
     syncOwnershipIndexes(state);
   } else if (BUILDINGS[id] && !(city.buildings ?? []).includes(id)) {
@@ -973,8 +994,14 @@ function processCityQueue(state: GameState, city: City): void {
     }
     const cost = effectiveItemCost(state, city.ownerId, id);
     if (!Number.isFinite(cost) || (city.production ?? 0) < cost) break;
+    // Cities v3 §1: a citizen unit spends a population point, and a city cannot
+    // recruit below `minCityPopToTrain`. If it's too small, wait for it to grow —
+    // production stays banked, the item stays queued.
+    const popCost = unitPopCost(id);
+    if (popCost > 0 && city.population < RECRUITMENT.minCityPopToTrain) break;
     city.production = (city.production ?? 0) - cost;
     completeQueueItem(state, city, id);
+    if (popCost > 0) city.population = Math.max(1, city.population - popCost);
     city.queue.shift();
   }
 }
@@ -1474,13 +1501,41 @@ function applyUpgradeUnit(state: GameState, action: { playerId: string; unitId: 
 
 // Retire one of your own units. Its upkeep stops and a quarter of its build cost
 // comes back as scrap coin.
+// The player's city nearest a point (for resettling a unit whose home city was lost).
+function nearestOwnCity(state: GameState, ownerId: string, from: Coord): City | undefined {
+  let best: City | undefined;
+  let bestD = Infinity;
+  for (const c of Object.values(state.map.cities)) {
+    if (c.ownerId !== ownerId) continue;
+    const d = distance(c.position, from);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return best;
+}
+
 function applyDisbandUnit(state: GameState, action: DisbandUnitAction): void {
   assertPlayerTurn(state, action.playerId);
   const player = state.playersById[action.playerId];
   const unit = state.map.units[action.unitId];
   if (!unit) throw new Error(`Unknown unit ${action.unitId}`);
   if (unit.ownerId !== action.playerId) throw new Error("Cannot disband another player's unit");
-  player.gold += Math.round(productionItemCost(unit.type) * 0.25);
+
+  // Cities v3 §1: a disbanded citizen-military unit returns to its HOME city's
+  // population, prorated by health — a full pop point at 100%, otherwise the
+  // fraction credits that city's banked food (fraction × food-per-pop). Mercenaries
+  // and civilians (merchant/engineer) return nothing; a lost home city resettles to
+  // the nearest own city. (Combat death, handled elsewhere, returns nothing.)
+  const def = UNITS[unit.type];
+  const isCitizenMilitary = def && def.domain !== "civilian" && !unit.mercenary;
+  if (isCitizenMilitary) {
+    let home = unit.homeCityId ? state.map.cities[unit.homeCityId] : undefined;
+    if (!home || home.ownerId !== player.id) home = nearestOwnCity(state, player.id, unit.position);
+    if (home) {
+      const frac = unit.maxHp > 0 ? Math.max(0, Math.min(1, unit.hp / unit.maxHp)) : 0;
+      if (frac >= 1) home.population += 1;
+      else home.food = (home.food ?? 0) + frac * growthCost(home.population);
+    }
+  }
   delete state.map.units[action.unitId];
   syncOwnershipIndexes(state);
 }

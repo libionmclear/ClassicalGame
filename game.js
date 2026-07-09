@@ -797,6 +797,11 @@
       const reqTech = def.requiresTech;
       const hasTech = !reqTech || player.techs.includes(reqTech);
       const needsCoast = def.domain === "naval" && !coastal;
+      // Cities v3 §1: military & settlers cost a population point; a city can't
+      // recruit below pop 2 (the unit queues and waits for the city to grow).
+      const popCost = engine.unitPopCost ? engine.unitPopCost(type) : 0;
+      const minPop = (engine.RECRUITMENT && engine.RECRUITMENT.minCityPopToTrain) || 2;
+      const popTooLow = popCost > 0 && selectedCity && (selectedCity.population || 0) < minPop;
       const techName = reqTech ? techMeta(reqTech).name : "";
       const discRes = (engine.BUILD_RESOURCE || {})[type];
       const discGlyph = discRes && engine.RESOURCES && engine.RESOURCES[discRes] ? engine.RESOURCES[discRes].glyph : "";
@@ -817,6 +822,7 @@
         meta.role + (reqTech ? " — needs " + techName : "") +
         (def.domain === "naval" ? "\n\n⚓ Coastal cities only; launches into the water." : "") +
         (typeof cost === "number" ? "\n\nCosts " + cost + " labor — this city banks labor each turn until it is paid, then the unit appears at End Turn." : "") +
+        (popCost > 0 ? "\n\n👤 Costs " + popCost + " population when trained (a city won't recruit below pop " + minPop + " — it queues and waits to grow)." : "") +
         (discounted ? "\n\n" + discGlyph + " -30%: you control " + (engine.RESOURCES[discRes] ? engine.RESOURCES[discRes].name : discRes) + " in your territory." : discRes ? "\n\nControl " + (engine.RESOURCES[discRes] ? engine.RESOURCES[discRes].name : discRes) + " in your territory for -30% labour." : "") +
         (UNIT_HISTORY[type] ? "\n\n" + UNIT_HISTORY[type] : "");
 
@@ -825,11 +831,11 @@
         : needsCoast
           ? "⚓ coastal only"
           : typeof cost === "number"
-            ? (discounted ? discGlyph + " " : "") + cost + " ⚒️" + etaHint
+            ? (discounted ? discGlyph + " " : "") + cost + " ⚒️" + (popCost > 0 ? " · −" + popCost + "👤" : "") + etaHint
             : "";
       btn.innerHTML =
         '<span class="bi-name">' + (UNIT_GLYPHS[type] || "•") + " " + meta.name + "</span>" +
-        '<span class="bi-cost">' + status + "</span>";
+        '<span class="bi-cost' + (popTooLow ? " bi-warn" : "") + '">' + status + "</span>";
 
       btn.addEventListener("click", function () {
         if (btn.disabled || !selectedCityId) return;

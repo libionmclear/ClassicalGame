@@ -95,6 +95,11 @@ export interface Unit {
   maxHp: number;
   movementRemaining: number;
   veterancy: Veterancy;
+  /** The city this unit was recruited from (Cities v3 §1). Disbanding a citizen
+   *  military unit returns its population here, prorated by health. */
+  homeCityId?: string;
+  /** Hired for gold, not drawn from population — no pop cost, no disband return. */
+  mercenary?: boolean;
 }
 
 export interface City {
