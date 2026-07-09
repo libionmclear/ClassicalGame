@@ -1,7 +1,7 @@
 // Cities v3 §2 — district system helpers. Bridges the declarative data
 // (districts-data-v2.js) into the engine.
-import { DISTRICT_TYPES, DISTRICT_SLOTS_BY_TIER, DISTRICT_NAMES } from "../districts-data-v2.js";
-import type { DistrictType, DistrictName } from "../districts-data-v2.js";
+import { DISTRICT_TYPES, DISTRICT_SLOTS_BY_TIER, DISTRICT_NAMES, GREAT_WORKS } from "../districts-data-v2.js";
+import type { DistrictType, DistrictName, GreatWork } from "../districts-data-v2.js";
 import type { City } from "./types";
 
 // City tier 1..10 from population (Phase 4 thresholds), then district slots by tier.
@@ -29,4 +29,11 @@ export function districtForbidden(typeId: string, civ: string): boolean {
   const n = districtName(typeId, civ);
   return !!(n && n.forbidden);
 }
-export { DISTRICT_TYPES, DISTRICT_SLOTS_BY_TIER };
+const GWORK: Record<string, GreatWork> = {};
+for (const g of GREAT_WORKS) GWORK[g.id] = g;
+export function greatWork(id: string): GreatWork | undefined { return GWORK[id]; }
+// A player of `civ` may build a Great Work if it is theirs or a civ:null universal.
+export function greatWorkAllowed(work: GreatWork, civ: string): boolean {
+  return work.civ == null || work.civ === String(civ || "").toLowerCase();
+}
+export { DISTRICT_TYPES, DISTRICT_SLOTS_BY_TIER, GREAT_WORKS };

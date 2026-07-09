@@ -20,7 +20,7 @@ import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import { cityTier, districtSlots, districtType, districtName, districtForbidden } from "./districts";
+import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
 import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction } from "./types";
 import type {
   AttackCityAction,
@@ -822,10 +822,25 @@ export function computeCityStability(state: GameState, cityId: string): number {
   const civId = owner ? String(owner.civ || "").toLowerCase() : "";
   for (const d of city.districts ?? []) {
     if (d.pillaged) continue;
+    if (d.type === "greatwork" && d.work) {
+      const gwc = greatWork(d.work)?.effect.cityYield;
+      if (gwc && typeof gwc.stability === "number") s += gwc.stability;
+      continue;
+    }
     const cy = districtType(d.type)?.effect.cityYield;
     if (cy && typeof cy.stability === "number") s += cy.stability;
     const bonus = districtName(d.type, civId)?.bonus;
     if (bonus && typeof bonus.stability === "number") s += bonus.stability;
+  }
+  // Empire-wide Great Work stability (e.g. Colosseum +1 all cities).
+  if (owner) {
+    for (const cid of owner.cityIds) {
+      for (const d of state.map.cities[cid]?.districts ?? []) {
+        if (d.pillaged || d.type !== "greatwork" || !d.work) continue;
+        const emp = greatWork(d.work)?.effect.empire as Record<string, number> | undefined;
+        if (emp && typeof emp.stability === "number") s += emp.stability;
+      }
+    }
   }
   if (owner) {
     for (const techId of Object.keys(TECH_STABILITY)) if (owner.techs.includes(techId)) s += TECH_STABILITY[techId];
@@ -942,12 +957,31 @@ export function computeCityYield(
   // A pillaged district yields nothing until repaired. Stability from districts is
   // handled in computeCityStability.
   const civId = owner ? String(owner.civ || "").toLowerCase() : "";
+  // Great Works use "labour" for production; ordinary districts use the plain keys.
+  const addY = (src: Record<string, number> | undefined) => {
+    if (!src) return;
+    for (const k of YK) if (typeof src[k] === "number") yields[k] += src[k];
+    if (typeof src.labour === "number") yields.production += src.labour;
+  };
   for (const d of city.districts ?? []) {
     if (d.pillaged) continue;
-    const cy = districtType(d.type)?.effect.cityYield;
-    if (cy) for (const k of YK) if (typeof cy[k] === "number") yields[k] += cy[k] as number;
-    const bonus = districtName(d.type, civId)?.bonus;
-    if (bonus) for (const k of YK) if (typeof bonus[k] === "number") yields[k] += bonus[k] as number;
+    if (d.type === "greatwork" && d.work) {
+      const gw = greatWork(d.work);
+      if (gw) { addY(gw.effect.cityYield); if (city.isCapital) addY(gw.effect.capitalYield); }
+      continue;
+    }
+    addY(districtType(d.type)?.effect.cityYield);
+    addY(districtName(d.type, civId)?.bonus as Record<string, number> | undefined);
+  }
+  // Empire-wide Great Work yields — sourced from ANY of the owner's cities, applied
+  // to every city (so a Weiyang Palace's +science lifts the whole realm).
+  if (owner) {
+    for (const cid of owner.cityIds) {
+      for (const d of state.map.cities[cid]?.districts ?? []) {
+        if (d.pillaged || d.type !== "greatwork" || !d.work) continue;
+        addY(greatWork(d.work)?.effect.empire as Record<string, number> | undefined);
+      }
+    }
   }
 
   // Stability modifies everything: ±2% per point, and civic pride (+3) adds labour.
@@ -1901,8 +1935,10 @@ function applyBuildDistrict(state: GameState, action: BuildDistrictAction): void
   const player = state.playersById[action.playerId];
   const city = state.map.cities[action.cityId];
   if (!city || city.ownerId !== action.playerId) throw new Error("You can only build districts in your own city");
-  const dt = districtType(action.districtType);
-  if (!dt) throw new Error(`Unknown district type ${action.districtType}`); // Great Works arrive in Slice C2
+  // The requested id is either a district TYPE or a GREAT WORK card id (C2).
+  const gw = greatWork(action.districtType);
+  const dt = gw ? districtType("greatwork") : districtType(action.districtType);
+  if (!dt) throw new Error(`Unknown district type ${action.districtType}`);
   city.districts = city.districts ?? [];
   if (city.districts.length >= districtSlots(city)) throw new Error("No free district slot at this city's tier");
   const adj = neighborsOf(city.position).map((n) => keyOf(n));
@@ -1915,6 +1951,17 @@ function applyBuildDistrict(state: GameState, action: BuildDistrictAction): void
   else if (water) throw new Error("A district needs a land hex");
   const claim = claimingCity(state, parseKey(action.hex));
   if (!claim || claim.id !== city.id) throw new Error("That hex is not worked by this city");
+  if (gw) {
+    // Great Work: civ must match (or civ:null universal), one Great Work per city.
+    if (!greatWorkAllowed(gw, String(player.civ))) throw new Error(`${gw.name} is not your civilisation's Great Work`);
+    if (city.districts.some((d) => d.type === "greatwork")) throw new Error("A city may hold only one Great Work");
+    // heritage (restore an ancient monument) is cheaper than a from-scratch build.
+    const cost = Math.round((gw.kind === "heritage" ? 40 : 100) * (state.costScale || 1));
+    if (player.gold < cost) throw new Error("Not enough gold for the Great Work");
+    player.gold -= cost;
+    city.districts.push({ hex: action.hex, type: "greatwork", work: gw.id });
+    return;
+  }
   if (districtForbidden(action.districtType, String(player.civ))) throw new Error(`${player.civ} cannot build a ${action.districtType}`);
   if (dt.limit === "one-per-city" && city.districts.some((d) => districtType(d.type)?.limit === "one-per-city")) throw new Error("Only one such district per city");
   const cost = Math.round(DISTRICT_GOLD_COST * (state.costScale || 1));

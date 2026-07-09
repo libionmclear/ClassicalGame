@@ -56,7 +56,7 @@ import { loadScenario, listScenarios } from "./scenarios";
 import { generateMap, MAP_SIZES, TURN_LIMITS, CIV_ROSTER, DEFAULT_PLAYERS, MAX_PLAYERS } from "./mapgen";
 import { EVENTS, getEvent } from "./events";
 import { BRANCHES } from "./branch-data";
-import { cityTier, districtSlots, districtType, districtName, DISTRICT_TYPES } from "./districts";
+import { cityTier, districtSlots, districtType, districtName, DISTRICT_TYPES, GREAT_WORKS, greatWork } from "./districts";
 
 // Every symbol the browser demo (game.js) reads off window.HegemonEngine must be
 // re-exported here — esbuild only surfaces what this entry module exports.
@@ -129,5 +129,7 @@ export {
   districtSlots,
   districtType,
   districtName,
-  DISTRICT_TYPES
+  DISTRICT_TYPES,
+  GREAT_WORKS,
+  greatWork
 };

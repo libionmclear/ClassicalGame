@@ -1376,6 +1376,19 @@ button:hover:not(:disabled) {
   color: var(--muted);
   font-size: 0.85rem;
 }
+/* Seven Wonders collection badge (Cities v3 §4). */
+.cd-sw {
+  font-size: 0.78rem;
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+  border-radius: 12px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+.cd-sw.complete {
+  background: rgba(201, 168, 76, 0.16);
+  font-weight: 700;
+}
 
 .cd-coins {
   font-size: 1.05rem;

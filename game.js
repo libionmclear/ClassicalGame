@@ -3475,6 +3475,7 @@
     const p = [];
     if (effect.cityYield) p.push(yieldStr(effect.cityYield) + "/city");
     if (effect.capitalYield) p.push(yieldStr(effect.capitalYield) + " capital");
+    if (effect.empire) p.push(yieldStr(effect.empire) + " empire");
     if (effect.atkPct) p.push("+" + effect.atkPct + "% attack");
     if (effect.defPct) p.push("+" + effect.defPct + "% defence" + (effect.inOwnTerritory ? " at home" : ""));
     if (effect.vs && effect.vs.atkPct) p.push("+" + effect.vs.atkPct + "% vs " + (effect.vs.civ || effect.vs.cat || "target"));
@@ -3524,6 +3525,13 @@
   for (const e of V2.EVENT_CARDS) {
     CARDS.push({ id: e.id, type: "event", civ: e.civ || null, rarity: e.rarity, name: e.name, icon: "✨", effect: e.effect, benefit: effectSummary(e.effect), flags: effectFlags(e.effect) });
   }
+  // Great Works (Cities v3 §4): a card kind of their own — built (🗿) or heritage
+  // (🏛️, restore an ancient monument). civ:null are universal heritage, claimable by
+  // any civ. Own all Seven Wonders (sevenWonders flag) for the collection badge.
+  for (const g of engine.GREAT_WORKS || []) {
+    CARDS.push({ id: g.id, type: "greatwork", civ: g.civ || null, rarity: g.rarity, name: g.name, icon: g.kind === "heritage" ? "🏛️" : "🗿", effect: g.effect, kind: g.kind, sevenWonders: !!g.sevenWonders, benefit: effectSummary(g.effect), flags: effectFlags(g.effect) });
+  }
+  const SEVEN_WONDERS_TOTAL = CARDS.filter((c) => c.sevenWonders).length;
   for (const c of COSMETICS) CARDS.push(c);
 
   const CARDS_BY_ID = {};
@@ -3609,7 +3617,7 @@
     saveProfile(p);
   }
   // ===== Playing-card face, shared by the hand and the collection =====
-  const CARD_TYPE_LABEL = { civ: "Civilization", legend: "Legend", edict: "Edict", event: "Event", cosmetic: "Cosmetic" };
+  const CARD_TYPE_LABEL = { civ: "Civilization", legend: "Legend", edict: "Edict", event: "Event", cosmetic: "Cosmetic", greatwork: "Great Work" };
   const ROLE_LABEL = { commander: "Commander", statesman: "Statesman", sage: "Sage", builder: "Builder", navigator: "Navigator" };
   function cardBenefit(c) {
     // Legends/Edicts/Events lead with their EFFECT; the blurb is the history line.
@@ -4082,9 +4090,14 @@
     const owned = Object.keys(p.cards).length;
     const parts = [];
     const daily = canClaimDaily();
+    const swOwned = CARDS.filter((c) => c.sevenWonders && p.cards[c.id]).length;
+    const swBadge = SEVEN_WONDERS_TOTAL > 0
+      ? '<div class="cd-sw' + (swOwned >= SEVEN_WONDERS_TOTAL ? " complete" : "") + '" title="The Seven Wonders of the ancient world — own all seven Great Work cards for the collection badge.">🏛️ Seven Wonders ' + swOwned + " / " + SEVEN_WONDERS_TOTAL + (swOwned >= SEVEN_WONDERS_TOTAL ? " 🏅" : "") + "</div>"
+      : "";
     parts.push(
       '<div class="cd-top">' +
       '<div class="cd-coins">💰 <b>' + p.coins + "</b> coins</div>" +
+      swBadge +
       '<button id="cd-daily" class="cd-daily"' + (daily ? "" : " disabled") + ">" + (daily ? "📦 Claim daily pack" : "📦 Daily claimed") + "</button>" +
       '<div class="cd-count">' + owned + " / " + CARDS.length + " cards</div></div>"
     );

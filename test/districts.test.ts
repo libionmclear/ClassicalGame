@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyAction, createInitialGameState, computeCityYield } from "../src/engine/index";
+import { applyAction, createInitialGameState, computeCityYield, computeCityStability } from "../src/engine/index";
 import { cityTier, districtSlots } from "../src/engine/districts";
 import type { GameState } from "../src/engine/types";
 
@@ -74,4 +74,39 @@ test("§2 an enemy unit pillages a district on entry; labour repairs it", () => 
   s.currentPlayerIndex = 0; s.map.cities.c1.production = 60;
   s = applyAction(s, { type: "REPAIR_DISTRICT", playerId: "p1", cityId: "c1", hex: "1,0" });
   assert.ok(!s.map.cities.c1.districts?.[0].pillaged, "labour repaired it");
+});
+
+// ===== Slice C2 — Great Works =====
+
+test("§4 a Great Work builds in the greatwork slot and applies its city yield (Circus Maximus)", () => {
+  const s = base("rome", 10, 400);
+  const before = computeCityYield(s, "c1").gold;
+  const after = applyAction(s, { type: "BUILD_DISTRICT", playerId: "p1", cityId: "c1", districtType: "gw-circus", hex: "1,0" });
+  assert.equal(after.map.cities.c1.districts?.[0].type, "greatwork");
+  assert.equal(after.map.cities.c1.districts?.[0].work, "gw-circus");
+  assert.ok(computeCityYield(after, "c1").gold > before, "Circus Maximus adds gold");
+});
+
+test("§4 a Great Work must match your civ (or be a civ:null universal)", () => {
+  assert.throws(() => applyAction(base("greece", 10, 400), { type: "BUILD_DISTRICT", playerId: "p1", cityId: "c1", districtType: "gw-circus", hex: "1,0" }), /Great Work/);
+});
+
+test("§4 only one Great Work per city", () => {
+  let s = base("rome", 10, 400);
+  s = applyAction(s, { type: "BUILD_DISTRICT", playerId: "p1", cityId: "c1", districtType: "gw-circus", hex: "1,0" });
+  assert.throws(() => applyAction(s, { type: "BUILD_DISTRICT", playerId: "p1", cityId: "c1", districtType: "gw-pantheon", hex: "0,1" }), /one Great Work/);
+});
+
+test("§4 a Great Work's EMPIRE effect lifts every one of your cities (Colosseum +1 stability)", () => {
+  const tiles: Record<string, { terrain: string; region: string }> = {};
+  for (let r = -2; r <= 4; r += 1) for (let q = -2; q <= 4; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "r" };
+  const s = createInitialGameState({
+    seed: "emp",
+    players: [{ id: "p1", civ: "rome" }, { id: "p2", civ: "greece" }],
+    map: { width: 7, height: 7, regions: ["r"], tiles: tiles as never, cities: { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 10 }, cb: { id: "cb", ownerId: "p1", position: { q: 4, r: 4 }, population: 6 } } }
+  });
+  s.playersById.p1.gold = 400;
+  const cbBefore = computeCityStability(s, "cb");
+  const after = applyAction(s, { type: "BUILD_DISTRICT", playerId: "p1", cityId: "c1", districtType: "gw-colosseum", hex: "1,0" });
+  assert.equal(computeCityStability(after, "cb"), cbBefore + 1, "the empire-wide +1 reaches the other city");
 });
