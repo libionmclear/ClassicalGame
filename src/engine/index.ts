@@ -310,6 +310,33 @@ function categoryOf(unit: Unit): string {
   return UNITS[unit.type].category || "infantry";
 }
 
+// ===== Effect wiring, Slice 1 — generic combat % from branch techs + equipped cards =====
+// The five original doctrines below keep their own bespoke logic in the combat calc,
+// so exclude them here to avoid double-counting. Handles flat `atkPct`/`defPct`
+// (optionally `infantryOnly`) and `unitCatPct:{cat, atkPct/defPct, vsCat}`. Effects
+// gated by `condition` (e.g. fortified) are deferred to a later slice.
+const HARDCODED_COMBAT_TECHS = new Set(["furor", "thalassocracy", "parthian-shot", "testudo", "phalanx-wall"]);
+function techCardCombat(owner: Player | undefined, selfCat: string, foeCat: string, role: "atk" | "def"): { bonus: number; labels: string[] } {
+  const out = { bonus: 0, labels: [] as string[] };
+  if (!owner) return out;
+  const key = role === "atk" ? "atkPct" : "defPct";
+  const add = (v: number, name: string) => { out.bonus += v / 100; out.labels.push(`${name} ${v >= 0 ? "+" : "−"}${Math.abs(v)}%`); };
+  for (const techId of owner.techs) {
+    if (HARDCODED_COMBAT_TECHS.has(techId)) continue;
+    const rule = TECHS[techId];
+    const eff = rule && (rule.effect as Record<string, unknown> | undefined);
+    if (!eff || eff.condition) continue;
+    const name = (rule && rule.name) || techId;
+    const flat = eff[key];
+    if (typeof flat === "number" && flat !== 0 && (!eff.infantryOnly || selfCat === "infantry")) add(flat, name);
+    const uc = eff.unitCatPct as { cat?: string; atkPct?: number; defPct?: number; vsCat?: string[] } | undefined;
+    if (uc && uc.cat === selfCat && typeof uc[key] === "number" && uc[key] !== 0 && (!uc.vsCat || uc.vsCat.includes(foeCat))) add(uc[key] as number, name);
+  }
+  const cardPct = owner.perks && (owner.perks as Record<string, number | undefined>)[key];
+  if (typeof cardPct === "number" && cardPct !== 0) add(cardPct, "Cards");
+  return out;
+}
+
 // A unit fights as part of a "force": itself, anything stacked on its tile, and
 // friendly units adjacent to it. Diversity of roles grants a combined-arms bonus.
 function combinedArmsBonus(state: GameState, attacker: Unit): { bonus: number; label: string | null } {
@@ -358,6 +385,8 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   const atkCat = categoryOf(attacker);
   const defCat = categoryOf(defender);
   const modifiers: string[] = [];
+  const atkG = techCardCombat(state.playersById[attacker.ownerId], atkCat, defCat, "atk");
+  const defG = techCardCombat(state.playersById[defender.ownerId], defCat, atkCat, "def");
 
   let attackMult = veterancyMultiplier(attacker.veterancy);
   const flank = flankingBonus(state, attacker, defender);
@@ -396,6 +425,8 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
       modifiers.push("Parthian shot +20%");
     }
   }
+  // Generic branch-tech + card attack bonuses (effect wiring, Slice 1).
+  if (atkG.bonus) { attackMult += atkG.bonus; modifiers.push(...atkG.labels); }
 
   const terrainBonus = defenderTerrainBonus(state, defender);
   let defenseMult = terrainBonus + veterancyMultiplier(defender.veterancy);
@@ -424,6 +455,8 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
     defenseMult += 0.3;
     modifiers.push("Thalassocracy +30%");
   }
+  // Generic branch-tech + card defence bonuses (effect wiring, Slice 1).
+  if (defG.bonus) { defenseMult += defG.bonus; modifiers.push(...defG.labels); }
 
   const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
   let defPower = defenderDef.defense * (defender.hp / defender.maxHp) * Math.max(0.1, defenseMult);

@@ -143,7 +143,11 @@ export interface Player {
   lastEventTurn?: number;
   /** Small flat per-turn bonuses from equipped General cards (the meta-game).
    *  gold/science are added to the player pool; food/production to the capital. */
-  perks?: { food?: number; production?: number; gold?: number; science?: number; stability?: number };
+  perks?: {
+    food?: number; production?: number; gold?: number; science?: number; stability?: number;
+    /** Flat combat % from equipped cards (Slice 1 — card effect wiring). */
+    atkPct?: number; defPct?: number;
+  };
 }
 
 export interface GameMap {

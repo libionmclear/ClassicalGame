@@ -3428,11 +3428,19 @@
   // STABILITY is now a real per-city stat (Phase 5): a card's stability flows into
   // player.perks.stability, which the engine adds to every city's stability score.
   const YIELD_KEY = { food: "food", gold: "gold", science: "science", labour: "production", production: "production", stability: "stability" };
+  // A card's combat % is "flat" (engine-applyable) only if nothing scopes it
+  // (no inOwnTerritory/vs/condition). Conditional combat % stays flagged for now.
+  function isFlatCombat(effect) { return effect && !effect.inOwnTerritory && !effect.vs && !effect.condition; }
   function effectToPerks(effect) {
     const perks = {};
     const add = (src) => { if (!src) return; for (const k in src) { const t = YIELD_KEY[k]; if (t) perks[t] = (perks[t] || 0) + src[k]; } };
     add(effect && effect.capitalYield);
     add(effect && effect.cityYield); // NOTE: per-city approximated as flat until a per-city card hook exists
+    // Slice 1: flat, unconditional combat % becomes a player-wide combat perk the engine applies.
+    if (isFlatCombat(effect)) {
+      if (typeof effect.atkPct === "number") perks.atkPct = (perks.atkPct || 0) + effect.atkPct;
+      if (typeof effect.defPct === "number") perks.defPct = (perks.defPct || 0) + effect.defPct;
+    }
     return perks;
   }
   // Does this effect reference stability (currently STUBBED as gold)?
@@ -3445,9 +3453,11 @@
   function effectFlags(effect) {
     if (!effect) return [];
     const flags = [];
+    const flatCombat = isFlatCombat(effect);
     for (const k in effect) {
       if (k === "capitalYield" || k === "cityYield") continue; // applied (stability stubbed)
-      flags.push(k); // atkPct/defPct/unitCostPct/buildFasterPct/researchCostPct/movePlus/healPlus/plunderPct/tradeRouteGold/special/instant/unitPct/filters…
+      if ((k === "atkPct" || k === "defPct") && flatCombat) continue; // Slice 1: now wired
+      flags.push(k); // unitCostPct/buildFasterPct/researchCostPct/movePlus/healPlus/plunderPct/tradeRouteGold/special/instant/unitPct/filters…
     }
     return flags;
   }

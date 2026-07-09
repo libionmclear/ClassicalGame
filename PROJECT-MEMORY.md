@@ -389,6 +389,17 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Effect wiring — Slice 1: combat %** (the "un‑flag" pass; user reordered the plan
+  to wire effects → art → resume A–F). Branch‑tech and equipped‑card combat % now
+  actually reach the combat calc (`techCardCombat` in `index.ts`): flat `atkPct`/
+  `defPct` (incl. `infantryOnly`) + `unitCatPct:{cat,atk/defPct,vsCat}`, from
+  researched techs (EXCLUDING the 5 hardcoded doctrines furor/testudo/phalanx‑wall/
+  thalassocracy/parthian‑shot, to avoid double‑count) + `player.perks.atkPct/defPct`
+  (client `effectToPerks` now un‑flags flat, unconditional card combat %). `perks`
+  type gained `atkPct/defPct`. New `test/effects.test.ts`. 136/136. **Deferred:**
+  `condition:`‑gated combat (e.g. fortified) and conditional card combat
+  (inOwnTerritory/vs) stay flagged; later slices do cost/upkeep %, yield specials,
+  move/heal; diplomacy/district‑dependent specials wait for STEP C/D.
 - **Cities v3 — STEP B: population‑based recruitment** (`HEGEMON-CITY-DISTRICTS-v2.md`
   §1 + `districts-data-v2.js` RECRUITMENT). Training a **citizen unit costs 1
   population** and a city **can't recruit below pop 2** (the item queues and waits to
