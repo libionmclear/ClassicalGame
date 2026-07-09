@@ -214,9 +214,13 @@ function cityAt(state: GameState, cityId: string): City {
 
 function movementBudgetFor(state: GameState, unit: Unit): number {
   const def = UNITS[unit.type];
+  const owner = state.playersById[unit.ownerId];
   // Roads & Logistics — an imperial road network: land units march one tile more.
-  const logistics = def.domain === "land" && (state.playersById[unit.ownerId]?.techs.includes("roads-logistics") ?? false) ? 1 : 0;
-  return def.movement + logistics;
+  const logistics = def.domain === "land" && (owner?.techs.includes("roads-logistics") ?? false) ? 1 : 0;
+  // Slice 4: flat +move from branch techs / cards (movePlus, per-cat, +navalMovePlus).
+  let bonus = playerPctMod(owner, "movePlus", def.category);
+  if (def.domain === "naval") bonus += playerPctMod(owner, "navalMovePlus");
+  return def.movement + logistics + bonus;
 }
 
 function applyMovement(state: GameState, action: MoveUnitAction): void {
@@ -1309,7 +1313,9 @@ export function restHealAmount(state: GameState, unit: Unit): number {
     (c) => c.position.q === unit.position.q && c.position.r === unit.position.r
   );
   // Medicine — field surgeons and better care mend wounds faster everywhere.
-  const medic = state.playersById[unit.ownerId]?.techs.includes("medicine") ? 3 : 0;
+  const owner = state.playersById[unit.ownerId];
+  // Slice 4: medicine (+3) plus any branch-tech / card healPlus (per-category too).
+  const medic = (owner?.techs.includes("medicine") ? 3 : 0) + playerPctMod(owner, "healPlus", categoryOf(unit));
   if (cityHere && cityHere.ownerId === unit.ownerId) return HEAL_IN_CITY + medic;
   const claim = claimingCity(state, unit.position);
   return (claim && claim.ownerId === unit.ownerId ? HEAL_IN_TERRITORY : HEAL_IN_FIELD) + medic;

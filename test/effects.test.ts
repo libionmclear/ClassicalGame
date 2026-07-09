@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeCombatPreview, createInitialGameState, effectiveItemCost, scaledResearchCost, computeCityYield } from "../src/engine/index";
+import { computeCombatPreview, createInitialGameState, effectiveItemCost, scaledResearchCost, computeCityYield, restHealAmount, applyAction } from "../src/engine/index";
 import type { GameState, Player } from "../src/engine/types";
 
 function city(opts: { techs?: string[]; farm?: boolean; capital?: boolean; building?: string }): GameState {
@@ -81,4 +81,26 @@ test("Slice 3: buildingBoost raises the boosted building's yield (forum-romanum)
   const g = (techs: string[], forum: boolean) => computeCityYield(city({ techs, building: forum ? "forum" : undefined }), "c1").gold;
   const delta = (g(["forum-romanum"], true) - g(["forum-romanum"], false)) - (g([], true) - g([], false));
   assert.ok(delta >= 1, `forum worth +${delta} more gold with forum-romanum`);
+});
+
+test("Slice 4: a card healPlus adds exactly that much to the heal amount", () => {
+  const s0 = duel({}); s0.map.units.a.hp = 8;
+  const before = restHealAmount(s0, s0.map.units.a);
+  const s1 = duel({}); s1.map.units.a.hp = 8; s1.playersById.p1.perks = { healPlus: 4 };
+  assert.equal(restHealAmount(s1, s1.map.units.a) - before, 4);
+});
+
+test("Slice 4: a branch tech healPlus (hippocratic-medicine) speeds healing", () => {
+  const s0 = duel({}); s0.map.units.a.hp = 8;
+  const before = restHealAmount(s0, s0.map.units.a);
+  const s1 = duel({ techs: ["hippocratic-medicine"] }); s1.map.units.a.hp = 8;
+  assert.ok(restHealAmount(s1, s1.map.units.a) > before, "field surgeons mend faster");
+});
+
+test("Slice 4: a card movePlus grants extra movement once the turn resets", () => {
+  let s = duel({});
+  s.playersById.p1.perks = { movePlus: 2 };
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" }); // -> p2
+  s = applyAction(s, { type: "END_TURN", playerId: "p2" }); // -> back to p1, units reset
+  assert.equal(s.map.units.a.movementRemaining, 2 + 2, "warrior 2 base +2 move card");
 });

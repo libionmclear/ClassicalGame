@@ -149,6 +149,8 @@ export interface Player {
     atkPct?: number; defPct?: number;
     /** Cost/upkeep/research % from equipped cards (Slice 2). */
     unitCostPct?: number; upkeepPct?: number; researchCostPct?: number; buildFasterPct?: number;
+    /** Flat move / heal from equipped cards (Slice 4). */
+    movePlus?: number; navalMovePlus?: number; healPlus?: number;
   };
 }
 
