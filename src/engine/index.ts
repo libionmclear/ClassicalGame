@@ -356,6 +356,21 @@ function playerPctMod(owner: Player | undefined, key: string, catId?: string): n
   return total;
 }
 
+// Effect wiring, Slice 3 — parse a yield-type `special:` string like
+// "farm+1food, mine+2gold, library-city+1sci" into structured bonuses. Non-yield
+// clauses (farm-buildable-on-desert, repair-ships-2x, …) are ignored here (behavioural
+// hooks are a later slice / STEP C-D).
+type YKey = "food" | "production" | "gold" | "science";
+const YIELD_ALIAS: Record<string, YKey> = { food: "food", gold: "gold", labour: "production", production: "production", sci: "science", science: "science" };
+function parseYieldSpecial(special: string): { target: string; y: YKey; n: number }[] {
+  const out: { target: string; y: YKey; n: number }[] = [];
+  for (const part of special.split(",")) {
+    const m = /^\s*([a-z-]+)\+(\d+)(food|gold|labour|production|sci|science)\s*$/.exec(part);
+    if (m && YIELD_ALIAS[m[3]]) out.push({ target: m[1], y: YIELD_ALIAS[m[3]], n: parseInt(m[2], 10) });
+  }
+  return out;
+}
+
 // A unit fights as part of a "force": itself, anything stacked on its tile, and
 // friendly units adjacent to it. Diversity of roles grants a combined-arms bonus.
 function combinedArmsBonus(state: GameState, attacker: Unit): { bonus: number; label: string | null } {
@@ -828,6 +843,28 @@ export function computeCityYield(
     }
   }
 
+  // Slice 3: gather per-improvement / per-building yield bonuses, a capital-only
+  // bonus (tech capitalYield), and buildingBoost — all from the owner's branch techs.
+  const impBonus: Record<string, Partial<Record<YKey, number>>> = {};
+  const bldExtra: Record<string, Partial<Record<YKey, number>>> = {};
+  const YK: YKey[] = ["food", "production", "gold", "science"];
+  if (owner) {
+    const addTo = (map: Record<string, Partial<Record<YKey, number>>>, k: string, y: YKey, n: number) => { (map[k] ??= {})[y] = (map[k][y] ?? 0) + n; };
+    for (const techId of owner.techs) {
+      const eff = TECHS[techId]?.effect as Record<string, unknown> | undefined;
+      if (!eff) continue;
+      const cap = eff.capitalYield as Partial<Record<YKey, number>> | undefined;
+      if (cap && city.isCapital) for (const k of YK) if (typeof cap[k] === "number") yields[k] += cap[k] as number;
+      const boost = eff.buildingBoost as Record<string, Partial<Record<YKey, number>>> | undefined;
+      if (boost) for (const bid in boost) for (const k of YK) if (typeof boost[bid][k] === "number") addTo(bldExtra, bid, k, boost[bid][k] as number);
+      if (typeof eff.special === "string") for (const b of parseYieldSpecial(eff.special)) {
+        const bid = b.target.replace(/-city$/, "");
+        if (IMPROVEMENTS[b.target]) addTo(impBonus, b.target, b.y, b.n);
+        else if (BUILDINGS[bid]) addTo(bldExtra, bid, b.y, b.n);
+      }
+    }
+  }
+
   for (const buildingId of city.buildings ?? []) {
     const b = BUILDINGS[buildingId];
     if (!b) continue;
@@ -837,6 +874,8 @@ export function computeCityYield(
       yields.gold += b.yields.gold ?? 0;
       yields.science += b.yields.science ?? 0;
     }
+    const be = bldExtra[buildingId]; // Slice 3: tech buildingBoost / building yield-special
+    if (be) { yields.food += be.food ?? 0; yields.production += be.production ?? 0; yields.gold += be.gold ?? 0; yields.science += be.science ?? 0; }
     // Trade-network buildings (harbours) earn more the more of them you hold —
     // a shipping lane needs ports at both ends. Count the owner's other copies.
     if (b.networkGold && owner) {
@@ -861,6 +900,8 @@ export function computeCityYield(
       yields.production += imp.yields.production ?? 0;
       yields.gold += imp.yields.gold ?? 0;
       yields.science += imp.yields.science ?? 0;
+      const ib = impBonus[tile.improvement as string]; // Slice 3: tech improvement yield-special
+      if (ib) { yields.food += ib.food ?? 0; yields.production += ib.production ?? 0; yields.gold += ib.gold ?? 0; yields.science += ib.science ?? 0; }
     }
     // A strategic deposit worked by this city adds its bonus yields.
     const res = tile.resource ? RESOURCES[tile.resource] : null;

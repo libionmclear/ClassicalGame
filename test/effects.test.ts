@@ -1,7 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeCombatPreview, createInitialGameState, effectiveItemCost, scaledResearchCost } from "../src/engine/index";
+import { computeCombatPreview, createInitialGameState, effectiveItemCost, scaledResearchCost, computeCityYield } from "../src/engine/index";
 import type { GameState, Player } from "../src/engine/types";
+
+function city(opts: { techs?: string[]; farm?: boolean; capital?: boolean; building?: string }): GameState {
+  const tiles: Record<string, { terrain: string; region: string; improvement?: string }> = {};
+  for (let r = 0; r < 3; r += 1) for (let q = 0; q < 3; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "r" };
+  if (opts.farm) tiles["1,0"].improvement = "farm";
+  return createInitialGameState({
+    seed: "cy",
+    players: [{ id: "p1", civ: "rome", techs: opts.techs || [] }],
+    map: {
+      width: 3, height: 3, regions: ["r"], tiles: tiles as never,
+      cities: { c1: { id: "c1", ownerId: "p1", position: { q: 1, r: 1 }, population: 4, isCapital: !!opts.capital, buildings: opts.building ? [opts.building] : [] } }
+    }
+  });
+}
 
 // Effect wiring, Slice 1 — branch-tech + equipped-card combat % actually reach the
 // combat calculation (they were flagged/data-only before).
@@ -49,4 +63,22 @@ test("Slice 2: a card's research-cost % reduces the tech cost", () => {
   const before = scaledResearchCost(s, "iron-working", "p1");
   s.playersById.p1.perks = { researchCostPct: -30 };
   assert.ok(scaledResearchCost(s, "iron-working", "p1") < before, "cheaper research with a -30% card");
+});
+
+test("Slice 3: a farm yield-special makes each worked farm worth more (helot-agriculture)", () => {
+  const f = (techs: string[], farm: boolean) => computeCityYield(city({ techs, farm }), "c1").food;
+  const delta = (f(["helot-agriculture"], true) - f(["helot-agriculture"], false)) - (f([], true) - f([], false));
+  assert.ok(delta >= 1, `farm worth +${delta} more food with the tech`);
+});
+
+test("Slice 3: tech capitalYield lands only on the capital (ekklesia)", () => {
+  const sci = (techs: string[], capital: boolean) => computeCityYield(city({ techs, capital }), "c1").science;
+  const delta = (sci(["ekklesia"], true) - sci(["ekklesia"], false)) - (sci([], true) - sci([], false));
+  assert.ok(delta >= 1, `capital gets +${delta} science from capitalYield`);
+});
+
+test("Slice 3: buildingBoost raises the boosted building's yield (forum-romanum)", () => {
+  const g = (techs: string[], forum: boolean) => computeCityYield(city({ techs, building: forum ? "forum" : undefined }), "c1").gold;
+  const delta = (g(["forum-romanum"], true) - g(["forum-romanum"], false)) - (g([], true) - g([], false));
+  assert.ok(delta >= 1, `forum worth +${delta} more gold with forum-romanum`);
 });
