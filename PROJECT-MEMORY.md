@@ -296,10 +296,11 @@ gold **"The age of X begins" toast** (`showCombatToast(...,"gate")`) fires in
 `render()` on the closed→open flip (tracked in `ttGateAnnounced`). The
 **civ branch band** (dashed `--civ`, name from `engine.BRANCHES`, done/total,
 crowned capstone) is unchanged below the grid. **Connectors** (`drawTechLinks`):
-only between full cards (chips never enter `ttNodeById`); same‑row = straight,
-else orthogonal routed through clear row/column channels (gaps in the union of
-node rects); cross‑track = coral dashed. Hover still lights the full prereq
-chain (`highlightTechChain`). **Background is `--ground`, NOT `--ink`** (in this
+**only same‑track prereqs between ADJACENT cards**, as clean flat links along the
+lane — the persistent cross‑track coral routing was a tangled mess and was DROPPED;
+cross‑track prereqs (and the branch band) are revealed only by the **hover‑lit
+chain** (`highlightTechChain` lights the full prereq chain's nodes). Cards are a
+fixed 152px with a 2‑line effect clamp; columns size to content (`max-content`). **Background is `--ground`, NOT `--ink`** (in this
 codebase `--ink` was repointed to parchment in Phase 6 — that was the "parchment
 background" §6 bug). Engine exposes `AGE_GATES`, `techTier`, `BRANCHES` to the
 browser. **Known gap:** connectors render *behind* the opaque cards so none show

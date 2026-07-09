@@ -2785,53 +2785,30 @@
     const sx = techTreeEl.scrollLeft, sy = techTreeEl.scrollTop;
     const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left - c.left + sx, r: r.right - c.left + sx, t: r.top - c.top + sy, bo: r.bottom - c.top + sy, mx: (r.left + r.right) / 2 - c.left + sx, my: (r.top + r.bottom) / 2 - c.top + sy }; };
     const rects = Object.keys(ttNodeById).map((k) => R(ttNodeById[k]));
-    // Clear channels = gaps in the UNION of all node x- (and y-) intervals: an x with
-    // no card in ANY row is a safe vertical run; a y with no card in any column is a
-    // safe horizontal run. Route every connector through these so it crosses no card.
-    function channels(lo, hi) {
-      const iv = rects.map((r) => lo === "l" ? [r.l, r.r] : [r.t, r.bo]).sort((a, b) => a[0] - b[0]);
-      const merged = []; for (const [s, e] of iv) { const m = merged[merged.length - 1]; if (m && s <= m[1] + 1) m[1] = Math.max(m[1], e); else merged.push([s, e]); }
-      const chans = [];
-      for (let i = 0; i < merged.length - 1; i += 1) if (merged[i + 1][0] - merged[i][1] > 10) chans.push((merged[i][1] + merged[i + 1][0]) / 2);
-      return chans;
-    }
-    const clearXs = channels("l"), clearYs = channels("t");
-    const nearest = (arr, v, fallback) => arr.length ? arr.reduce((b, x) => Math.abs(x - v) < Math.abs(b - v) ? x : b, arr[0]) : fallback;
-    const nearestToward = (arr, from, to, fb) => { const cand = arr.filter((x) => (to >= from ? x >= from : x <= from)); return cand.length ? nearest(cand, from, fb) : nearest(arr, from, fb); };
     const frag = [];
+    // Persistent connectors: ONLY same-track prerequisites, drawn as clean FLAT links
+    // along the lane between ADJACENT cards. Cross-track prereqs (and the branch band)
+    // are revealed by the hover-lit chain instead of drawn — that persistent
+    // cross-hatch was the visual mess. Chips are never registered, so none touch them.
     for (const id in ttNodeById) {
       const rule = techs[id];
-      if (!rule) continue;
+      if (!rule || rule.civ) continue; // branch band gets no persistent links
       const b = R(ttNodeById[id]);
       for (const p of rule.prerequisites || []) {
         const aEl = ttNodeById[p];
-        if (!aEl) continue;
+        if (!aEl || techs[p].civ) continue;
+        if (ttTrackOf(p) !== ttTrackOf(id)) continue; // cross-track -> hover only
         const a = R(aEl);
+        if (b.l <= a.r) continue; // left-to-right within the lane
+        // skip if another card sits between them in the same lane (non-adjacent link)
+        if (rects.some((rr) => Math.abs(rr.my - a.my) < 6 && rr.l > a.r + 1 && rr.r < b.l - 1)) continue;
         const pDone = player.techs.includes(p), tDone = player.techs.includes(id);
         const tAvail = !tDone && canResearchSafe(player, id);
-        const sameRow = Math.abs(a.my - b.my) < 6;
-        const sameTrack = !rule.civ && !techs[p].civ && ttTrackOf(p) === ttTrackOf(id);
-        let cls = "tt-link", d;
+        let cls = "tt-link";
         if (pDone && tDone) cls += " done"; else if (tAvail && pDone) cls += " next";
-        if (sameRow && b.l - a.r > 2 && b.l - a.r < 40) {
-          // adjacent same-row cards: a short straight link across the clear gap
-          d = "M" + a.r + " " + a.my + " L" + b.l + " " + b.my;
-        } else {
-          if (!sameTrack) cls += " cross";
-          // exit source into the IMMEDIATE clear row-channel on the side toward the
-          // target, run along it, drop through the clear column-channel nearest to the
-          // target's left edge, then a short stub into the target.
-          const down = b.my >= a.my;
-          const exitY = down ? a.bo : a.t;
-          const gyC = clearYs.filter((y) => (down ? y > a.bo : y < a.t));
-          const gy = gyC.length ? (down ? Math.min.apply(null, gyC) : Math.max.apply(null, gyC)) : exitY + (down ? 8 : -8);
-          const vxC = clearXs.filter((x) => x < b.l - 1);
-          const vx = vxC.length ? Math.max.apply(null, vxC) : b.l - 8;
-          d = "M" + a.mx + " " + exitY + " L" + a.mx + " " + gy + " L" + vx + " " + gy + " L" + vx + " " + b.my + " L" + b.l + " " + b.my;
-        }
         const path = document.createElementNS(TT_SVGNS, "path");
         path.setAttribute("class", cls);
-        path.setAttribute("d", d);
+        path.setAttribute("d", "M" + a.r + " " + a.my + " L" + b.l + " " + b.my);
         path.dataset.from = p;
         path.dataset.to = id;
         frag.push(path);
