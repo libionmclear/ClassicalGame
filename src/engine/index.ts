@@ -160,17 +160,17 @@ function syncOwnershipIndexes(state: GameState): void {
 // Mediterranean climate: mostly clear skies and hot, dry summers; rain is the
 // exception, not the rule; storms and fog are rare.
 function randomWeather(roll: number): WeatherType {
-  if (roll < 0.64) return "clear"; // 64%
-  if (roll < 0.80) return "heat";  // 16% — the long dry summer
-  if (roll < 0.90) return "rain";  // 10%
-  if (roll < 0.955) return "fog";  // 5.5%
-  return "storm";                  // 4.5%
+  if (roll < 0.70) return "clear"; // 70%
+  if (roll < 0.86) return "heat";  // 16% — the long dry summer
+  if (roll < 0.93) return "rain";  // 7% — rain is the exception
+  if (roll < 0.97) return "fog";   // 4%
+  return "storm";                  // 3%
 }
 
 // A weather FRONT holds for several turns before it shifts, so rain settles in
 // for a spell rather than flickering on and off every single turn. Fronts are
 // staggered per region so the whole map doesn't change weather on the same turn.
-const WEATHER_FRONT = 4;
+const WEATHER_FRONT = 6;
 function generateWeatherByRegion(state: GameState, turn: number): Record<string, WeatherType> {
   const result: Record<string, WeatherType> = {};
   const regions = state.map.regions.length > 0 ? state.map.regions : ["core"];

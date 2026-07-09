@@ -383,6 +383,18 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Elevation system — visual half (commit 1 of 2).** Terrain now rises in clear
+  terraces and **mountains carry snow‑capped twin‑spike peaks** (`buildPeak` in
+  `board3d.ts`; `TERRAIN_ELEV` raised — sea/coast L0, plains/valley/desert L1,
+  forest L2, hills L3, mountains L5). Mapgen was producing near‑zero mountains, so
+  `mapgen.ts` got elevation **contrast** (`×1.35` around 0.5) + lower thresholds
+  (mountains >0.82, hills >0.64) → ~0–9% mountains / 12–33% hills (a spine, not a
+  wall). **Rain fix:** the falling‑rain volume now shows only when ≥34% of *visible*
+  tiles are wet (was ≥1 tile → constant flicker); rain rarer (10→7%) and fronts
+  longer (`WEATHER_FRONT` 4→6). *Chosen design for the pending **movement half
+  (commit 2)**: level derived from terrain; ascent limited to +1/step (descend
+  free); level‑3 entry costs the whole turn; level‑5 peaks impassable; Mountain
+  Paths still crosses L3–4. Not built yet — awaiting review of the visuals.*
 - **HEGEMON v2 — PHASE 7 (Tech‑tree UI).** Per `docs/HEGEMON-TECHTREE-UI-SPEC.md`,
   rebuilt the research modal into the approved layout: **3 era columns** of shared
   trunk + a **civ‑unique branch band** ("Via Romana" etc. from `engine.BRANCHES`,

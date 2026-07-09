@@ -37,8 +37,13 @@ const TERRAIN_COLOR: Record<string, number> = {
   coast: 0x3f7f9c,
   sea: 0x2f5177
 };
+// Terraced elevation: the land rises in clear steps so height reads as a "level".
+// Water stays flat and low; each land tier is distinctly taller than the last, and
+// mountains tower (their snow-capped peaks add another ~1.5 on top — see buildPeak).
+// This is the render half of the elevation system (movement rules follow the same
+// tiers). sea/coast=L0, plains/valley/desert=L1, forest=L2, hills=L3, mountains=L5.
 const TERRAIN_ELEV: Record<string, number> = {
-  sea: -0.18, coast: -0.05, plains: 0.08, valley: 0.1, forest: 0.16, hills: 0.34, mountains: 0.85, desert: 0.08
+  sea: -0.18, coast: -0.05, plains: 0.12, valley: 0.16, forest: 0.42, hills: 0.86, mountains: 1.5, desert: 0.12
 };
 const FLOOR = -0.6;
 const SIZE = 1;
@@ -202,6 +207,8 @@ const GEO = {
   treeCone: new THREE.ConeGeometry(0.19, 0.44, 6),
   treeTrunk: new THREE.CylinderGeometry(0.045, 0.055, 0.16, 4),
   rock: new THREE.IcosahedronGeometry(0.15, 0),
+  peakSpike: new THREE.ConeGeometry(0.4, 1.0, 5),
+  peakSnow: new THREE.ConeGeometry(0.2, 0.4, 5),
   // City architecture
   dome: new THREE.SphereGeometry(0.2, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
   column: new THREE.CylinderGeometry(0.028, 0.028, 0.34, 6),
@@ -635,6 +642,30 @@ function buildTree(): THREE.Group {
 function buildRock(): THREE.Mesh {
   return meshOf(GEO.rock, 0x7d746a);
 }
+// A level-5 mountain: two rocky spikes of uneven height, each snow-capped. Placed
+// on mountain tiles (which tower above everything else) so peaks read as the
+// impassable summits of the elevation system.
+function buildPeak(): THREE.Group {
+  const g = new THREE.Group();
+  const spikes = [
+    { x: -0.22, z: 0.12, h: 0.95, r: 0.42 },
+    { x: 0.2, z: -0.14, h: 1.45, r: 0.5 }
+  ];
+  for (const s of spikes) {
+    const rock = new THREE.Mesh(GEO.peakSpike, mat(0x6f685c));
+    rock.castShadow = true;
+    rock.scale.set(s.r / 0.4, s.h, s.r / 0.4);
+    rock.position.set(s.x, s.h / 2, s.z);
+    g.add(rock);
+    const snowH = s.h * 0.34, snowR = s.r * 0.36;
+    const snow = new THREE.Mesh(GEO.peakSnow, mat(0xeef2f6));
+    snow.castShadow = true;
+    snow.scale.set(snowR / 0.2, snowH / 0.4, snowR / 0.2);
+    snow.position.set(s.x, s.h - snowH / 2, s.z);
+    g.add(snow);
+  }
+  return g;
+}
 function buildAnimal(color: number): THREE.Group {
   const g = new THREE.Group();
   const body = meshOf(GEO.horse, color); body.scale.set(0.5, 0.7, 0.7); body.position.y = 0.12; g.add(body);
@@ -916,8 +947,16 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       if (tv.v !== 2 || occupied.has(tv.q + "," + tv.r)) continue;
       const w = axialToWorld(tv.q, tv.r);
       const top = topOf(tv.t);
+      // A mountain wears a snow-capped twin-spike peak instead of loose rocks.
+      if (tv.t === "mountains") {
+        const pk = buildPeak();
+        pk.scale.setScalar(0.85 + rnd(tv.q, tv.r, 5) * 0.4);
+        pk.rotation.y = rnd(tv.q, tv.r, 7) * Math.PI * 2;
+        pk.position.set(w.x, top, w.z);
+        scatterGroup.add(pk);
+      }
       let trees = tv.t === "forest" ? 3 : 0;
-      let rocks = tv.t === "mountains" ? 3 : tv.t === "hills" ? 1 : 0;
+      let rocks = tv.t === "hills" ? 1 : 0;
       if (tv.res === "timber") trees = Math.max(trees, 4);
       else if (tv.res === "iron" || tv.res === "stone" || tv.res === "silver") rocks = Math.max(rocks, 3);
       for (let i = 0; i < trees; i += 1) {
@@ -1578,18 +1617,25 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       placeScatter(view);
       drawBorders(view);
       drawWaterways(view);
-      // Rain only over the wet region's footprint: measure the bounds of the
-      // visible rain/storm tiles and size the drop volume to just cover them.
-      let wet = false; stormy = false;
+      // Rain over the wet region's footprint — but only when a real part of the
+      // ON-SCREEN map is actually under the front. A single wet tile at the edge
+      // used to trigger a full downpour every few turns ("intermittent rain"); now
+      // the drops show only if a meaningful fraction of visible tiles are wet.
+      stormy = false;
+      let wetCount = 0, visCount = 0;
       let mnX = Infinity, mxX = -Infinity, mnZ = Infinity, mxZ = -Infinity;
       for (const t of view.tiles) {
-        if (t.v !== 2 || (t.wx !== "rain" && t.wx !== "storm")) continue;
-        wet = true;
+        if (t.v !== 2) continue;
+        visCount += 1;
+        if (t.wx !== "rain" && t.wx !== "storm") continue;
+        wetCount += 1;
         if (t.wx === "storm") stormy = true;
         const w = axialToWorld(t.q, t.r);
         if (w.x < mnX) mnX = w.x; if (w.x > mxX) mxX = w.x;
         if (w.z < mnZ) mnZ = w.z; if (w.z > mxZ) mxZ = w.z;
       }
+      const wet = wetCount > 0 && wetCount / Math.max(1, visCount) >= 0.34;
+      stormy = wet && stormy;
       rainOn = wet;
       rain.visible = wet;
       if (wet) {

@@ -152,10 +152,13 @@ function fbm(seed: string, salt: string, x: number, y: number): number {
 function terrainFor(elev: number, moist: number): TerrainType {
   if (elev < 0.3) return "sea";
   if (elev < 0.38) return "coast";
-  if (elev > 0.83) return "mountains";
-  if (elev > 0.7) return "hills";
+  // Real relief: a proper spread of high ground so the land rises in tiers and
+  // mountains actually appear (they carry the impassable snow peaks). Was 0.83 /
+  // 0.70 with a flat noise, which produced near-zero mountains.
+  if (elev > 0.82) return "mountains";
+  if (elev > 0.64) return "hills";
   if (moist < 0.3) return "desert";
-  if (moist > 0.68 && elev < 0.55) return "valley";
+  if (moist > 0.68 && elev < 0.52) return "valley";
   if (moist > 0.52) return "forest";
   return "plains";
 }
@@ -184,7 +187,10 @@ function buildTerrain(seed: string, spec: SizeSpec): TerrainField {
   // terrain reads coherently on the rectangular board.
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
+      // Contrast the noise around its midpoint so high ground climbs into real
+      // ridges (and lowlands settle) rather than everything hovering near 0.5.
       let elev = fbm(seed, "elev", col, row) + 0.06;
+      elev = 0.5 + (elev - 0.5) * 1.35;
       // Edge falloff sinks the borders into sea, leaving a central landmass with coasts.
       const nx = cols <= 1 ? 0 : (col / (cols - 1)) * 2 - 1;
       const ny = rows <= 1 ? 0 : (row / (rows - 1)) * 2 - 1;
