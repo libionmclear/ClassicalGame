@@ -6,6 +6,9 @@ export const TERRAIN: Record<string, TerrainRule> = {
   valley: { moveCost: 1, yields: { food: 3, production: 0, gold: 0 }, defense: 0, vision: 0 },
   forest: { moveCost: 2, yields: { food: 0, production: 2, gold: 0 }, defense: 0.25, vision: 0 },
   hills: { moveCost: 2, yields: { food: 1, production: 1, gold: 0 }, defense: 0.25, vision: 1 },
+  // Highlands (elevation level 4): the rocky approach below the peaks — slow and
+  // defensible, one step short of the impassable mountains.
+  highlands: { moveCost: 3, yields: { food: 0, production: 2, gold: 0 }, defense: 0.4, vision: 1 },
   mountains: { moveCost: 3, yields: { food: 0, production: 1, gold: 0 }, defense: 0.5, vision: 2, impassableWithoutTech: "mountain-paths" },
   desert: { moveCost: 2, yields: { food: 0, production: 0, gold: 0 }, defense: 0, vision: 0 },
   coast: { moveCost: 1, yields: { food: 1, production: 0, gold: 1 }, defense: 0, vision: 0, navalOnly: true },

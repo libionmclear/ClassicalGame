@@ -3,6 +3,7 @@ export type TerrainType =
   | "valley"
   | "forest"
   | "hills"
+  | "highlands"
   | "mountains"
   | "desert"
   | "coast"

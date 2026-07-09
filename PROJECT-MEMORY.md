@@ -388,6 +388,17 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Corrections: admin all‑cards + 5‑tier terrain.** (1) The **admin** test account
+  now loads with the **entire card collection** + all civs unlocked (in‑memory grant
+  in `loadProfile` when `currentAccount.isAdmin`) so every card is testable. (2)
+  **Terrain now has five even height tiers** so the land climbs as a staircase to a
+  reachable peak: added a new **`highlands` (L4)** terrain type (engine
+  `TerrainType`/`TERRAIN`, `mapgen.terrainFor` band 0.77–0.86, render colour+height,
+  client labels/glyph/swatch). Re‑spaced `TERRAIN_ELEV` to ~0.2 steps (plains .14 →
+  forest .34 → hills .54 → highlands .74 → mountains .96) and **shortened the snow
+  peak** (spikes ~1.0/1.45 → 0.5/0.78) — the summit was too spire‑like. Monetization
+  note corrected in auto‑memory: **pay‑to‑enhance/speed‑up** (everything earnable free
+  via slow packs; money only buys speed), superseding "strictly not pay‑to‑win".
 - **Tech tree v2.1 — research economy + swimlane UI** (`docs/HEGEMON-TECHTREE-UI-SPEC-v2.md`).
   *Engine (commit 38dce62):* §2 hard AND‑prereqs (tightened trunk), §3 **era gates**
   (`AGE_GATES` 2:5/3:6 in `canResearch`), §3b **depth‑tiered costs** (age×tier×costMod,

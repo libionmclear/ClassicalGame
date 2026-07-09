@@ -155,8 +155,11 @@ function terrainFor(elev: number, moist: number): TerrainType {
   // Real relief: a proper spread of high ground so the land rises in tiers and
   // mountains actually appear (they carry the impassable snow peaks). Was 0.83 /
   // 0.70 with a flat noise, which produced near-zero mountains.
-  if (elev > 0.82) return "mountains";
-  if (elev > 0.64) return "hills";
+  // Five elevation tiers so a massif climbs hills -> highlands -> peak (the L4
+  // highlands ring sits between the passable hills and the impassable summits).
+  if (elev > 0.86) return "mountains";
+  if (elev > 0.77) return "highlands";
+  if (elev > 0.62) return "hills";
   if (moist < 0.3) return "desert";
   if (moist > 0.68 && elev < 0.52) return "valley";
   if (moist > 0.52) return "forest";

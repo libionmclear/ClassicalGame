@@ -225,6 +225,7 @@
     valley: "Valley",
     forest: "Forest",
     hills: "Hills",
+    highlands: "Highlands",
     mountains: "Mountains",
     desert: "Desert",
     coast: "Coast",
@@ -235,6 +236,7 @@
     valley: "🌾",
     forest: "🌲",
     hills: "⛰️",
+    highlands: "🪨",
     mountains: "🏔️",
     desert: "🏜️",
     coast: "〰️",
@@ -245,6 +247,7 @@
     valley: "#7d9749",
     forest: "#33553a",
     hills: "#7a6a4a",
+    highlands: "#726650",
     desert: "#b79860",
     coast: "#3f7387",
     sea: "#2f4f77"
@@ -3741,7 +3744,7 @@
     let p = null;
     try { p = JSON.parse(window.localStorage.getItem(PROFILE_KEY) || "null"); } catch (e) { p = null; }
     if (!p || typeof p !== "object") p = {};
-    return {
+    const prof = {
       name: p.name || "Player",
       games: p.games || 0,
       wins: p.wins || 0,
@@ -3770,6 +3773,15 @@
       equipped: p.equipped || {},
       loadout: normalizeLoadout(p.loadout) // { legend, edict, event } — v2 3-slot
     };
+    // Admin test account: grant the ENTIRE collection so every card + civ is
+    // testable (one copy of each card, all civs unlocked). In-memory on load only.
+    try {
+      if (currentAccount && currentAccount.isAdmin) {
+        for (const id in CARDS_BY_ID) prof.cards[id] = Math.max(1, prof.cards[id] || 0);
+        prof.unlockedCivs = (engine.CIV_ROSTER || []).map(function (c) { return c.id; });
+      }
+    } catch (e) {}
+    return prof;
   }
   function saveProfile(p) {
     try { window.localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) {}

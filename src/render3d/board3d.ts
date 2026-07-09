@@ -32,18 +32,19 @@ const TERRAIN_COLOR: Record<string, number> = {
   valley: 0x8aa354,
   forest: 0x33553a,
   hills: 0x86744f,
+  highlands: 0x7d7258,
   mountains: 0x746a5b,
   desert: 0xc6a86a,
   coast: 0x3f7f9c,
   sea: 0x2f5177
 };
-// Terraced elevation: the land rises in clear steps so height reads as a "level".
-// Water stays flat and low; each land tier is distinctly taller than the last, and
-// mountains tower (their snow-capped peaks add another ~1.5 on top — see buildPeak).
-// This is the render half of the elevation system (movement rules follow the same
-// tiers). sea/coast=L0, plains/valley/desert=L1, forest=L2, hills=L3, mountains=L5.
+// Five terraced elevation levels (~0.2 apart) so the land reads as an even staircase
+// you can climb to a peak: L1 plains → L2 forest → L3 hills → L4 highlands → L5
+// mountains. Water stays flat and low. The peak's snow spikes add a modest amount on
+// top (see buildPeak) — much shorter than before, so a summit is tall but reachable.
+// This is the render half of the elevation system; movement rules follow the tiers.
 const TERRAIN_ELEV: Record<string, number> = {
-  sea: -0.18, coast: -0.05, plains: 0.12, valley: 0.16, forest: 0.42, hills: 0.86, mountains: 1.5, desert: 0.12
+  sea: -0.12, coast: -0.04, plains: 0.14, valley: 0.18, forest: 0.34, hills: 0.54, highlands: 0.74, mountains: 0.96, desert: 0.14
 };
 const FLOOR = -0.6;
 const SIZE = 1;
@@ -647,9 +648,11 @@ function buildRock(): THREE.Mesh {
 // impassable summits of the elevation system.
 function buildPeak(): THREE.Group {
   const g = new THREE.Group();
+  // Modest twin spikes (was ~1.0/1.45 — too spire-like); a summit should cap the
+  // L5 terrace, not tower over it.
   const spikes = [
-    { x: -0.22, z: 0.12, h: 0.95, r: 0.42 },
-    { x: 0.2, z: -0.14, h: 1.45, r: 0.5 }
+    { x: -0.22, z: 0.12, h: 0.5, r: 0.44 },
+    { x: 0.2, z: -0.14, h: 0.78, r: 0.52 }
   ];
   for (const s of spikes) {
     const rock = new THREE.Mesh(GEO.peakSpike, mat(0x6f685c));
@@ -961,7 +964,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         scatterGroup.add(pk);
       }
       let trees = tv.t === "forest" ? 3 : 0;
-      let rocks = tv.t === "hills" ? 1 : 0;
+      let rocks = tv.t === "highlands" ? 2 : tv.t === "hills" ? 1 : 0;
       if (tv.res === "timber") trees = Math.max(trees, 4);
       else if (tv.res === "iron" || tv.res === "stone" || tv.res === "silver") rocks = Math.max(rocks, 3);
       for (let i = 0; i < trees; i += 1) {
