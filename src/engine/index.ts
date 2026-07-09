@@ -337,6 +337,25 @@ function techCardCombat(owner: Player | undefined, selfCat: string, foeCat: stri
   return out;
 }
 
+// Effect wiring, Slice 2 — sum a numeric % effect (unitCostPct/upkeepPct/
+// researchCostPct/buildFasterPct) across a player's non-hardcoded researched techs +
+// equipped-card perks. `catId` also picks up a per-category `unitCatPct.<key>`.
+function playerPctMod(owner: Player | undefined, key: string, catId?: string): number {
+  if (!owner) return 0;
+  let total = 0;
+  for (const techId of owner.techs) {
+    if (HARDCODED_COMBAT_TECHS.has(techId)) continue;
+    const eff = TECHS[techId]?.effect as Record<string, unknown> | undefined;
+    if (!eff) continue;
+    if (typeof eff[key] === "number") total += eff[key] as number;
+    const uc = eff.unitCatPct as (Record<string, unknown> & { cat?: string }) | undefined;
+    if (catId && uc && uc.cat === catId && typeof uc[key] === "number") total += uc[key] as number;
+  }
+  const perkVal = owner.perks && (owner.perks as Record<string, number | undefined>)[key];
+  if (typeof perkVal === "number") total += perkVal;
+  return total;
+}
+
 // A unit fights as part of a "force": itself, anything stacked on its tile, and
 // friendly units adjacent to it. Diversity of roles grants a combined-arms bonus.
 function combinedArmsBonus(state: GameState, attacker: Unit): { bonus: number; label: string | null } {
@@ -748,6 +767,9 @@ export function mapCostScale(width: number, height: number): number {
 export function scaledResearchCost(state: GameState, techId: string, playerId?: string): number {
   let cost = researchCost(techId) * (state.costScale || 1);
   if (playerId && state.playersById[playerId]?.techs.includes("rhetoric")) cost *= 0.85;
+  // Slice 2: extra research-cost % from other techs/cards (rhetoric stays explicit).
+  const rc = playerPctMod(playerId ? state.playersById[playerId] : undefined, "researchCostPct");
+  if (rc) cost *= Math.max(0.3, 1 + rc / 100);
   return Math.max(1, Math.round(cost));
 }
 
@@ -925,6 +947,14 @@ export function effectiveItemCost(state: GameState, ownerId: string, id: string)
   let mult = buildDiscount(state, ownerId, id) * (state.costScale || 1);
   // Carthage's thalassocracy — her shipyards turn out warships 25% cheaper.
   if (UNITS[id]?.domain === "naval" && (state.playersById[ownerId]?.techs.includes("thalassocracy") ?? false)) mult *= 0.75;
+  // Slice 2: build-faster (all items) + unit-cost % (units only, incl. per-category).
+  const owner = state.playersById[ownerId];
+  const faster = playerPctMod(owner, "buildFasterPct");
+  if (faster) mult *= Math.max(0.4, 1 - faster / 100);
+  if (UNITS[id]) {
+    const uc = playerPctMod(owner, "unitCostPct", UNITS[id].category);
+    if (uc) mult *= Math.max(0.4, 1 + uc / 100);
+  }
   return Math.max(1, Math.round(base * mult));
 }
 
@@ -939,7 +969,10 @@ export function playerFoodUpkeep(state: GameState, playerId: string): number {
     return n + (u && UNITS[u.type].domain !== "civilian" ? 1 : 0);
   }, 0);
   const free = player.cityIds.length * FOOD_UPKEEP_FREE_PER_CITY;
-  return Math.max(0, military - free);
+  const net = Math.max(0, military - free);
+  // Slice 2: army upkeep % from techs/cards (e.g. a logistics reform).
+  const up = playerPctMod(player, "upkeepPct");
+  return up ? Math.max(0, Math.round(net * (1 + up / 100))) : net;
 }
 
 // Pick an empty water tile next to a coastal city to launch a new ship. Falls

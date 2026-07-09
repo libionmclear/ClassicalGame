@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeCombatPreview, createInitialGameState } from "../src/engine/index";
+import { computeCombatPreview, createInitialGameState, effectiveItemCost, scaledResearchCost } from "../src/engine/index";
 import type { GameState, Player } from "../src/engine/types";
 
 // Effect wiring, Slice 1 — branch-tech + equipped-card combat % actually reach the
@@ -35,4 +35,18 @@ test("Slice 1: an equipped card's flat +attack% reaches the combat calc", () => 
 test("Slice 1: a branch tech's flat +attack% (hammer-and-anvil) reaches the combat calc", () => {
   const mods = computeCombatPreview(duel({ techs: ["hammer-and-anvil"] }), "a", "d").modifiers;
   assert.ok(mods.some((m) => /10%/.test(m)), `expected a +10% branch modifier, got ${mods.join(", ")}`);
+});
+
+test("Slice 2: a card's unit-cost % reduces the build cost", () => {
+  const s = duel({});
+  const before = effectiveItemCost(s, "p1", "warrior");
+  s.playersById.p1.perks = { unitCostPct: -50 };
+  assert.ok(effectiveItemCost(s, "p1", "warrior") < before, "cheaper units with a -50% cost card");
+});
+
+test("Slice 2: a card's research-cost % reduces the tech cost", () => {
+  const s = duel({});
+  const before = scaledResearchCost(s, "iron-working", "p1");
+  s.playersById.p1.perks = { researchCostPct: -30 };
+  assert.ok(scaledResearchCost(s, "iron-working", "p1") < before, "cheaper research with a -30% card");
 });

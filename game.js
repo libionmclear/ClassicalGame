@@ -3441,6 +3441,10 @@
       if (typeof effect.atkPct === "number") perks.atkPct = (perks.atkPct || 0) + effect.atkPct;
       if (typeof effect.defPct === "number") perks.defPct = (perks.defPct || 0) + effect.defPct;
     }
+    // Slice 2: cost/upkeep/research % — flat player-wide perks the engine applies.
+    for (const k of ["unitCostPct", "upkeepPct", "researchCostPct", "buildFasterPct"]) {
+      if (effect && typeof effect[k] === "number") perks[k] = (perks[k] || 0) + effect[k];
+    }
     return perks;
   }
   // Does this effect reference stability (currently STUBBED as gold)?
@@ -3457,7 +3461,8 @@
     for (const k in effect) {
       if (k === "capitalYield" || k === "cityYield") continue; // applied (stability stubbed)
       if ((k === "atkPct" || k === "defPct") && flatCombat) continue; // Slice 1: now wired
-      flags.push(k); // unitCostPct/buildFasterPct/researchCostPct/movePlus/healPlus/plunderPct/tradeRouteGold/special/instant/unitPct/filters…
+      if (k === "unitCostPct" || k === "upkeepPct" || k === "researchCostPct" || k === "buildFasterPct") continue; // Slice 2: now wired
+      flags.push(k); // movePlus/healPlus/plunderPct/tradeRouteGold/special/instant/unitPct/filters…
     }
     return flags;
   }

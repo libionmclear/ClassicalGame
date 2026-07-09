@@ -147,6 +147,8 @@ export interface Player {
     food?: number; production?: number; gold?: number; science?: number; stability?: number;
     /** Flat combat % from equipped cards (Slice 1 — card effect wiring). */
     atkPct?: number; defPct?: number;
+    /** Cost/upkeep/research % from equipped cards (Slice 2). */
+    unitCostPct?: number; upkeepPct?: number; researchCostPct?: number; buildFasterPct?: number;
   };
 }
 
