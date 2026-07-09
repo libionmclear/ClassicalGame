@@ -283,23 +283,28 @@ Signed in as admin: **☰ Menu → account → 🖉 Map editor** — a terrain p
 click‑paint tiles on the live map, and **Export atlas** to dump the map as an
 offset ASCII grid to paste into a scenario file.
 
-### Tech‑tree UI (`docs/HEGEMON-TECHTREE-UI-SPEC.md`, Phase 7)
-The research modal (`renderTechTree` in `game.js`, `.tt*` classes in `game.css`)
-is the approved layout: **three era columns** of shared‑trunk techs (no `civ`) +
-a **civ‑unique branch band** at the bottom (dashed `--civ` border, branch name
-from `engine.BRANCHES[civ].name` + a `done / total` progress counter, capstone
-crowned with a `--civ` inset). Nodes are `.tt-node` buttons carrying
-`data-state` (researched/available/locked), `data-unique`, `data-capstone`,
-`data-fork-closed`; each shows icon, name, a one‑line effect (parsed from the
-`EFFECT:` tail of the note) and a cost pill. A single absolute **`<svg.tt-links>`**
-draws **bezier connectors** for every visible prereq edge (`drawTechLinks`,
-measured from `getBoundingClientRect` + scroll offsets; classes `done`/`next`/
-`branch`). **Hover a node** → `highlightTechChain` walks its prereqs and adds
-`.lit` to those nodes + connecting paths while `.tt-dim` fades the rest (the
-"how do I get there" feature). Rival branches are simply not rendered
-(`civMatches` filter). `engine.BRANCHES` (name+color per civ) is re‑exported via
-`browser-entry`. Open the modal **before** rendering so the connector layer can
-measure visible rects; links redraw on tree scroll + window resize.
+### Tech‑tree UI (`docs/HEGEMON-TECHTREE-UI-SPEC-v2.md`, v2.1 swimlanes)
+The research modal (`renderTechTree` in `game.js`, `.tt*` in `game.css`) is a
+**swimlane grid**: rows = the five **tracks** (`TT_TRACKS`/`TT_TECH_TRACK` —
+military/construction/economy/civic/naval), columns = the three eras; each
+track×age cell lays its chain left‑to‑right by same‑age depth. Techs behind a
+**closed era gate** render as **name‑only dashed chips** (`.tt-chip`, no icon/
+effect/cost/connectors); once the gate opens they become full **`.tt-node`**
+cards (icon, name, one‑line effect, real cost pill). **Era‑gate badge** per era
+header (`.tt-gate`, `cur/req`, amber; `.near` pulses one‑away, `.open` gold); a
+gold **"The age of X begins" toast** (`showCombatToast(...,"gate")`) fires in
+`render()` on the closed→open flip (tracked in `ttGateAnnounced`). The
+**civ branch band** (dashed `--civ`, name from `engine.BRANCHES`, done/total,
+crowned capstone) is unchanged below the grid. **Connectors** (`drawTechLinks`):
+only between full cards (chips never enter `ttNodeById`); same‑row = straight,
+else orthogonal routed through clear row/column channels (gaps in the union of
+node rects); cross‑track = coral dashed. Hover still lights the full prereq
+chain (`highlightTechChain`). **Background is `--ground`, NOT `--ink`** (in this
+codebase `--ink` was repointed to parchment in Phase 6 — that was the "parchment
+background" §6 bug). Engine exposes `AGE_GATES`, `techTier`, `BRANCHES` to the
+browser. **Known gap:** connectors render *behind* the opaque cards so none show
+over a card, but the strict §7a geometric zero‑intersection isn't met (edges into
+deep chained nodes route under cards); true zero needs a sub‑column‑aligned grid.
 
 ### UI design system (`docs/HEGEMON-UI-SPEC.md`, Phase 6)
 The DOM client (`game.html`/`game.css`/`game.js`) uses one design language:
@@ -383,6 +388,20 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Tech tree v2.1 — research economy + swimlane UI** (`docs/HEGEMON-TECHTREE-UI-SPEC-v2.md`).
+  *Engine (commit 38dce62):* §2 hard AND‑prereqs (tightened trunk), §3 **era gates**
+  (`AGE_GATES` 2:5/3:6 in `canResearch`), §3b **depth‑tiered costs** (age×tier×costMod,
+  replaces flat 20/46/82 → entries 13/32/62, capstones 125, −11%), §3c **linearised
+  within‑age track chains** (`TRUNK_CHAINS` overlay) so the trunk frontier stays ≤10.
+  *UI:* rewrote the research modal into a **swimlane grid** (5 track rows × 3 era
+  columns), gated techs collapse to **chips**, **era‑gate badges** + gold open‑toast,
+  cost pills show the real tiered cost, connectors re‑routed through clear gutters
+  (behind opaque cards), §6 dark‑ground fix. *AI:* uses `canResearch` (gate‑legal) +
+  a **value‑per‑cost** term. New `test/techtree-v2.test.ts` (AND‑prereq, gate, cost
+  formula, 30‑tech frontier sim). 127/127 tests. **Balance decisions on record:**
+  monarchy trades the Age III civic trunk line (sits behind republic) for its other
+  strengths; ≤7 frontier ruled infeasible with 5 tracks + civ branches (shipped ≤10);
+  strict §7a zero‑intersection connectors deferred (need sub‑column alignment).
 - **Elevation system — visual half (commit 1 of 2).** Terrain now rises in clear
   terraces and **mountains carry snow‑capped twin‑spike peaks** (`buildPeak` in
   `board3d.ts`; `TERRAIN_ELEV` raised — sea/coast L0, plains/valley/desert L1,

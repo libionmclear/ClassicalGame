@@ -1,5 +1,5 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
-import { applyAction, computeCombatPreview, researchCost, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv } from "./index";
+import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv } from "./index";
 import { getEvent } from "./events";
 import { distance, DIRECTIONS, keyOf, parseKey } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -139,17 +139,19 @@ function bestBuildableTech(state: GameState, player: Player): string | null {
     if (player.techs.includes(techId)) continue;
     const tech = TECHS[techId];
     if (!tech) continue;
-    if (tech.civ && !playerControlsCiv(player, tech.civ)) continue;
-    if (!tech.prerequisites.every((p) => player.techs.includes(p))) continue;
-    if (tech.forkGroup) {
-      const chosen = player.forkChoices[tech.forkGroup];
-      if (chosen && chosen !== tech.forkBranch) continue;
-    }
+    // v2.1 §3: canResearch now enforces AND-prereqs, the era gate, civ and fork — use
+    // it as the candidate filter so the AI never picks an illegal (gated) tech.
+    let ok = false;
+    try { ok = canResearch(player, techId); } catch { ok = false; }
+    if (!ok) continue;
     let score = RESEARCH_BASE[techId] ?? 8; // branch techs missing from the old list get a mid base
     if (tech.civ) score *= 1.5;             // your own unique branch is a priority
     if (ECON_TRUNK.has(techId)) score += 6; // keep the economy moving early
-    if (tech.capstone) { if (military < 4) continue; score += 4; } // capstone only with a real army
-    score -= (tech.age - 1) * 0.1;          // tiny tie-break toward cheaper, earlier techs
+    if (tech.capstone && military < 4) continue; // capstone only with a real army
+    // v2.1 §3c/§3.8 cost-efficiency: value per science, so it grabs cheap foundations
+    // early and only commits to an expensive line (deep track / capstone) deliberately.
+    score = (score * 36) / (24 + researchCost(techId));
+    if (tech.capstone) score += 3; // keep the branch capstone attractive once it unlocks
     if (score > bestScore) { bestScore = score; best = techId; }
   }
   return best;

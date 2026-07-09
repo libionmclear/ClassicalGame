@@ -2386,6 +2386,17 @@
     // the turn pill border, the context-panel edge, and the tech-tree band.
     if (document.body.dataset.civ !== HUMAN_ID) document.body.dataset.civ = HUMAN_ID;
 
+    // Era-gate opening (§3): gold toast when a new age unlocks for the human.
+    try {
+      const me = human();
+      for (const age of [2, 3]) {
+        const open = ttGateOpen(me, age);
+        if (ttGateAnnounced[age] === undefined) ttGateAnnounced[age] = open;
+        else if (open && !ttGateAnnounced[age]) { ttGateAnnounced[age] = true; showCombatToast("🏛️ The age of " + (age === 2 ? "Kingdoms" : "Empires") + " begins", "gate"); }
+        else if (!open) ttGateAnnounced[age] = false;
+      }
+    } catch (e) {}
+
     try {
       const activeColor = CIV_COLORS[current.id] || "#ccc";
       const turnLabel = state.turnLimit
@@ -2523,11 +2534,42 @@
 
   // Highlight (or clear) the whole prerequisite chain of a tech — "what to
   // research to get here".
-  // Tech-tree UI state (Phase 7): the current node elements and connector paths,
-  // so hovering a node can light its whole prerequisite chain (nodes + links).
+  // Tech-tree UI state: full-card node elements + connector paths. Chips (techs
+  // behind a closed era gate) are NOT registered here, so no connectors touch them.
   const TT_SVGNS = "http://www.w3.org/2000/svg";
   let ttNodeById = {};
   let ttLinkPaths = [];
+  let ttGateAnnounced = {}; // age -> was-open, so we toast only on a closed->open flip
+
+  // v2.1 §1 — five swimlane tracks. Every trunk tech maps to one (forks keep their
+  // parent's track); civ-branch techs live in the band, not a track.
+  const TT_TRACKS = [
+    { key: "military", label: "Military" },
+    { key: "construction", label: "Construction" },
+    { key: "economy", label: "Economy" },
+    { key: "civic", label: "Civic" },
+    { key: "naval", label: "Naval" }
+  ];
+  const TT_TECH_TRACK = {
+    "bronze-working": "military", archery: "military", "phalanx-doctrine": "military", "skirmish-doctrine": "military",
+    "iron-working": "military", "combined-arms": "military", metallurgy: "military", "horseback-riding": "military", siegecraft: "military",
+    masonry: "construction", engineering: "construction", "mountain-paths": "construction", aqueducts: "construction", "roads-logistics": "construction",
+    pottery: "economy", "animal-husbandry": "economy", irrigation: "economy", "temple-economy": "economy", coinage: "economy",
+    "caravan-logistics": "economy", "crop-rotation": "economy", "currency-reform": "economy",
+    writing: "civic", mathematics: "civic", philosophy: "civic", astronomy: "civic", republic: "civic", monarchy: "civic",
+    "law-administration": "civic", rhetoric: "civic", medicine: "civic", assimilation: "civic", "tribute-empire": "civic",
+    sailing: "naval", "open-sea-sailing": "naval", "ramming-fleets": "naval", "merchant-marine": "naval", cartography: "naval"
+  };
+  function ttTrackOf(id) { return TT_TECH_TRACK[id] || "civic"; }
+  function ttPrevAgeCount(player, age) {
+    const techs = engine.TECHS || {};
+    return player.techs.filter((id) => techs[id] && techs[id].age === age - 1).length;
+  }
+  // v2.1 §3 — an era gate is open once the player holds enough of the previous age.
+  function ttGateOpen(player, age) {
+    const g = (engine.AGE_GATES || {})[age];
+    return !g || ttPrevAgeCount(player, age) >= g.requiredPrevAgeTechs;
+  }
 
   // Hover a node -> light every tech on the path you'd research to reach it, plus
   // the connectors between them; everything else dims (UI-SPEC §4).
@@ -2570,9 +2612,9 @@
     return s;
   }
 
-  // Phase 7 tech tree: 3 era columns of shared-trunk techs + a civ-unique branch
-  // band, with a bezier connector layer and hover-lit prerequisite chains
-  // (docs/HEGEMON-TECHTREE-UI-SPEC.md). Rival branches are simply not rendered.
+  // v2.1 swimlane tech tree (docs/HEGEMON-TECHTREE-UI-SPEC-v2.md): rows = tracks,
+  // columns = age sub-columns. Techs behind a CLOSED era gate render as chips.
+  // Rival branches are not rendered.
   function renderTechTree(victory) {
     if (!techTreeEl) return;
     const techs = engine.TECHS || {};
@@ -2586,23 +2628,25 @@
     ttNodeById = {};
     ttLinkPaths = [];
 
-    // Connector layer — one SVG covering the scroll content (drawn after layout).
     const svg = document.createElementNS(TT_SVGNS, "svg");
     svg.setAttribute("class", "tt-links");
     techTreeEl.appendChild(svg);
 
-    // Order a column so a tech tends to sit below its prerequisites (longest
-    // prereq-chain depth), which makes the connectors read top-left to bottom-right.
+    // Left-to-right order within a cell = same-age prereq depth (the track chain).
     const depthCache = {};
     function depth(id) {
       if (depthCache[id] != null) return depthCache[id];
+      depthCache[id] = 0;
       const r = techs[id];
-      const pre = (r && r.prerequisites) || [];
-      depthCache[id] = pre.length ? 1 + Math.max.apply(null, pre.map(depth)) : 0;
-      return depthCache[id];
+      const a = r ? r.age : 1;
+      const same = r ? (r.prerequisites || []).filter((p) => techs[p] && techs[p].age === a) : [];
+      const d = same.length ? 1 + Math.max.apply(null, same.map(depth)) : 0;
+      depthCache[id] = d;
+      return d;
     }
 
-    function makeNode(id) {
+    // A full card (§4). Only cards register in ttNodeById, so connectors ignore chips.
+    function makeCard(id) {
       const rule = techs[id];
       const info = techMeta(id);
       const researched = player.techs.includes(id);
@@ -2612,10 +2656,7 @@
       const nodeState = researched ? "researched" : available ? "available" : "locked";
       const realCost = engine.scaledResearchCost ? engine.scaledResearchCost(state, id, HUMAN_ID) : (engine.researchCost ? engine.researchCost(id) : 0);
       const affordable = player.science >= realCost;
-
-      const prereqs = (rule.prerequisites || []).map(function (p) {
-        return { name: techMeta(p).name, have: player.techs.includes(p) };
-      });
+      const prereqs = (rule.prerequisites || []).map((p) => ({ name: techMeta(p).name }));
 
       const node = document.createElement("button");
       node.className = "tt-node";
@@ -2626,85 +2667,100 @@
       if (rule.capstone) node.dataset.capstone = "1";
       node.disabled = !(available && affordable && canAct);
       node.title = info.name + " — " + info.note +
-        (researched ? "\n✓ Researched." : available ? "\nCost: " + realCost + " science" : prereqs.length ? "\nRequires: " + prereqs.map(function (p) { return p.name; }).join(", ") : "");
-
+        (researched ? "\n✓ Researched." : available ? "\nCost: " + realCost + " science" : prereqs.length ? "\nRequires: " + prereqs.map((p) => p.name).join(", ") : "");
       const pill = researched
         ? '<span class="tt-pill done">✓</span>'
         : available
           ? '<span class="tt-pill' + (affordable ? " avail" : " wait") + '">' + realCost + " 🧪</span>"
-          : forkClosed
-            ? '<span class="tt-pill">✕</span>'
-            : '<span class="tt-pill">🔒</span>';
+          : forkClosed ? '<span class="tt-pill">✕</span>' : '<span class="tt-pill">🔒</span>';
       const crown = rule.capstone ? '<span class="tt-crown" title="Branch capstone">👑</span>' : "";
       node.innerHTML =
-        '<span class="tt-node-top">' +
-          '<span class="tt-ico">' + (TECH_ICONS[id] || (rule.capstone ? "👑" : "🔬")) + "</span>" +
-          '<span class="tt-name">' + info.name + crown + "</span>" +
-          pill +
-        "</span>" +
+        '<span class="tt-node-top"><span class="tt-ico">' + (TECH_ICONS[id] || (rule.capstone ? "👑" : "🔬")) + "</span>" +
+        '<span class="tt-name">' + info.name + crown + "</span>" + pill + "</span>" +
         '<span class="fx">' + techEffectLine(info.note) + "</span>";
-
-      node.addEventListener("click", function () {
-        if (node.disabled) return;
-        apply({ type: "RESEARCH_TECH", playerId: HUMAN_ID, techId: id });
-      });
+      node.addEventListener("click", function () { if (!node.disabled) apply({ type: "RESEARCH_TECH", playerId: HUMAN_ID, techId: id }); });
       node.addEventListener("mouseenter", function () { highlightTechChain(id, true); });
       node.addEventListener("mouseleave", function () { highlightTechChain(id, false); });
       ttNodeById[id] = node;
       return node;
     }
-
-    // ===== Shared trunk: three era columns =====
-    const eras = document.createElement("div");
-    eras.className = "tt-eras";
-    for (const age of [1, 2, 3]) {
-      const ids = Object.keys(techs)
-        .filter((id) => techs[id].age === age && !techs[id].civ)
-        .sort((a, b) => depth(a) - depth(b) || (techs[a].prerequisites || []).length - (techs[b].prerequisites || []).length);
-      const col = document.createElement("div");
-      col.className = "tt-era";
-      col.dataset.age = age;
-      const h = document.createElement("h3");
-      h.textContent = AGE_LABELS[age] || "Age " + age;
-      col.appendChild(h);
-      for (const id of ids) col.appendChild(makeNode(id));
-      eras.appendChild(col);
+    // A collapsed chip (§4): name only, no icon/effect/cost, no connectors.
+    function makeChip(id) {
+      const info = techMeta(id);
+      const chip = document.createElement("span");
+      chip.className = "tt-chip";
+      chip.dataset.tech = id;
+      chip.title = info.name + " — locked until this age opens.\n" + info.note;
+      chip.textContent = info.name;
+      return chip;
     }
-    techTreeEl.appendChild(eras);
 
-    // ===== Civ-unique branch band =====
+    // ===== Swimlane grid: corner + era headers (with gate badges), then track rows =====
+    const grid = document.createElement("div");
+    grid.className = "tt-grid";
+    grid.appendChild(document.createElement("div")); // top-left corner
+    for (const age of [1, 2, 3]) {
+      const h = document.createElement("div");
+      h.className = "tt-era-head";
+      let html = '<span class="tt-era-name">' + (AGE_LABELS[age] || "Age " + age) + "</span>";
+      const g = (engine.AGE_GATES || {})[age];
+      if (g) {
+        const cur = ttPrevAgeCount(player, age), req = g.requiredPrevAgeTechs, open = cur >= req;
+        const cls = open ? "open" : (cur >= req - 1 ? "near" : "");
+        html += '<span class="tt-gate ' + cls + '" title="Age gate — research ' + req + ' Age ' + (age - 1) +
+          " techs to open (" + Math.min(cur, req) + "/" + req + ').">' + (open ? "✓ " : "") + Math.min(cur, req) + "/" + req + "</span>";
+      }
+      h.innerHTML = html;
+      grid.appendChild(h);
+    }
+    for (const tr of TT_TRACKS) {
+      const lbl = document.createElement("div");
+      lbl.className = "tt-track-label";
+      lbl.textContent = tr.label;
+      grid.appendChild(lbl);
+      for (const age of [1, 2, 3]) {
+        const cell = document.createElement("div");
+        cell.className = "tt-cell";
+        const open = ttGateOpen(player, age);
+        const ids = Object.keys(techs)
+          .filter((id) => techs[id].age === age && !techs[id].civ && ttTrackOf(id) === tr.key)
+          .sort((a, b) => depth(a) - depth(b));
+        for (const id of ids) cell.appendChild(open ? makeCard(id) : makeChip(id));
+        grid.appendChild(cell);
+      }
+    }
+    techTreeEl.appendChild(grid);
+
+    // ===== Civ-unique branch band (unchanged model) =====
     const branchIds = Object.keys(techs).filter((id) => techs[id].civ && civMatches(player, techs[id].civ));
     if (branchIds.length) {
       const band = document.createElement("div");
       band.className = "tt-band";
-      const color = CIV_COLORS[myCiv] || (BR[myCiv] && BR[myCiv].color) || "#c0392b";
-      band.style.setProperty("--civ", color);
+      band.style.setProperty("--civ", CIV_COLORS[myCiv] || (BR[myCiv] && BR[myCiv].color) || "#c0392b");
       const done = branchIds.filter((id) => player.techs.includes(id)).length;
       const head = document.createElement("div");
       head.className = "tt-band-head";
-      head.innerHTML =
-        '<span class="tt-band-title">' + ((BR[myCiv] && BR[myCiv].name) || "Unique Branch") + "</span>" +
+      head.innerHTML = '<span class="tt-band-title">' + ((BR[myCiv] && BR[myCiv].name) || "Unique Branch") + "</span>" +
         '<span class="tt-band-count">' + done + " / " + branchIds.length + "</span>";
       band.appendChild(head);
-      const grid = document.createElement("div");
-      grid.className = "tt-band-grid";
+      const bgrid = document.createElement("div");
+      bgrid.className = "tt-band-grid";
       for (const age of [1, 2, 3]) {
-        const ids = branchIds
-          .filter((id) => techs[id].age === age)
-          .sort((a, b) => depth(a) - depth(b));
         const sub = document.createElement("div");
         sub.className = "tt-band-col";
-        for (const id of ids) sub.appendChild(makeNode(id));
-        grid.appendChild(sub);
+        for (const id of branchIds.filter((id) => techs[id].age === age).sort((a, b) => depth(a) - depth(b))) sub.appendChild(makeCard(id));
+        bgrid.appendChild(sub);
       }
-      band.appendChild(grid);
+      band.appendChild(bgrid);
       techTreeEl.appendChild(band);
     }
 
     requestAnimationFrame(drawTechLinks);
   }
 
-  // Draw the prerequisite connectors as bezier curves over the whole scroll area.
+  // v2.1 §5 connectors: same-track = straight horizontal (node edge to node edge);
+  // cross-track = coral dashed, orthogonal H-V-H bent in the gutter just before the
+  // target. Only drawn between full cards (chips are never in ttNodeById).
   function drawTechLinks() {
     if (!techTreeEl) return;
     if (researchModalEl && researchModalEl.classList.contains("hidden")) return;
@@ -2716,32 +2772,57 @@
     svg.setAttribute("width", W);
     svg.setAttribute("height", H);
     svg.setAttribute("viewBox", "0 0 " + W + " " + H);
-    const cRect = techTreeEl.getBoundingClientRect();
-    let paths = "";
-    ttLinkPaths = [];
+    const c = techTreeEl.getBoundingClientRect();
+    const sx = techTreeEl.scrollLeft, sy = techTreeEl.scrollTop;
+    const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left - c.left + sx, r: r.right - c.left + sx, t: r.top - c.top + sy, bo: r.bottom - c.top + sy, mx: (r.left + r.right) / 2 - c.left + sx, my: (r.top + r.bottom) / 2 - c.top + sy }; };
+    const rects = Object.keys(ttNodeById).map((k) => R(ttNodeById[k]));
+    // Clear channels = gaps in the UNION of all node x- (and y-) intervals: an x with
+    // no card in ANY row is a safe vertical run; a y with no card in any column is a
+    // safe horizontal run. Route every connector through these so it crosses no card.
+    function channels(lo, hi) {
+      const iv = rects.map((r) => lo === "l" ? [r.l, r.r] : [r.t, r.bo]).sort((a, b) => a[0] - b[0]);
+      const merged = []; for (const [s, e] of iv) { const m = merged[merged.length - 1]; if (m && s <= m[1] + 1) m[1] = Math.max(m[1], e); else merged.push([s, e]); }
+      const chans = [];
+      for (let i = 0; i < merged.length - 1; i += 1) if (merged[i + 1][0] - merged[i][1] > 10) chans.push((merged[i][1] + merged[i + 1][0]) / 2);
+      return chans;
+    }
+    const clearXs = channels("l"), clearYs = channels("t");
+    const nearest = (arr, v, fallback) => arr.length ? arr.reduce((b, x) => Math.abs(x - v) < Math.abs(b - v) ? x : b, arr[0]) : fallback;
+    const nearestToward = (arr, from, to, fb) => { const cand = arr.filter((x) => (to >= from ? x >= from : x <= from)); return cand.length ? nearest(cand, from, fb) : nearest(arr, from, fb); };
     const frag = [];
     for (const id in ttNodeById) {
       const rule = techs[id];
       if (!rule) continue;
-      const bEl = ttNodeById[id];
+      const b = R(ttNodeById[id]);
       for (const p of rule.prerequisites || []) {
         const aEl = ttNodeById[p];
         if (!aEl) continue;
-        const a = aEl.getBoundingClientRect(), b = bEl.getBoundingClientRect();
-        const x1 = a.right - cRect.left + techTreeEl.scrollLeft;
-        const y1 = a.top + a.height / 2 - cRect.top + techTreeEl.scrollTop;
-        const x2 = b.left - cRect.left + techTreeEl.scrollLeft;
-        const y2 = b.top + b.height / 2 - cRect.top + techTreeEl.scrollTop;
-        const mid = (x1 + x2) / 2;
+        const a = R(aEl);
         const pDone = player.techs.includes(p), tDone = player.techs.includes(id);
         const tAvail = !tDone && canResearchSafe(player, id);
-        let cls = "tt-link";
-        if (pDone && tDone) cls += " done";
-        else if (tAvail && pDone) cls += " next";
-        if (rule.civ || techs[p].civ) cls += " branch";
+        const sameRow = Math.abs(a.my - b.my) < 6;
+        const sameTrack = !rule.civ && !techs[p].civ && ttTrackOf(p) === ttTrackOf(id);
+        let cls = "tt-link", d;
+        if (pDone && tDone) cls += " done"; else if (tAvail && pDone) cls += " next";
+        if (sameRow && b.l - a.r > 2 && b.l - a.r < 40) {
+          // adjacent same-row cards: a short straight link across the clear gap
+          d = "M" + a.r + " " + a.my + " L" + b.l + " " + b.my;
+        } else {
+          if (!sameTrack) cls += " cross";
+          // exit source into the IMMEDIATE clear row-channel on the side toward the
+          // target, run along it, drop through the clear column-channel nearest to the
+          // target's left edge, then a short stub into the target.
+          const down = b.my >= a.my;
+          const exitY = down ? a.bo : a.t;
+          const gyC = clearYs.filter((y) => (down ? y > a.bo : y < a.t));
+          const gy = gyC.length ? (down ? Math.min.apply(null, gyC) : Math.max.apply(null, gyC)) : exitY + (down ? 8 : -8);
+          const vxC = clearXs.filter((x) => x < b.l - 1);
+          const vx = vxC.length ? Math.max.apply(null, vxC) : b.l - 8;
+          d = "M" + a.mx + " " + exitY + " L" + a.mx + " " + gy + " L" + vx + " " + gy + " L" + vx + " " + b.my + " L" + b.l + " " + b.my;
+        }
         const path = document.createElementNS(TT_SVGNS, "path");
         path.setAttribute("class", cls);
-        path.setAttribute("d", "M" + x1 + " " + y1 + " C " + mid + " " + y1 + ", " + mid + " " + y2 + ", " + x2 + " " + y2);
+        path.setAttribute("d", d);
         path.dataset.from = p;
         path.dataset.to = id;
         frag.push(path);
