@@ -72,8 +72,11 @@ export interface TechRule {
   forkBranch?: string;
   /** Civ id (lowercase, e.g. "rome") this tech is unique to — only that people may research it. */
   civ?: string;
-  /** Explicit science cost; when omitted the cost is derived from the age. */
+  /** Explicit science cost; DEPRECATED — cost now derives from age×tier (v2.1 §3b). */
   cost?: number;
+  /** Cost multiplier override on the depth-tiered formula (v2.1 §3b): e.g. 0.7 for a
+   *  cheap utility side-tech, 1.2 for a luxury convenience. Data wins over formula. */
+  costMod?: number;
   /** v2 civ-unique branch techs carry a display name, history note, effect block,
    *  and a capstone flag (the branch's terminal doctrine). */
   name?: string;

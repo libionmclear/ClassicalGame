@@ -54,11 +54,12 @@ export const TECHS: Record<string, TechRule> = {
     forkBranch: "coinage"
   },
 
-  "iron-working": { age: 2, prerequisites: ["bronze-working"] },
+  // v2.1 §2: hard AND-prereqs, tightened so the ages interlock.
+  "iron-working": { age: 2, prerequisites: ["bronze-working", "masonry"] },
   "combined-arms": { age: 2, prerequisites: ["iron-working"] },
-  "open-sea-sailing": { age: 2, prerequisites: ["sailing"] },
+  "open-sea-sailing": { age: 2, prerequisites: ["sailing", "writing"] },
   engineering: { age: 2, prerequisites: ["masonry"] },
-  "horseback-riding": { age: 2, prerequisites: ["bronze-working"] },
+  "horseback-riding": { age: 2, prerequisites: ["animal-husbandry"] },
   "mountain-paths": { age: 2, prerequisites: ["engineering"] },
   "caravan-logistics": { age: 2, prerequisites: ["coinage"] },
   republic: {
@@ -87,10 +88,10 @@ export const TECHS: Record<string, TechRule> = {
   },
 
   "roads-logistics": { age: 3, prerequisites: ["engineering"] },
-  siegecraft: { age: 3, prerequisites: ["iron-working"] },
-  medicine: { age: 3, prerequisites: ["writing"] },
-  "law-administration": { age: 3, prerequisites: ["writing"] },
-  "currency-reform": { age: 3, prerequisites: ["coinage"] },
+  siegecraft: { age: 3, prerequisites: ["iron-working", "engineering"] },
+  medicine: { age: 3, prerequisites: ["philosophy"] },
+  "law-administration": { age: 3, prerequisites: ["writing", "republic"] },
+  "currency-reform": { age: 3, prerequisites: ["masonry", "writing"] },
   cartography: { age: 3, prerequisites: ["open-sea-sailing"] },
   assimilation: {
     age: 3,
@@ -112,7 +113,7 @@ export const TECHS: Record<string, TechRule> = {
   metallurgy: { age: 2, prerequisites: ["iron-working"] },
   aqueducts: { age: 2, prerequisites: ["engineering"] },
   astronomy: { age: 2, prerequisites: ["mathematics"] },
-  rhetoric: { age: 3, prerequisites: ["writing"] },
+  rhetoric: { age: 3, prerequisites: ["philosophy"] },
 
   // Deeper economy so research keeps paying off.
   "crop-rotation": { age: 2, prerequisites: ["irrigation"], cost: 30 },
@@ -192,6 +193,56 @@ for (const t of UNIQUE_TECHS) {
     }
     if (y.food || y.production || y.gold || y.science) TECH_CITY_YIELD[t.id] = y;
   }
+}
+
+// ===== v2.1 §1/§3c — within-age TRACK CHAINS (the authoritative trunk prereqs) =====
+// The trunk is organised into five tracks (military/construction/economy/civic/naval).
+// Within each age a track is a near-LINEAR chain: an entry tech (only previous-age
+// prereqs) then each successive tech behind the last. That keeps the researchable
+// "frontier" small (one live head per track) and gives the depth-tiered costs real
+// texture. Includes the approved §2 hard-prereqs. Applied after the branch merge so
+// it is the single source of truth for trunk edges. (≤7 frontier is not reachable
+// with 5 tracks + civ branches — see docs; this holds trunk-only to ~10.)
+const TRUNK_CHAINS: Record<string, string[]> = {
+  // AGE I — entries: bronze-working, masonry, pottery, writing, sailing
+  archery: ["bronze-working"],
+  "animal-husbandry": ["pottery"],
+  irrigation: ["animal-husbandry"],
+  mathematics: ["writing"],
+  "phalanx-doctrine": ["bronze-working"],
+  "skirmish-doctrine": ["archery"],
+  "temple-economy": ["irrigation"],
+  coinage: ["irrigation"],
+  // AGE II — entries: iron-working, engineering, open-sea-sailing, philosophy, caravan-logistics
+  "iron-working": ["bronze-working", "masonry"],
+  engineering: ["masonry"],
+  "open-sea-sailing": ["sailing", "writing"],
+  philosophy: ["writing"],
+  "caravan-logistics": ["irrigation"],
+  "combined-arms": ["iron-working"],
+  metallurgy: ["combined-arms"],
+  "horseback-riding": ["animal-husbandry", "metallurgy"],
+  "mountain-paths": ["engineering"],
+  aqueducts: ["mountain-paths"],
+  astronomy: ["mathematics", "philosophy"],
+  republic: ["astronomy"],
+  monarchy: ["astronomy"],
+  "ramming-fleets": ["open-sea-sailing"],
+  "merchant-marine": ["open-sea-sailing"],
+  "crop-rotation": ["caravan-logistics", "irrigation"],
+  // AGE III — entries: siegecraft, roads-logistics, cartography, currency-reform, law-administration
+  siegecraft: ["iron-working", "engineering"],
+  "roads-logistics": ["engineering"],
+  cartography: ["open-sea-sailing"],
+  "currency-reform": ["masonry", "writing"],
+  "law-administration": ["writing", "republic"],
+  rhetoric: ["philosophy", "law-administration"],
+  medicine: ["philosophy", "rhetoric"],
+  assimilation: ["medicine"],
+  "tribute-empire": ["medicine"]
+};
+for (const [id, prereqs] of Object.entries(TRUNK_CHAINS)) {
+  if (TECHS[id]) TECHS[id].prerequisites = prereqs;
 }
 
 // Classical rock-paper-scissors, both when attacking and defending:

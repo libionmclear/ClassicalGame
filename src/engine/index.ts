@@ -597,6 +597,13 @@ export function canResearch(player: Player, techId: string): boolean {
     if (!player.techs.includes(prereq)) return false;
   }
 
+  // v2.1 §3 — era gate: a tech of age N is locked until enough age N−1 techs are in.
+  const gate = AGE_GATES[tech.age];
+  if (gate) {
+    const prevAgeDone = player.techs.filter((id) => TECHS[id] && TECHS[id].age === tech.age - 1).length;
+    if (prevAgeDone < gate.requiredPrevAgeTechs) return false;
+  }
+
   if (tech.forkGroup) {
     const chosenBranch = player.forkChoices[tech.forkGroup];
     if (chosenBranch && chosenBranch !== tech.forkBranch) return false;
@@ -641,12 +648,38 @@ function growthCost(population: number): number {
   return 8 + population * 6;
 }
 
+// v2.1 §3b — depth-tiered pricing: cheap to ENTER a track, expensive to go DEEP.
+// cost = AGE_BASE[age] × TIER_MULT[tier] × costMod, tier = 1 + longest SAME-AGE
+// prereq chain above the tech (capstones use a fixed steeper multiplier).
+export const AGE_BASE: Record<number, number> = { 1: 16, 2: 40, 3: 78 };
+export const TIER_MULT: Record<string, number> = { "1": 0.8, "2": 1.0, "3": 1.3, capstone: 1.6 };
+// v2.1 §3 — era gates: a tech of age N needs this many age N−1 techs first.
+export const AGE_GATES: Record<number, { requiredPrevAgeTechs: number }> = {
+  2: { requiredPrevAgeTechs: 5 },
+  3: { requiredPrevAgeTechs: 6 }
+};
+
+const _sameAgeDepth: Record<string, number> = {};
+function sameAgeDepth(techId: string): number {
+  if (_sameAgeDepth[techId] != null) return _sameAgeDepth[techId];
+  _sameAgeDepth[techId] = 0; // tentative, breaks any accidental cycle
+  const tech = TECHS[techId];
+  if (!tech) return 0;
+  const same = tech.prerequisites.filter((p) => TECHS[p] && TECHS[p].age === tech.age);
+  const d = same.length ? 1 + Math.max(...same.map(sameAgeDepth)) : 0;
+  _sameAgeDepth[techId] = d;
+  return d;
+}
+// tier index (1..3) from the same-age prereq depth; capstones are priced separately.
+export function techTier(techId: string): number {
+  return Math.min(3, 1 + sameAgeDepth(techId));
+}
 export function researchCost(techId: string): number {
   const tech = TECHS[techId];
-  if (tech && typeof tech.cost === "number") return tech.cost;
-  const age = tech ? tech.age : 1;
-  // Steeper by age so a full tree is a real, deepening commitment, not a formality.
-  return age === 1 ? 20 : age === 2 ? 46 : 82;
+  if (!tech) return AGE_BASE[1];
+  const mult = tech.capstone ? TIER_MULT.capstone : TIER_MULT[String(techTier(techId))];
+  const costMod = typeof tech.costMod === "number" ? tech.costMod : 1;
+  return Math.max(1, Math.round(AGE_BASE[tech.age] * mult * costMod));
 }
 
 // Bigger maps take proportionally longer to develop: research + build costs scale

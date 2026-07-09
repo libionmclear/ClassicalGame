@@ -136,8 +136,11 @@ test("civ-unique tech and unit are gated to their people", () => {
   const rome = state.playersById.p1; // civ "Rome"
   const carthage = state.playersById.p2; // civ "Carthage"
   // v2: legionary-system now anchors on the Via Romana branch (iron-working + castra).
-  rome.techs.push("iron-working", "castra");
-  carthage.techs.push("iron-working", "castra");
+  // v2.1: it is age 2, so the era gate needs 5 Age-I techs first — give both peoples
+  // the same foundation so the test still isolates the CIV gate, not the era gate.
+  const ageOne = ["bronze-working", "masonry", "sailing", "writing", "pottery"];
+  rome.techs.push(...ageOne, "iron-working", "castra");
+  carthage.techs.push(...ageOne, "iron-working", "castra");
 
   // Only Rome may research the Legionary System, even with the prerequisites met.
   assert.equal(canResearch(rome, "legionary-system"), true);
