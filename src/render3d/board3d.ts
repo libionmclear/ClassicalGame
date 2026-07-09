@@ -885,12 +885,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // only when a visible region is wet. Storm makes it heavier + darker. Each drop
   // is a vertical streak (a tall point sprite) and there are enough of them that
   // the fall reads as one continuous sheet rather than sparse flickering dots.
-  const RAIN_N = 5000, RAIN_SPREAD = 70, RAIN_TOP = 42;
+  const RAIN_N = 9000, RAIN_SPREAD = 80, RAIN_TOP = 42;
   const rainArr = new Float32Array(RAIN_N * 3);
+  // Lay the drops on a JITTERED GRID (one per cell, randomised within the cell)
+  // rather than pure random — pure random clumps into visible dense/sparse patches
+  // that read as "intermittent". A grid gives an even, steady veil.
+  const RAIN_COLS = Math.ceil(Math.sqrt(RAIN_N));
   for (let i = 0; i < RAIN_N; i += 1) {
-    rainArr[i * 3] = (Math.random() - 0.5) * RAIN_SPREAD;
+    const gx = i % RAIN_COLS, gz = Math.floor(i / RAIN_COLS);
+    rainArr[i * 3] = ((gx + Math.random()) / RAIN_COLS - 0.5) * RAIN_SPREAD;
     rainArr[i * 3 + 1] = Math.random() * RAIN_TOP;
-    rainArr[i * 3 + 2] = (Math.random() - 0.5) * RAIN_SPREAD;
+    rainArr[i * 3 + 2] = ((gz + Math.random()) / RAIN_COLS - 0.5) * RAIN_SPREAD;
   }
   const rainGeo = new THREE.BufferGeometry();
   rainGeo.setAttribute("position", new THREE.BufferAttribute(rainArr, 3));
@@ -905,12 +910,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     g.fillStyle = grad; g.fillRect(3, 0, 2, 32);
     const t = new THREE.CanvasTexture(cv); t.needsUpdate = true; return t;
   })();
-  const rainMat = new THREE.PointsMaterial({ map: rainStreak, color: 0xbcd0e4, size: 0.7, transparent: true, opacity: 0.5, depthWrite: false });
+  const rainMat = new THREE.PointsMaterial({ map: rainStreak, color: 0xbcd0e4, size: 0.55, transparent: true, opacity: 0.5, depthWrite: false });
   const rain = new THREE.Points(rainGeo, rainMat);
   rain.visible = false;
   scene.add(rain);
   let rainOn = false;
-  let rainCX = 0, rainCZ = 0, rainSX = 1, rainSZ = 1; // wet-region footprint
+  let rainCX = 0, rainCZ = 0, rainS = 1; // wet-region centre + one uniform scale
 
   // A pointy-top hex prism. CylinderGeometry(...,6) is already pointy-top (a
   // vertex faces +Z), which matches axialToWorld — so do NOT rotate it, or the
@@ -1545,7 +1550,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (rainOn) {
       // Rain falls ONLY over the wet region's footprint (not the whole board).
       rain.position.set(rainCX, 0, rainCZ);
-      rain.scale.set(rainSX, 1, rainSZ);
+      rain.scale.set(rainS, 1, rainS);
       const pos = rainGeo.getAttribute("position") as THREE.BufferAttribute;
       const fall = (stormy ? 46 : 30) * dt;
       const arr = pos.array as Float32Array;
@@ -1640,8 +1645,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       rain.visible = wet;
       if (wet) {
         rainCX = (mnX + mxX) / 2; rainCZ = (mnZ + mxZ) / 2;
-        rainSX = Math.max(0.12, (mxX - mnX + SIZE * 2) / RAIN_SPREAD);
-        rainSZ = Math.max(0.12, (mxZ - mnZ + SIZE * 2) / RAIN_SPREAD);
+        // ONE uniform scale (square) so the veil is never stretched thin on one
+        // axis — a square field over the wet footprint keeps the density even.
+        const ext = Math.max(mxX - mnX, mxZ - mnZ) + SIZE * 4;
+        rainS = Math.max(0.7, Math.min(1.4, ext / RAIN_SPREAD));
       }
       rainMat.opacity = stormy ? 0.75 : 0.5;
       rainMat.color.set(stormy ? 0x8fa4bc : 0xaec4dc);
