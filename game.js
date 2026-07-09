@@ -3630,9 +3630,16 @@
   function cardFaceHtml(c, locked) {
     const rar = (RARITY[c.rarity] && RARITY[c.rarity].name) || c.rarity;
     const banner = (c.type === "legend" && ROLE_LABEL[c.role]) || CARD_TYPE_LABEL[c.type] || c.type;
+    // Real art loads from assets/cards/<id>.png when present (drop illustrations in
+    // there — prompts in docs/card-art-prompts.md); until then it 404s and removes
+    // itself, leaving the civ-tinted procedural face + the emoji focal.
+    const tint = c.civ && CIV_COLORS[c.civ] ? ' style="--cardciv:' + CIV_COLORS[c.civ] + '"' : "";
+    const art = locked
+      ? '<span class="pcard-emoji">🔒</span>'
+      : '<img class="pcard-img" src="assets/cards/' + c.id + '.png" alt="" loading="lazy" onerror="this.remove()"><span class="pcard-emoji">' + c.icon + "</span>";
     return (
       '<div class="pcard-banner"><span>' + banner + "</span><span>" + rar + "</span></div>" +
-      '<div class="pcard-art"><span class="pcard-emoji">' + (locked ? "🔒" : c.icon) + "</span></div>" +
+      '<div class="pcard-art"' + tint + ">" + art + "</div>" +
       '<div class="pcard-name">' + c.name + "</div>" +
       '<div class="pcard-desc">' + (cardBenefit(c) || "&nbsp;") + "</div>"
     );

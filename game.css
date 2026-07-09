@@ -1499,15 +1499,25 @@ button:hover:not(:disabled) {
 }
 /* The art panel — a slot ready for real card art; the emoji stands in for now. */
 .pcard-art {
+  position: relative;
+  overflow: hidden;
   aspect-ratio: 3 / 2;
   display: flex;
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0) 62%),
+    radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--cardciv, #6a86b0) 45%, transparent), rgba(0, 0, 0, 0) 66%),
     linear-gradient(180deg, #22364f, #16273d);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   border-bottom: 1px solid rgba(0, 0, 0, 0.4);
+}
+/* Real illustration when assets/cards/<id>.png exists; else it removes itself. */
+.pcard-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .pcard-emoji {
   font-size: 2.7rem;
