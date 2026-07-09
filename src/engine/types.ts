@@ -124,6 +124,20 @@ export interface City {
   lastAttackedTurn?: number;
   /** Turn this city last changed hands — a fresh conquest is briefly unstable. */
   capturedTurn?: number;
+  /** Cities v3 §2 — districts built on the 6 hexes around the centre. */
+  districts?: District[];
+}
+
+/** A district occupies one of the six hexes adjacent to the city centre. */
+export interface District {
+  /** Key of the hex it sits on ("q,r"). */
+  hex: string;
+  /** District type id (civic/market/aqueduct/…/greatwork) or, for a Great Work, its card id. */
+  type: string;
+  /** A pillaged district yields nothing until repaired with labour. */
+  pillaged?: boolean;
+  /** For a GREAT WORK district: the owned Great Work card id. */
+  work?: string;
 }
 
 export interface Player {
@@ -329,6 +343,24 @@ export interface ImproveTileAction {
   improvement: string;
 }
 
+export interface BuildDistrictAction {
+  type: "BUILD_DISTRICT";
+  playerId: string;
+  cityId: string;
+  /** District type id, or a Great Work card id you own. */
+  districtType: string;
+  /** Axial "q,r" of one of the six hexes adjacent to the city. */
+  hex: string;
+}
+
+export interface RepairDistrictAction {
+  type: "REPAIR_DISTRICT";
+  playerId: string;
+  cityId: string;
+  /** Axial "q,r" of the pillaged district to repair. */
+  hex: string;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -346,7 +378,9 @@ export type GameAction =
   | ImproveTileAction
   | UpgradeUnitAction
   | DisbandUnitAction
-  | RenameCityAction;
+  | RenameCityAction
+  | BuildDistrictAction
+  | RepairDistrictAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

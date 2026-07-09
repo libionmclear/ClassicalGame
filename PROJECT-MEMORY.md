@@ -389,6 +389,20 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **STEP C — District system, Slice C1 (engine core).** Cities v3 §2: `city.districts`
+  (`{hex,type,pillaged,work}`), `cityTier(pop)` (Phase-4 thresholds) → `districtSlots`
+  (2:1/4:2/5:3/6:4/8:5/10:6). Data bridged from `districts-data-v2.js` via
+  `src/engine/districts.ts` (+ `.d.ts`). **BUILD_DISTRICT** action: validates adjacency
+  to the city centre, owned-land (harbour needs a coast hex), per-civ `forbidden`,
+  one-per-city limit, free slot; costs 40 gold ×costScale. **REPAIR_DISTRICT** (labour).
+  District `cityYield` + per-civ `bonus` feed `computeCityYield`; district stability
+  feeds `computeCityStability`. **Pillage-on-enter:** a combat unit stepping onto an
+  enemy district hex pillages it (yields nothing until repaired). Exposed
+  `cityTier/districtSlots/districtType/districtName/DISTRICT_TYPES` to the browser.
+  New `test/districts.test.ts`. 150/150. **Remaining STEP C slices:** C2 Great Works
+  (new card kind, built/heritage, civ:null universal, Seven-Wonders badge), C3
+  units-v2-addendum merge (60 uniques), C4 UI (city-panel picker + flat-marker render),
+  C5 AI §6.7. District BUILD is engine-only until C4 wires the UI.
 - **Effect wiring — Slice 1: combat %** (the "un‑flag" pass; user reordered the plan
   to wire effects → art → resume A–F). Branch‑tech and equipped‑card combat % now
   actually reach the combat calc (`techCardCombat` in `index.ts`): flat `atkPct`/

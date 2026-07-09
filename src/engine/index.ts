@@ -20,7 +20,8 @@ import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction } from "./types";
+import { cityTier, districtSlots, districtType, districtName, districtForbidden } from "./districts";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -269,6 +270,17 @@ function applyMovement(state: GameState, action: MoveUnitAction): void {
 
   unit.position = destination;
   unit.movementRemaining = Math.max(0, unit.movementRemaining - totalCost);
+
+  // Cities v3 §2: a combat unit entering an enemy district hex pillages it.
+  const destKey = keyOf(destination);
+  const unitDefCat = UNITS[unit.type];
+  if (unitDefCat && unitDefCat.domain !== "civilian") {
+    for (const c of Object.values(state.map.cities)) {
+      if (c.ownerId === unit.ownerId) continue;
+      const d = (c.districts ?? []).find((x) => x.hex === destKey && !x.pillaged);
+      if (d) d.pillaged = true;
+    }
+  }
 
   const destinationTile = tileAt(state, destination);
   if (destinationTile.terrain === "desert" && !state.playersById[unit.ownerId].techs.includes("caravan-logistics")) {
@@ -806,6 +818,15 @@ export function computeCityStability(state: GameState, cityId: string): number {
   const owner = state.playersById[city.ownerId];
   let s = 0;
   for (const b of city.buildings ?? []) s += STABILITY_BUILDINGS[b] ?? 0;
+  // Cities v3 §2: districts adjust stability (civic/leisure/temple +, crammed −).
+  const civId = owner ? String(owner.civ || "").toLowerCase() : "";
+  for (const d of city.districts ?? []) {
+    if (d.pillaged) continue;
+    const cy = districtType(d.type)?.effect.cityYield;
+    if (cy && typeof cy.stability === "number") s += cy.stability;
+    const bonus = districtName(d.type, civId)?.bonus;
+    if (bonus && typeof bonus.stability === "number") s += bonus.stability;
+  }
   if (owner) {
     for (const techId of Object.keys(TECH_STABILITY)) if (owner.techs.includes(techId)) s += TECH_STABILITY[techId];
     s += owner.perks?.stability ?? 0;
@@ -915,6 +936,18 @@ export function computeCityYield(
       yields.gold += res.yields.gold ?? 0;
       yields.science += res.yields.science ?? 0;
     }
+  }
+
+  // Cities v3 §2: districts on the urban ring add their yields (per-civ bonus too).
+  // A pillaged district yields nothing until repaired. Stability from districts is
+  // handled in computeCityStability.
+  const civId = owner ? String(owner.civ || "").toLowerCase() : "";
+  for (const d of city.districts ?? []) {
+    if (d.pillaged) continue;
+    const cy = districtType(d.type)?.effect.cityYield;
+    if (cy) for (const k of YK) if (typeof cy[k] === "number") yields[k] += cy[k] as number;
+    const bonus = districtName(d.type, civId)?.bonus;
+    if (bonus) for (const k of YK) if (typeof bonus[k] === "number") yields[k] += bonus[k] as number;
   }
 
   // Stability modifies everything: ±2% per point, and civic pride (+3) adds labour.
@@ -1860,6 +1893,47 @@ export function getVictoryStatus(state: GameState): VictoryStatus {
   return { winnerId: null, type: null, reason: null };
 }
 
+// Cities v3 §2 — found a district on one of the six hexes around a city.
+const DISTRICT_GOLD_COST = 40;
+const DISTRICT_REPAIR_LABOUR = 15;
+function applyBuildDistrict(state: GameState, action: BuildDistrictAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const player = state.playersById[action.playerId];
+  const city = state.map.cities[action.cityId];
+  if (!city || city.ownerId !== action.playerId) throw new Error("You can only build districts in your own city");
+  const dt = districtType(action.districtType);
+  if (!dt) throw new Error(`Unknown district type ${action.districtType}`); // Great Works arrive in Slice C2
+  city.districts = city.districts ?? [];
+  if (city.districts.length >= districtSlots(city)) throw new Error("No free district slot at this city's tier");
+  const adj = neighborsOf(city.position).map((n) => keyOf(n));
+  if (!adj.includes(action.hex)) throw new Error("A district must sit on a hex adjacent to the city");
+  if (city.districts.some((d) => d.hex === action.hex)) throw new Error("That hex already holds a district");
+  const tile = state.map.tiles[action.hex];
+  if (!tile) throw new Error("No such tile");
+  const water = tile.terrain === "coast" || tile.terrain === "sea";
+  if (dt.requires === "coast") { if (tile.terrain !== "coast") throw new Error("A harbour needs a coast hex"); }
+  else if (water) throw new Error("A district needs a land hex");
+  const claim = claimingCity(state, parseKey(action.hex));
+  if (!claim || claim.id !== city.id) throw new Error("That hex is not worked by this city");
+  if (districtForbidden(action.districtType, String(player.civ))) throw new Error(`${player.civ} cannot build a ${action.districtType}`);
+  if (dt.limit === "one-per-city" && city.districts.some((d) => districtType(d.type)?.limit === "one-per-city")) throw new Error("Only one such district per city");
+  const cost = Math.round(DISTRICT_GOLD_COST * (state.costScale || 1));
+  if (player.gold < cost) throw new Error("Not enough gold to found the district");
+  player.gold -= cost;
+  city.districts.push({ hex: action.hex, type: action.districtType });
+}
+function applyRepairDistrict(state: GameState, action: RepairDistrictAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const city = state.map.cities[action.cityId];
+  if (!city || city.ownerId !== action.playerId) throw new Error("Not your city");
+  const d = (city.districts ?? []).find((x) => x.hex === action.hex);
+  if (!d || !d.pillaged) throw new Error("No pillaged district on that hex");
+  const cost = Math.round(DISTRICT_REPAIR_LABOUR * (state.costScale || 1));
+  if ((city.production ?? 0) < cost) throw new Error("Not enough banked labour to repair");
+  city.production = (city.production ?? 0) - cost;
+  d.pillaged = false;
+}
+
 export function applyAction(inputState: GameState, action: GameAction): GameState {
   const state = deepClone(inputState);
   state.playersById = makePlayersById(state.players);
@@ -1915,6 +1989,12 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "RENAME_CITY":
       applyRenameCity(state, action);
+      break;
+    case "BUILD_DISTRICT":
+      applyBuildDistrict(state, action);
+      break;
+    case "REPAIR_DISTRICT":
+      applyRepairDistrict(state, action);
       break;
     default: {
       const unknownAction: never = action;
