@@ -1,5 +1,6 @@
 import type { TechRule, TerrainRule, UnitRule } from "./types";
 import { UNIQUE_TECHS } from "./branch-data";
+import { UNIQUE_UNITS_WAVE2 } from "../units-v2-addendum.js";
 
 export const TERRAIN: Record<string, TerrainRule> = {
   plains: { moveCost: 1, yields: { food: 2, production: 0, gold: 0 }, defense: 0, vision: 0 },
@@ -700,3 +701,33 @@ export const UNIT_BUILD_COSTS: Record<string, number> = {
   "scythed-chariot": 26, "han-cavalry": 22, "ji-halberdier": 24, "armoured-elephant": 30,
   "indian-longbow": 18, "kshatriya-chariot": 24, "steppe-archer": 20, "royal-scythian": 24, "amazon-rider": 20
 };
+
+// ===== Cities v3 §6 — merge the wave-2 addendum (units-v2-addendum.js): 24 uniques
+// (2 per civ → 5 each, 60 total). Stats are DERIVED from basedOn + numeric mods; the
+// `special` behaviours are STUBBED (base stats + civ gate only) and the silhouette
+// specs (UNIT_SILHOUETTES_WAVE2) are recorded there for the modelers. cap → buildCap.
+const BASE_ALIAS: Record<string, string> = { "war-galley": "trireme", "siege-ballista": "siege" };
+for (const u of UNIQUE_UNITS_WAVE2) {
+  const base = UNITS[BASE_ALIAS[u.basedOn] ?? u.basedOn] ?? UNITS.warrior;
+  const m = u.mods;
+  const n = (k: string): number => (typeof m[k] === "number" ? (m[k] as number) : 0);
+  const rule: UnitRule = {
+    domain: base.domain,
+    movement: Math.max(1, base.movement + n("move")),
+    attack: m.noAttack ? 0 : Math.max(0, base.attack + n("atk")),
+    defense: base.defense + n("def"),
+    maxHp: base.maxHp + n("maxHp"),
+    range: base.range,
+    upkeep: base.upkeep,
+    category: u.cat,
+    requiresTech: u.unlockedBy,
+    civ: u.civ
+  };
+  if (m.mounted === true || base.mounted) rule.mounted = true;
+  if (base.counters) rule.counters = base.counters;
+  if (m.cap === "max-1") rule.buildCap = 1;
+  else if (m.cap === "max-2") rule.buildCap = 2;
+  UNITS[u.id] = rule;
+  const baseCost = UNIT_BUILD_COSTS[BASE_ALIAS[u.basedOn] ?? u.basedOn] ?? 24;
+  UNIT_BUILD_COSTS[u.id] = Math.max(8, Math.round((baseCost + n("cost")) * (m.cheap ? 0.75 : 1)));
+}

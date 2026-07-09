@@ -160,11 +160,13 @@
   const defaultHintText = "Your turn — click your city (🏛️) to build, or a unit to move it. Then End Turn.";
 
   // Units offered in the city build menu (order = progression).
-  const BUILDABLE = [
-    "warrior", "archer", "spearman", "swordsman", "horseman", "siege", "trireme", "merchant", "settler",
-    // Civ-unique units — the build menu shows only the one that matches your people.
-    "legionary", "hoplite", "war-elephant", "war-chariot", "gaesatae", "horse-archer"
-  ];
+  // Base units everyone can train, then EVERY civ-unique unit in the roster (the
+  // build menu filters to the ones matching your people). This picks up the v2 wave-1
+  // and wave-2 (Cities v3 §6) uniques automatically instead of a hand-kept list.
+  const BASE_UNITS = ["warrior", "archer", "spearman", "swordsman", "horseman", "siege", "trireme", "merchant", "settler"];
+  const BUILDABLE = BASE_UNITS.concat(
+    Object.keys(engine.UNITS || {}).filter(function (id) { return engine.UNITS[id].civ && BASE_UNITS.indexOf(id) === -1; })
+  );
   const UNIT_META = {
     warrior: { name: "Warrior", role: "Basic melee infantry — cheap, no strong matchups" },
     archer: { name: "Archer", role: "Ranged (range 2): strikes with no reply at distance, but fragile in melee and easy prey for cavalry" },
@@ -790,7 +792,7 @@
       if (!def) continue;
       // Civ-unique units only appear for the people they belong to.
       if (def.civ && !civMatches(player, def.civ)) continue;
-      const meta = UNIT_META[type] || { name: type, role: "" };
+      const meta = UNIT_META[type] || { name: type.replace(/-/g, " ").replace(/\b\w/g, function (ch) { return ch.toUpperCase(); }), role: "Civ-unique unit" };
       const base = costs[type];
       const cost = itemCost(type); // discounted if you hold the needed resource
       const discounted = typeof base === "number" && cost < base;
@@ -3214,7 +3216,7 @@
 
     parts.push('<section class="cdx-sec"><h3>Units — a classical order of battle</h3>');
     for (const type of BUILDABLE) {
-      const meta = UNIT_META[type] || { name: type, role: "" };
+      const meta = UNIT_META[type] || { name: type.replace(/-/g, " ").replace(/\b\w/g, function (ch) { return ch.toUpperCase(); }), role: "Civ-unique unit" };
       parts.push(
         '<div class="cdx-entry"><b>' + (UNIT_GLYPHS[type] || "") + " " + meta.name + "</b> — " + meta.role +
         '<div class="cdx-note">' + (UNIT_HISTORY[type] || "") + "</div></div>"

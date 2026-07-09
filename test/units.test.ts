@@ -51,3 +51,23 @@ test("camel-train is a non-combat support unit", () => {
   assert.equal(UNITS["camel-train"].attack, 0);
   assert.equal(UNITS["camel-train"].domain, "civilian");
 });
+
+// Cities v3 §6 — wave-2 addendum merge (Slice C3).
+import { UNIQUE_UNITS_WAVE2 } from "../src/units-v2-addendum.js";
+
+test("§6 all 24 wave-2 units merged, civ-gated, with valid unlock techs", () => {
+  assert.equal(UNIQUE_UNITS_WAVE2.length, 24, "2 per civ × 12");
+  for (const u of UNIQUE_UNITS_WAVE2) {
+    const def = UNITS[u.id];
+    assert.ok(def, `${u.id} is in the roster`);
+    assert.equal(def.civ, u.civ, `${u.id} is gated to ${u.civ}`);
+    assert.equal(def.requiresTech, u.unlockedBy, `${u.id} needs ${u.unlockedBy}`);
+    assert.ok(TECHS[u.unlockedBy], `${u.id}'s unlock tech ${u.unlockedBy} exists`);
+    assert.ok(typeof UNIT_BUILD_COSTS[u.id] === "number", `${u.id} has a build cost`);
+  }
+});
+
+test("§6 wave-2 elite caps are recorded (hippeis ≤1, maiden-guard ≤2)", () => {
+  assert.equal(UNITS["hippeis"].buildCap, 1);
+  assert.equal(UNITS["maiden-guard"].buildCap, 2);
+});
