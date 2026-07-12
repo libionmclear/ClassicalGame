@@ -778,6 +778,80 @@
       }
       buildingMenuEl.appendChild(btn);
     }
+    renderDistrictsInto(buildingMenuEl, isTurn, selectedCity);
+  }
+
+  // Cities v3 §2/§4 — the DISTRICTS builder inside the city panel (buildings tab).
+  // (uses the module-scope AXIAL_DIRS defined below.)
+  function districtLabel(typeId, civId) {
+    const nm = engine.districtName && engine.districtName(typeId, civId);
+    return (nm && nm.n) || (typeId.charAt(0).toUpperCase() + typeId.slice(1));
+  }
+  function renderDistrictsInto(parent, isTurn, city) {
+    if (!city || !engine.districtSlots || !engine.DISTRICT_TYPES) return;
+    const player = human();
+    const civId = String(player.civ || HUMAN_ID || "").toLowerCase();
+    const slots = engine.districtSlots(city);
+    const used = (city.districts || []).length;
+    const wrap = document.createElement("div");
+    wrap.className = "dist-section";
+    wrap.innerHTML = '<div class="dist-head">🏛 Districts <span class="dist-slots">' + used + " / " + slots + "</span></div>" +
+      (slots <= 0 ? '<div class="dist-note">Grow the city (tier 2+) to open a district slot.</div>' : "");
+    for (const d of city.districts || []) {
+      const gw = d.type === "greatwork" && engine.greatWork ? engine.greatWork(d.work) : null;
+      const row = document.createElement("div");
+      row.className = "dist-row" + (d.pillaged ? " pillaged" : "");
+      row.innerHTML = "<span>" + (d.pillaged ? "🔥 " : gw ? "★ " : "🏛 ") + (gw ? gw.name : districtLabel(d.type, civId)) + "</span>";
+      if (d.pillaged && isTurn) {
+        const rb = document.createElement("button");
+        rb.className = "dist-repair";
+        rb.textContent = "Repair 15⚒";
+        rb.addEventListener("click", function () { apply({ type: "REPAIR_DISTRICT", playerId: HUMAN_ID, cityId: city.id, hex: d.hex }); });
+        row.appendChild(rb);
+      }
+      wrap.appendChild(row);
+    }
+    if (isTurn && slots > 0 && used < slots) {
+      const usedHexes = new Set((city.districts || []).map((d) => d.hex));
+      const hexes = AXIAL_DIRS.map(function (dir) { return (city.position.q + dir[0]) + "," + (city.position.r + dir[1]); })
+        .filter(function (k) { return state.map.tiles[k] && !usedHexes.has(k); });
+      const hasGW = (city.districts || []).some((d) => d.type === "greatwork");
+      const ownedGW = (engine.GREAT_WORKS || []).filter((g) => (g.civ == null || g.civ === civId) && loadProfile().cards[g.id]);
+      const form = document.createElement("div");
+      form.className = "dist-build";
+      const typeSel = document.createElement("select");
+      for (const dt of engine.DISTRICT_TYPES) {
+        if (dt.id === "greatwork") continue;
+        const nm = engine.districtName && engine.districtName(dt.id, civId);
+        if (nm && nm.forbidden) continue;
+        const o = document.createElement("option");
+        o.value = dt.id; o.textContent = districtLabel(dt.id, civId) + " · 40💰";
+        typeSel.appendChild(o);
+      }
+      if (!hasGW) for (const g of ownedGW) {
+        const o = document.createElement("option");
+        o.value = g.id; o.textContent = "★ " + g.name + " · " + (g.kind === "heritage" ? 40 : 100) + "💰";
+        typeSel.appendChild(o);
+      }
+      const hexSel = document.createElement("select");
+      for (const k of hexes) {
+        const t = state.map.tiles[k];
+        const o = document.createElement("option");
+        o.value = k; o.textContent = k + " · " + (t ? t.terrain : "?");
+        hexSel.appendChild(o);
+      }
+      const btn = document.createElement("button");
+      btn.className = "dist-buildbtn";
+      btn.textContent = hexes.length ? "Build here" : "No free adjacent hex";
+      btn.disabled = !hexes.length;
+      btn.addEventListener("click", function () {
+        if (!hexSel.value) return;
+        apply({ type: "BUILD_DISTRICT", playerId: HUMAN_ID, cityId: city.id, districtType: typeSel.value, hex: hexSel.value });
+      });
+      form.append(typeSel, hexSel, btn);
+      wrap.appendChild(form);
+    }
+    parent.appendChild(wrap);
   }
 
   function renderBuildMenu(isTurn, selectedCity) {
@@ -1308,7 +1382,9 @@
         action.type === "IMPROVE_TILE" ||
         action.type === "RESEARCH_TECH" ||
         action.type === "RESOLVE_EVENT" ||
-        action.type === "RENAME_CITY";
+        action.type === "RENAME_CITY" ||
+        action.type === "BUILD_DISTRICT" ||
+        action.type === "REPAIR_DISTRICT";
       state = engine.applyAction(state, action);
       playActionSfx(action);
       if (!keepSelection) clearSelection();
@@ -1342,6 +1418,7 @@
     } catch (err) {
       console.error(err);
       logAction("Action failed: " + err.message);
+      showCombatToast("⚠ " + err.message, "loss");
       renderLog();
     }
   }

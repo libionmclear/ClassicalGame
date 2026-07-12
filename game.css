@@ -1749,6 +1749,18 @@ details.panel-collapse > summary {
   gap: 4px;
 }
 
+/* Cities v3 — the district builder inside the city panel. */
+.dist-section { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.dist-head { display: flex; justify-content: space-between; font-family: var(--display); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.dist-slots { color: var(--muted); }
+.dist-note { font-size: 0.72rem; color: var(--faint); margin-top: 4px; }
+.dist-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; padding: 3px 0; }
+.dist-row.pillaged { color: var(--bad); }
+.dist-repair { font-size: 0.66rem; padding: 2px 8px; }
+.dist-build { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.dist-build select { flex: 1 1 45%; min-width: 0; background: var(--panel-2); color: var(--parchment); border: 1px solid var(--line); border-radius: var(--r); font-size: 0.74rem; padding: 4px 6px; }
+.dist-buildbtn { flex: 1 1 100%; font-size: 0.78rem; }
+
 .build-item {
   width: 100%;
   display: flex;
