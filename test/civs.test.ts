@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 
 import { createInitialGameState, applyAction, effectiveItemCost } from "../src/engine";
 import { CIV_ROSTER, MAX_PLAYERS } from "../src/engine/mapgen";
-import { UNITS } from "../src/engine/data";
+import { UNITS, TECHS } from "../src/engine/data";
+import { BRANCHES, UNIQUE_TECHS } from "../src/engine/branch-data";
 import type { GameState } from "../src/engine/types";
 
 function plains(n: number): Record<string, { terrain: "plains"; region: string }> {
@@ -66,10 +67,24 @@ test("Kush's ranged units are born veterans", () => {
 });
 
 test("unique buildings are civ-locked", () => {
-  const britons = createInitialGameState({ seed: "ub", players: [{ id: "britons", civ: "Britons" }], map: { width: 4, height: 4, regions: ["core"], tiles: plains(4), cities: { bc: { id: "bc", ownerId: "britons", position: { q: 0, r: 0 }, population: 3, hp: 24, maxHp: 24 } } } });
+  const britons = createInitialGameState({ seed: "ub", players: [{ id: "britons", civ: "Britons", techs: ["druidic-lore"] }], map: { width: 4, height: 4, regions: ["core"], tiles: plains(4), cities: { bc: { id: "bc", ownerId: "britons", position: { q: 0, r: 0 }, population: 3, hp: 24, maxHp: 24 } } } });
   const built = applyAction(britons, { type: "BUILD_BUILDING", playerId: "britons", cityId: "bc", buildingId: "nemeton" });
   assert.ok((built.map.cities["bc"].queue ?? []).includes("nemeton"), "the Britons may raise a Nemeton");
 
   const rome = createInitialGameState({ seed: "ub2", players: [{ id: "rome", civ: "Rome" }], map: { width: 4, height: 4, regions: ["core"], tiles: plains(4), cities: { rc: { id: "rc", ownerId: "rome", position: { q: 0, r: 0 }, population: 3, hp: 24, maxHp: 24 } } } });
   assert.throws(() => applyAction(rome, { type: "BUILD_BUILDING", playerId: "rome", cityId: "rc", buildingId: "nemeton" }), /unique to the britons/);
+});
+
+test("Britons and Kush have full tech branches ending in a capstone", () => {
+  for (const civ of ["britons", "kush"]) {
+    assert.ok(BRANCHES[civ], civ + " branch registered");
+    const techs = UNIQUE_TECHS.filter((t) => t.civ === civ);
+    assert.ok(techs.length >= 10, civ + " has ~10 branch techs");
+    assert.ok(techs.some((t) => t.capstone), civ + " ends in a capstone doctrine");
+    for (const t of techs) for (const pr of t.prereq) assert.ok(TECHS[pr], `${civ}'s ${t.id} prereq ${pr} resolves in TECHS`);
+  }
+  // The unique units/buildings are unlocked BY their branch tech (like the other civs).
+  assert.equal(UNITS["chariot-isles"].requiresTech, "chariot-craft");
+  assert.equal(UNITS["meroe-archer"].requiresTech, "ta-seti-archery");
+  assert.ok(TECHS["chariot-craft"] && TECHS["ta-seti-archery"], "the unit-unlock techs are merged into TECHS");
 });

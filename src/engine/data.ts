@@ -307,13 +307,13 @@ export const UNITS: Record<string, UnitRule> = {
   // Britons — the chariot of the isles: hit-and-run — keeps moving after it strikes.
   "chariot-isles": {
     domain: "land", movement: 4, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true,
-    requiresTech: "horseback-riding", civ: "britons", category: "mounted", counters: { ranged: 0.4, infantry: 0.15 },
+    requiresTech: "chariot-craft", civ: "britons", category: "mounted", counters: { ranged: 0.4, infantry: 0.15 },
     upgradesFrom: "horseman", special: "hit-and-run"
   },
   // Kush — the archer of Meroë: the finest bowmen of the early ages (Ta-Seti, "land of the bow").
   "meroe-archer": {
     domain: "land", movement: 2, attack: 24, defense: 13, maxHp: 20, range: 2, upkeep: 1,
-    requiresTech: "archery", civ: "kush", category: "ranged", counters: { infantry: 0.2 },
+    requiresTech: "ta-seti-archery", civ: "kush", category: "ranged", counters: { infantry: 0.2 },
     upgradesFrom: "archer"
   },
   // Gaul — the gaesatae: ferocious naked charge, murderous but poorly guarded.
@@ -510,6 +510,7 @@ export const BUILDINGS: Record<string, BuildingRule> = {
     name: "Nemeton",
     cost: 16,
     civ: "britons",
+    requiresTech: "druidic-lore",
     yields: { science: 2 },
     note: "A sacred grove where the druids kept the lore of the tribe — no roof but the oak canopy. Effect: +2 science."
   },
@@ -518,7 +519,7 @@ export const BUILDINGS: Record<string, BuildingRule> = {
     name: "Iron Furnaces of Meroë",
     cost: 18,
     civ: "kush",
-    requiresTech: "iron-working",
+    requiresTech: "meroitic-iron",
     yields: { production: 2 },
     note: "Meroë smelted iron on a scale that earned it the name 'the Birmingham of Africa'. Effect: +2 production."
   }

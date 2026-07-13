@@ -389,6 +389,23 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Britons + Kush tech branches (Design Brief §4.1 branch) — the LAST brief item;
+  the design brief is now fully realized.** Two civ-unique branches authored in
+  `src/techs-v2.js` (data of record) → regenerated `branch-data.ts` (141 techs, 14
+  branches): **Britons "The Painted Isle"** (hillforts, woad, the war-chariot,
+  druidic-lore, tin-of-Belerion, island-oppida, sacred-groves, warband-fury,
+  client-kings → capstone **Island Fastness** +25% def in own territory) and
+  **Kush "Lords of the Bow"** (Ta-Seti archery, Nile cataracts, Nubian gold,
+  Meroitic iron, Apedemak cult, desert caravans, Meroitic script, pyramids of
+  Meroë, the Kandakes → capstone **Archers of Kush** ranged +20%), 10 techs each,
+  every rung with a real historical note. The unique units/buildings now unlock
+  BY a branch tech like the other civs (chariot-isles ← chariot-craft, meroe-archer
+  ← ta-seti-archery, nemeton ← druidic-lore, iron-furnaces ← meroitic-iron). Same
+  wiring as the existing 12 branches (cityYield live; flat atk/def % + unitCatPct
+  reach combat; conditional/`special` flagged). New civs.test.ts branch case; the
+  nemeton test now grants the tech. **232/232**, browser-verified the branches
+  reach `window.HegemonEngine` (14 branches, correct names/capstones, 0 errors).
+  **Every system in `docs/HEGEMON_game_design_brief_2.md` is now shipped.**
 - **Title ladders (Design Brief §11) — the last of the three missing brief
   systems.** New `src/engine/titles.ts`: `TITLE_LADDERS` for all 8 civs
   (Rome's cursus honorum Servus→Princeps, Egypt Peasant→Regent, Greece
