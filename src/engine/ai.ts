@@ -1,7 +1,7 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
 import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv, computeCityStability, computePlayerIncome } from "./index";
 import { districtSlots, districtForbidden } from "./districts";
-import { canProposeAgreement, aiAcceptsProposal } from "./diplomacy";
+import { canProposeAgreement, aiAcceptsProposal, personalityOf, relationBand, getRelation, isVassal, canDemandVassalage, militaryStrength, isAtWar } from "./diplomacy";
 import { getEvent } from "./events";
 import { distance, DIRECTIONS, keyOf, parseKey, neighborsOf } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -568,14 +568,53 @@ function settlerMoveAction(state: GameState, player: Player): GameAction | null 
   return null;
 }
 
-// Diplomacy (D3): the AI seeks a Trade Pact with any civ it is at peace with and
-// warm enough toward (canProposeAgreement enforces band / no-war / no-dup / no
-// pending). Trade pacts don't block war, so this never stalls a conquest; NAP and
-// personality-driven diplomacy are Phase 2.
+// Diplomacy (D3 + E4 personalities §5): the AI's foreign policy, in priority
+// order — subjugate the weak, sue for peace when losing, climb the alliance
+// ladder with friends, else seek a Trade Pact. canProposeAgreement enforces the
+// band / no-war / no-dup / no-pending / no-vassal rules; the personality flags
+// decide WHICH move a given civ reaches for. Trade pacts never block war, so this
+// step (which sits late in the priority list) never stalls a conquest.
 function diplomacyAction(state: GameState, player: Player): GameAction | null {
-  for (const other of state.players) {
-    if (canProposeAgreement(state, player.id, other.id, "trade-pact") === true) {
-      return { type: "PROPOSE_AGREEMENT", playerId: player.id, targetId: other.id, agreementType: "trade-pact" };
+  const per = personalityOf(player.civ);
+  const others = state.players.filter((o) => o.id !== player.id);
+
+  // 1. Demand vassalage from a much weaker neighbour you don't hate (Rome, Macedon, Persia).
+  if (per.demandsVassals) {
+    for (const o of others) {
+      if (o.pendingProposal || isVassal(state, o.id)) continue;
+      if (relationBand(getRelation(state, player.id, o.id)) === "hostile") continue;
+      if (canDemandVassalage(state, player.id, o.id) === true) {
+        return { type: "PROPOSE_VASSALAGE", playerId: player.id, targetId: o.id, vassalId: o.id };
+      }
+    }
+  }
+  // 2. Losing a war? Submit to survive (Egypt, Persia) or buy peace with tribute (Carthage, …).
+  if (per.submitsWhenLosing || per.buysPeace) {
+    for (const o of others) {
+      if (!isAtWar(state, player.id, o.id) || o.pendingProposal) continue;
+      const strong = militaryStrength(state, o.id), me = militaryStrength(state, player.id);
+      if (per.submitsWhenLosing && !isVassal(state, player.id) && strong >= me * 2) {
+        return { type: "PROPOSE_VASSALAGE", playerId: player.id, targetId: o.id, vassalId: player.id };
+      }
+      if (per.buysPeace && player.gold >= 10 && strong >= me * 1.6) {
+        return { type: "OFFER_TRIBUTE", playerId: player.id, targetId: o.id, amount: 5, turns: 12 };
+      }
+    }
+  }
+  // 3. League-builders climb the alliance ladder with a trusted friend (Athens, Macedon).
+  if (per.seeksAlliances) {
+    for (const o of others) {
+      for (const t of ["full-alliance", "defensive-alliance", "nap"] as const) {
+        if (canProposeAgreement(state, player.id, o.id, t) === true) {
+          return { type: "PROPOSE_AGREEMENT", playerId: player.id, targetId: o.id, agreementType: t };
+        }
+      }
+    }
+  }
+  // 4. Baseline: a Trade Pact with anyone peaceful enough (the mercantile default).
+  for (const o of others) {
+    if (canProposeAgreement(state, player.id, o.id, "trade-pact") === true) {
+      return { type: "PROPOSE_AGREEMENT", playerId: player.id, targetId: o.id, agreementType: "trade-pact" };
     }
   }
   return null;

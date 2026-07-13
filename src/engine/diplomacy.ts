@@ -319,6 +319,37 @@ export function militaryStrength(state: GameState, playerId: string): number {
 
 // Deterministic AI verdict on an offer put to `me` by `from`. Utility = relation
 // band + military ratio (personality weights are Phase 2).
+// ---- civ diplomatic personalities (§5, slice E4) ------------------------
+
+export interface Personality {
+  eagerTrade: boolean;        // signs Trade Pacts readily (even while Wary)
+  coldTrade: boolean;         // needs Cordial to trade at all (isolationist)
+  seeksAlliances: boolean;    // proactively climbs NAP → alliance
+  demandsVassals: boolean;    // demands submission when it holds a 2:1 edge
+  submitsWhenLosing: boolean; // will vassalise itself to survive
+  buysPeace: boolean;         // offers tribute to end a losing war
+  rejectsPassage: boolean;    // never grants Passage Rights
+}
+const DEFAULT_PERSONALITY: Personality = { eagerTrade: false, coldTrade: false, seeksAlliances: false, demandsVassals: false, submitsWhenLosing: false, buysPeace: false, rejectsPassage: false };
+// §5 table, distilled to the levers Phase-2 diplomacy actually reads.
+const PERSONALITIES: Record<string, Partial<Personality>> = {
+  rome: { demandsVassals: true },                              // lawful expansionist
+  carthage: { eagerTrade: true, buysPeace: true },             // mercantile, buys peace
+  greece: { seeksAlliances: true },                            // Athens the league-builder
+  egypt: { submitsWhenLosing: true, buysPeace: true },         // defensive
+  gaul: { buysPeace: true },                                   // feud-prone, accepts white peace
+  parthia: {},                                                 // opportunist (attack-side)
+  sparta: { coldTrade: true, rejectsPassage: true },           // isolationist
+  macedon: { seeksAlliances: true, demandsVassals: true },     // hegemonic
+  persia: { demandsVassals: true, submitsWhenLosing: true },   // tributary empire
+  han: { buysPeace: true },                                    // tributary system
+  maurya: { buysPeace: true },                                 // dhamma diplomat
+  scythia: { buysPeace: true }                                 // raider; honours paid peace
+};
+export function personalityOf(civ: string): Personality {
+  return { ...DEFAULT_PERSONALITY, ...(PERSONALITIES[String(civ || "").toLowerCase()] || {}) };
+}
+
 export function aiAcceptsProposal(
   state: GameState, me: string, from: string, kind: ProposableAgreement | "tribute" | "vassalage", amount = 0, vassalId?: string
 ): boolean {
@@ -326,15 +357,19 @@ export function aiAcceptsProposal(
   if (isOathbreaker(state, from)) return false; // nobody signs with an oathbreaker
   const rel = getRelation(state, me, from);
   const mine = militaryStrength(state, me), theirs = militaryStrength(state, from) || 1;
-  if (kind === "trade-pact") return !isAtWar(state, me, from) && bandAtLeast(rel, "neutral");
+  const per = personalityOf(state.playersById[me]?.civ ?? "");
+  if (kind === "trade-pact") {
+    const floor: RelationBand = per.coldTrade ? "cordial" : per.eagerTrade ? "wary" : "neutral";
+    return !isAtWar(state, me, from) && bandAtLeast(rel, floor);
+  }
   if (kind === "nap") return !isAtWar(state, me, from) && bandAtLeast(rel, "cordial") && mine <= theirs * 1.8;
-  if (kind === "passage") return !isAtWar(state, me, from) && bandAtLeast(rel, "cordial");
-  // Alliances: only with a trusted friend (personality weighting is E4).
-  if (kind === "defensive-alliance" || kind === "full-alliance") return !isAtWar(state, me, from) && bandAtLeast(rel, "friendly");
+  if (kind === "passage") return !per.rejectsPassage && !isAtWar(state, me, from) && bandAtLeast(rel, "cordial");
+  // Alliances: with a trusted friend; league-builders will sign a touch cooler.
+  if (kind === "defensive-alliance" || kind === "full-alliance") return !isAtWar(state, me, from) && bandAtLeast(rel, per.seeksAlliances ? "cordial" : "friendly");
   if (kind === "vassalage") {
-    // If I'd be the vassal, submit only when clearly outmatched (survival);
-    // if I'd be the overlord, a free vassal is always welcome.
-    if (vassalId === me) return theirs >= mine * VASSAL_DEMAND_RATIO;
+    // If I'd be the vassal, submit when clearly outmatched (sooner if I'm a
+    // submitter); if I'd be the overlord, a free vassal is always welcome.
+    if (vassalId === me) return theirs >= mine * (per.submitsWhenLosing ? 1.5 : VASSAL_DEMAND_RATIO);
     return true;
   }
   // tribute: `from` offers to pay `me`. Take the gold unless I dominate (then I'd

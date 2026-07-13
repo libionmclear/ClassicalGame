@@ -7,7 +7,7 @@ import {
   applyRelationDrift, PEACE_WARM_CAP, ensurePair,
   isAtWar, isOathbreaker, enterWar, playerWarWeariness, WAR_DECLARE_RELATION, OATHBREAKER_VICTIM_HIT,
   hasAgreement, canProposeAgreement, aiAcceptsProposal,
-  canDemandVassalage, establishVassalage, isVassal
+  canDemandVassalage, establishVassalage, isVassal, personalityOf
 } from "../src/engine/diplomacy";
 import type { GameState } from "../src/engine/types";
 
@@ -411,4 +411,53 @@ test("a young Full Alliance does not win, and the setup toggle disables it", () 
   ensurePair(s, "p1", "p2").agreements[0].since = s.turn - 30; // now old enough...
   s.allianceVictory = false;                                    // ...but switched off
   assert.equal(getVictoryStatus(s).type, null, "alliance victory disabled at setup");
+});
+
+// ---- E4: civ personalities ------------------------------------------------
+
+test("personalityOf maps civs to their §5 levers (default otherwise)", () => {
+  assert.equal(personalityOf("carthage").eagerTrade, true);
+  assert.equal(personalityOf("sparta").rejectsPassage, true);
+  assert.equal(personalityOf("rome").demandsVassals, true);
+  assert.equal(personalityOf("greece").seeksAlliances, true);
+  assert.equal(personalityOf("atlantis").eagerTrade, false);
+});
+
+test("a mercantile civ trades even Wary; an isolationist won't at Neutral", () => {
+  const s = makeState(2);
+  s.playersById["p1"].civ = "carthage";
+  s.playersById["p2"].civ = "sparta";
+  ensurePair(s, "p1", "p2").relation = -20; // wary
+  assert.equal(aiAcceptsProposal(s, "p1", "p2", "trade-pact"), true, "Carthage trades while Wary");
+  ensurePair(s, "p1", "p2").relation = 0;   // neutral
+  assert.equal(aiAcceptsProposal(s, "p2", "p1", "trade-pact"), false, "Sparta needs Cordial to trade");
+});
+
+test("an isolationist never grants Passage Rights", () => {
+  const s = makeState(2);
+  s.playersById["p1"].civ = "sparta";
+  ensurePair(s, "p1", "p2").relation = 60;  // friendly — would normally pass
+  assert.equal(aiAcceptsProposal(s, "p1", "p2", "passage"), false);
+});
+
+test("a submitter yields at a smaller military gap than a proud civ", () => {
+  const tiles: Record<string, { terrain: "plains"; region: string }> = {};
+  for (let q = 0; q < 6; q += 1) { tiles[`${q},0`] = { terrain: "plains", region: "core" }; tiles[`${q},1`] = { terrain: "plains", region: "core" }; }
+  const s = createInitialGameState({
+    seed: "sub",
+    players: [{ id: "p1", civ: "rome" }, { id: "p2", civ: "egypt" }],
+    map: {
+      width: 6, height: 2, regions: ["core"], tiles,
+      units: {
+        a: { id: "a", type: "warrior", ownerId: "p1", position: { q: 0, r: 0 } },
+        b: { id: "b", type: "warrior", ownerId: "p1", position: { q: 1, r: 0 } },
+        c: { id: "c", type: "warrior", ownerId: "p1", position: { q: 2, r: 0 } },
+        d: { id: "d", type: "warrior", ownerId: "p2", position: { q: 0, r: 1 } },
+        e: { id: "e", type: "warrior", ownerId: "p2", position: { q: 1, r: 1 } }
+      }
+    }
+  }); // p1 strength 3, p2 strength 2 → a 1.5:1 edge
+  assert.equal(aiAcceptsProposal(s, "p2", "p1", "vassalage", 0, "p2"), true, "Egypt submits at 1.5:1");
+  s.playersById["p2"].civ = "rome";
+  assert.equal(aiAcceptsProposal(s, "p2", "p1", "vassalage", 0, "p2"), false, "a proud civ holds out for 2:1");
 });
