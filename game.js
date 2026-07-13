@@ -4203,7 +4203,8 @@
     // Coins are earned by playing (a win is worth more) — the free path: grind
     // coins, buy packs. The daily Standard pack is free on top.
     p.coins = (p.coins || 0) + (won ? COINS_WIN : COINS_LOSS);
-    for (const b of BADGES) if (!p.badges.includes(b.id) && b.test(p)) p.badges.push(b.id);
+    // A newly-earned achievement also grants Laurels with the civ you played (§11).
+    for (const b of BADGES) if (!p.badges.includes(b.id) && b.test(p)) { p.badges.push(b.id); if (civId) grantLaurels(p, civId, 2); }
     saveProfile(p);
     return p;
   }
