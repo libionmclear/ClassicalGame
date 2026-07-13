@@ -788,6 +788,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   controls.maxPolarAngle = 1.46; // low, near the horizon — lets the weather sky show
   controls.minDistance = 5;
   controls.maxDistance = 200;
+  // Pan across the GROUND plane (XZ), not the tilted screen plane — otherwise a
+  // right-drag while inclined would slide the focus below y=0 and dip the camera
+  // under the board (you'd see the underside of the hexes). The loop also pins
+  // the target to y=0 as a hard guarantee.
+  controls.screenSpacePanning = false;
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
@@ -930,6 +935,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   let tileMesh: THREE.InstancedMesh | null = null;
   let indexByKey: Record<string, number> = {};
   let builtSig = "";
+  // World-space extent of the current board (set in buildTiles). The loop clamps
+  // the pan target to this box + a margin so you can't scroll off into the void.
+  let boardBounds: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
 
   const spriteGroup = new THREE.Group();
   scene.add(spriteGroup);
@@ -1099,6 +1107,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     mesh.instanceMatrix.needsUpdate = true;
     scene.add(mesh);
     tileMesh = mesh;
+    boardBounds = { minX, maxX, minZ, maxZ };
     // Frame the board once, on first build — start at a moderate inclination
     // (~38° off vertical), square-on. Drag to spin/tilt from here to taste.
     const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
@@ -1517,6 +1526,16 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const loop = () => {
     if (!running) return;
     controls.update();
+    // Keep the focus on the ground plane and inside the map. With the target
+    // pinned to y=0 and the polar angle bounded below the horizon, the eye stays
+    // above the board (camera.y = dist·cos(polar) > 0) — you can't scroll under
+    // the hexes — and the XZ clamp stops you panning off into empty space.
+    controls.target.y = 0;
+    if (boardBounds) {
+      const margin = 8; // a little breathing room past the edge tiles
+      controls.target.x = Math.min(Math.max(controls.target.x, boardBounds.minX - margin), boardBounds.maxX + margin);
+      controls.target.z = Math.min(Math.max(controls.target.z, boardBounds.minZ - margin), boardBounds.maxZ + margin);
+    }
     const dt = animClock.getDelta();
     for (const m of mixers) m.update(dt);
     // Glide moving units toward their target tile at a steady march pace, with a

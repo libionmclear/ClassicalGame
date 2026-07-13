@@ -1,7 +1,8 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
-import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv } from "./index";
+import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv, computeCityStability, computePlayerIncome } from "./index";
+import { districtSlots, districtForbidden } from "./districts";
 import { getEvent } from "./events";
-import { distance, DIRECTIONS, keyOf, parseKey } from "./hex";
+import { distance, DIRECTIONS, keyOf, parseKey, neighborsOf } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import type { City, Coord, GameAction, GameState, Player, Unit } from "./types";
 
@@ -319,6 +320,57 @@ function buildingAction(state: GameState, player: Player): GameAction | null {
   return null;
 }
 
+// Cities v3 §6.7 — once a city has grown a district slot and the treasury can
+// spare the gold, the AI raises the district its situation most calls for:
+// barracks under threat, leisure/civic when order frays, an aqueduct when it is
+// hungry, otherwise a market. (Mercenary hiring — the other §6.7 lever — has no
+// action path yet, so it is intentionally skipped.)
+export function districtAction(state: GameState, player: Player): GameAction | null {
+  if (player.gold < 55) return null; // keep a small reserve over the 40g cost
+  // Empire-wide: is growth being throttled by the army's food-tax? computePlayerIncome
+  // returns food NET of upkeep, so ≤1 means troops are eating into what would feed cities.
+  const foodTight = computePlayerIncome(state, player.id).food <= 1;
+  for (const cityId of player.cityIds) {
+    const city = state.map.cities[cityId];
+    if (!city) continue;
+    const built = city.districts ?? [];
+    if (built.length >= districtSlots(city)) continue; // no free slot at this tier
+
+    // A land hex, adjacent to the city, actually worked by it, and still empty.
+    const takenHexes = new Set(built.map((d) => d.hex));
+    const freeHex = neighborsOf(city.position)
+      .map((n) => keyOf(n))
+      .find((k) => {
+        const tile = state.map.tiles[k];
+        if (!tile || tile.terrain === "coast" || tile.terrain === "sea") return false;
+        if (takenHexes.has(k)) return false;
+        const claim = claimingCity(state, parseKey(k));
+        return !!claim && claim.id === city.id;
+      });
+    if (!freeHex) continue;
+
+    // Read the city's situation and rank the district that answers it first.
+    const threatened = Object.values(state.map.units).some(
+      (u) => u.ownerId !== player.id && isMilitary(u) && distance(u.position, city.position) <= 4
+    );
+    const stability = computeCityStability(state, cityId);
+    const alreadyType = new Set(built.map((d) => d.type));
+
+    const prefs: string[] = [];
+    if (threatened) prefs.push("barracks");
+    if (stability <= 3) prefs.push("leisure", "civic");
+    if (foodTight) prefs.push("aqueduct");
+    prefs.push("market", "civic", "temple", "leisure", "affluent");
+
+    for (const type of prefs) {
+      if (alreadyType.has(type)) continue; // no point doubling up
+      if (districtForbidden(type, String(player.civ))) continue;
+      return { type: "BUILD_DISTRICT", playerId: player.id, cityId, districtType: type, hex: freeHex };
+    }
+  }
+  return null;
+}
+
 // Farthest empty tile a unit can reach along a path this turn (stops before any
 // occupied tile or enemy city — those are handled by the attack step).
 function reachableAlong(state: GameState, unit: Unit, path: Coord[]): Coord | null {
@@ -538,6 +590,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => foundCityAction(state, player),
     () => buildAction(state, player),
     () => buildingAction(state, player),
+    () => districtAction(state, player),
     () => tradeAction(state, player),
     () => improveAction(state, player),
     () => maneuverAction(state, player),

@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createInitialGameState, getVictoryStatus } from "../src/engine";
-import { chooseAiAction, runAiTurn, aggression } from "../src/engine/ai";
+import { createInitialGameState, getVictoryStatus, applyAction } from "../src/engine";
+import { chooseAiAction, runAiTurn, aggression, districtAction } from "../src/engine/ai";
 import { loadScenario } from "../src/engine/scenarios";
+import { neighborsOf, keyOf } from "../src/engine/hex";
 import type { CreateGameConfig, GameState } from "../src/engine/types";
 
 function makeState(
@@ -173,6 +174,65 @@ test("ai builds the best unlocked unit once teched (and done expanding)", () => 
   const action = chooseAiAction(state, "p1");
   assert.equal(action.type, "BUILD_UNIT");
   assert.equal((action as { unitType: string }).unitType, "swordsman");
+});
+
+test("ai founds a district once a city has grown a slot (Cities v3 §6.7)", () => {
+  // A tier-2 city (pop 3 → 1 district slot) with gold to spare should raise a
+  // district on one of its owned, adjacent land hexes.
+  const state = makeState(
+    {},
+    { c1: { id: "c1", ownerId: "p1", position: { q: 3, r: 3 }, population: 3, hp: 40, maxHp: 40 } }
+  );
+  const player = state.playersById["p1"];
+  player.gold = 80;
+
+  const action = districtAction(state, player);
+  assert.ok(action && action.type === "BUILD_DISTRICT", "expected a BUILD_DISTRICT action");
+
+  // The action the AI produced must be legal — apply it and watch the district land.
+  const next = applyAction(state, action);
+  const city = next.map.cities["c1"];
+  assert.equal((city.districts ?? []).length, 1, "the district should be built");
+  const adjacent = neighborsOf(city.position).map((n) => keyOf(n));
+  assert.ok(adjacent.includes(city.districts![0].hex), "the district sits on a hex adjacent to the city");
+  assert.equal(next.playersById["p1"].gold, 40, "founding the district cost 40 gold");
+});
+
+test("ai raises a barracks first when a city is threatened (Cities v3 §6.7)", () => {
+  // An enemy army two hexes off should make the AI's district pick a barracks
+  // over the peacetime default (market/leisure/civic).
+  const state = makeState(
+    { raider: { id: "raider", type: "warrior", ownerId: "p2", position: { q: 5, r: 3 } } },
+    { c1: { id: "c1", ownerId: "p1", position: { q: 3, r: 3 }, population: 3, hp: 40, maxHp: 40 } }
+  );
+  const player = state.playersById["p1"];
+  player.gold = 80;
+
+  const action = districtAction(state, player);
+  assert.ok(action && action.type === "BUILD_DISTRICT");
+  assert.equal(
+    (action as { districtType: string }).districtType,
+    "barracks",
+    "a nearby enemy army should make the AI raise a barracks first"
+  );
+});
+
+test("ai builds no district without a free slot or the gold (Cities v3 §6.7)", () => {
+  // (a) A pop-1 city is tier 1 → 0 district slots, so there is nothing to build.
+  const small = makeState(
+    {},
+    { c1: { id: "c1", ownerId: "p1", position: { q: 3, r: 3 }, population: 1, hp: 40, maxHp: 40 } }
+  );
+  small.playersById["p1"].gold = 80;
+  assert.equal(districtAction(small, small.playersById["p1"]), null, "no slot at tier 1");
+
+  // (b) A slot exists but the treasury is below the 40g cost + reserve.
+  const broke = makeState(
+    {},
+    { c1: { id: "c1", ownerId: "p1", position: { q: 3, r: 3 }, population: 3, hp: 40, maxHp: 40 } }
+  );
+  broke.playersById["p1"].gold = 30;
+  assert.equal(districtAction(broke, broke.playersById["p1"]), null, "can't afford it");
 });
 
 test("two AIs actually fight and drive the game to a conclusion", () => {
