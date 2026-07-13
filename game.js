@@ -1140,6 +1140,8 @@
       const band = engine.relationBand(rel);
       const pair = engine.getPair ? engine.getPair(state, me, id) : null;
       const atWar = engine.isAtWar(state, me, id);
+      const theirLord = state.playersById[id] && state.playersById[id].vassalOf;
+      const myLord = human() && human().vassalOf;
       const row = document.createElement("div");
       row.className = "diplo-row";
       row.style.setProperty("--rowciv", CIV_COLORS[id] || "#888");
@@ -1162,6 +1164,12 @@
       if (atWar) chipHtml += '<span class="diplo-chip war">⚔️ At War</span>';
       if (engine.hasAgreement(state, me, id, "trade-pact")) chipHtml += '<span class="diplo-chip pact">🤝 Trade Pact</span>';
       if (engine.hasAgreement(state, me, id, "nap")) chipHtml += '<span class="diplo-chip pact">🕊️ Non-Aggression</span>';
+      if (engine.hasAgreement(state, me, id, "passage")) chipHtml += '<span class="diplo-chip pact">🚶 Passage</span>';
+      if (engine.hasAgreement(state, me, id, "defensive-alliance")) chipHtml += '<span class="diplo-chip pact">🛡️ Defensive Alliance</span>';
+      if (engine.hasAgreement(state, me, id, "full-alliance")) chipHtml += '<span class="diplo-chip pact">🤝 Full Alliance</span>';
+      if (theirLord === me) chipHtml += '<span class="diplo-chip tribute">👑 Your vassal</span>';
+      else if (myLord === id) chipHtml += '<span class="diplo-chip tribute">⛓️ Your overlord</span>';
+      else if (theirLord) chipHtml += '<span class="diplo-chip">Vassal of ' + civName(theirLord) + "</span>";
       if (pair && pair.tribute && pair.tribute.expires > state.turn) {
         chipHtml += '<span class="diplo-chip tribute">💰 Tribute ' + (pair.tribute.to === me ? "from " + civName(id) : "to " + civName(pair.tribute.to)) + "</span>";
       }
@@ -1187,6 +1195,21 @@
       addBtn("🕊️ Non-Aggression", myTurn && engine.canProposeAgreement(state, me, id, "nap") === true, false, function () {
         apply({ type: "PROPOSE_AGREEMENT", playerId: me, targetId: id, agreementType: "nap" }); showCombatToast("🕊️ Envoy sent to " + civName(id), "gate");
       });
+      // Alliance ladder — each rung appears once it becomes proposable (§2).
+      [["passage", "🚶 Passage"], ["defensive-alliance", "🛡️ Alliance"], ["full-alliance", "🤝 Full Alliance"]].forEach(function (rung) {
+        if (myTurn && engine.canProposeAgreement(state, me, id, rung[0]) === true) {
+          addBtn(rung[1], true, false, function () { apply({ type: "PROPOSE_AGREEMENT", playerId: me, targetId: id, agreementType: rung[0] }); showCombatToast("🕊️ Envoy sent to " + civName(id), "gate"); });
+        }
+      });
+      // Vassalage (§4): demand submission with a 2:1 edge; release your vassal;
+      // or sue for protection by submitting yourself when at war.
+      if (myTurn && !atWar && engine.canDemandVassalage && engine.canDemandVassalage(state, me, id) === true) {
+        addBtn("👑 Demand Vassalage", true, true, function () { apply({ type: "PROPOSE_VASSALAGE", playerId: me, targetId: id, vassalId: id }); showCombatToast("👑 Demand sent to " + civName(id), "gate"); });
+      }
+      if (theirLord === me) addBtn("⛓️ Release", myTurn, false, function () { apply({ type: "RELEASE_VASSAL", playerId: me, targetId: id }); });
+      if (myTurn && atWar && !engine.isVassal(state, me)) {
+        addBtn("⛓️ Submit", true, true, function () { apply({ type: "PROPOSE_VASSALAGE", playerId: me, targetId: id, vassalId: me }); showCombatToast("⛓️ Submission offered to " + civName(id), "loss"); });
+      }
       if (atWar) addBtn("💰 Offer Tribute 5/t", myTurn && gold >= 5, false, function () { apply({ type: "OFFER_TRIBUTE", playerId: me, targetId: id, amount: 5, turns: 15 }); });
       addBtn("📣 Denounce", myTurn && !atWar, true, function () { apply({ type: "DENOUNCE", playerId: me, targetId: id }); });
       if (!atWar) {
@@ -1207,6 +1230,12 @@
     const fromName = civName(prop.from);
     const what = prop.kind === "trade-pact" ? "a <b>Trade Pact</b> — +1 gold to us both each turn"
       : prop.kind === "nap" ? "a <b>Non-Aggression Pact</b> — no war between us for 30 turns"
+      : prop.kind === "passage" ? "<b>Passage Rights</b> — our armies may cross each other's land"
+      : prop.kind === "defensive-alliance" ? "a <b>Defensive Alliance</b> — we come to each other's aid if attacked"
+      : prop.kind === "full-alliance" ? "a <b>Full Alliance</b> — joint wars and a shared victory"
+      : prop.kind === "vassalage" ? (prop.vassalId === HUMAN_ID
+          ? "that <b>you become their vassal</b> — pay a quarter of your gold, follow their wars, but keep your throne"
+          : "to <b>become your vassal</b> — they will pay you tribute and follow your wars")
         : "<b>tribute</b> of " + prop.amount + " gold/turn for " + prop.turns + " turns, in exchange for peace";
     proposalTitleEl.textContent = "An envoy from " + fromName;
     proposalSituationEl.innerHTML = fromName + " proposes " + what + ".";

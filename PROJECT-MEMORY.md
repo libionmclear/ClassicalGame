@@ -389,6 +389,35 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **STEP D — Diplomacy Phase 2 COMPLETE (slices E1–E5).** All of
+  `docs/HEGEMON-DIPLOMACY-v1.md` is now shipped. **E1 (alliance ladder):**
+  PROPOSE_AGREEMENT gained passage / defensive-alliance / full-alliance;
+  DiploAgreement gained `since` for "held N turns" prereqs (Passage=Cordial,
+  Def-Alliance=Friendly+NAP-held-15, Full=Friendly+Def-Alliance-held-15). Defensive
+  AUTO-JOIN: `enterWar` pulls the DEFENDER's alliance partners (later vassals too)
+  in against the aggressor — one level, never on the aggressor's aggression, and an
+  ally honouring its pact is never branded. **E2 (vassalage §4):** `Player.vassalOf`;
+  PROPOSE_VASSALAGE = DEMAND (needs 2:1 military, `canDemandVassalage`) or SUBMIT;
+  RELEASE_VASSAL; a vassal remits 25% gold income, joins the overlord's DEFENSIVE
+  wars (`defensivePartnersOf`), can't make its own alliances, and its capital
+  counts for DOMINATION (`getVictoryStatus` credits every capital to its
+  `topOverlord` — **win as a hegemon without razing the world**); rebellion when
+  the overlord's army halves or a content vassal (stability ≥+3) hates you. **E3
+  (alliance victory §6):** VictoryStatus `type:"alliance"` + `allies[]`; two Full
+  Allies of 30+ turns whose capitals (with vassals) cover the map win JOINTLY;
+  `state.allianceVictory` (config, default on) + a setup checkbox + game.js
+  humanWon treats an ally co-winner as a win. **E4 (personalities §5):**
+  `PERSONALITIES` table + `personalityOf(civ)` (eagerTrade/coldTrade/seeksAlliances/
+  demandsVassals/submitsWhenLosing/buysPeace/rejectsPassage); `aiAcceptsProposal`
+  and the AI's `diplomacyAction` now play each civ's policy (Rome/Macedon/Persia
+  demand vassals, Carthage trades+buys peace, Athens leagues, Egypt/Persia submit,
+  Sparta isolationist). **E5 (Phase-2 UI):** the Diplomacy screen shows alliance +
+  vassal/overlord chips and progressive ladder buttons (Passage/Alliance/Full
+  Alliance appear as they become proposable) plus Demand-Vassalage / Release /
+  Submit; the incoming-Envoy card handles every new kind. All exposed on
+  `window.HegemonEngine`. **204/204 tests** (40 in diplomacy.test.ts); AI-vs-AI
+  games still reach a decisive winner; E5 browser-verified (chips + the Passage
+  rung render at Cordial, 0 errors). **Diplomacy is DONE (Phase 1 + 2).**
 - **STEP D — Diplomacy Phase 1 COMPLETE (slices D2–D4).** Per
   `docs/HEGEMON-DIPLOMACY-v1.md`. **D2 (war + Oathbreaker, engine):** `DECLARE_WAR`
   + per-pair `warSince`; the first ATTACK/ATTACK_CITY auto-opens a war (idempotent
@@ -412,8 +441,8 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   NAP/Tribute/Denounce/Declare buttons gated by legality); incoming AI offers arrive
   as a **Crossroads-style Envoy card** (Accept/Decline). All diplomacy read helpers
   exposed on `window.HegemonEngine`. Browser-verified (screen renders, envoy sent,
-  incoming proposal accepted, 0 errors). **Phase 1 done; Phase 2** = alliances,
-  passage rights, vassalage, alliance victory, the §5 civ personalities.
+  incoming proposal accepted, 0 errors). *(Phase 2 — alliances, passage, vassalage,
+  alliance victory, §5 personalities — now also done; see the entry above.)*
 - **STEP D — Diplomacy Phase 1, Slice D1 (relations core, engine).** First slice of
   `docs/HEGEMON-DIPLOMACY-v1.md` (Phase 1 = relations, Trade Pact, NAP, tribute,
   war+Oathbreaker; Phase 2 = alliances/passage/vassalage/victory/personalities —
