@@ -149,17 +149,25 @@ export function brandOathbreaker(state: GameState, playerId: string, victimId: s
 // blow — brands the aggressor an Oathbreaker. Plain undeclared war between civs
 // with no pact is just war (design call: otherwise every AI war brands everyone).
 // Returns true if this call started the war.
-export function enterWar(state: GameState, aggressorId: string, targetId: string): boolean {
+export function enterWar(state: GameState, aggressorId: string, targetId: string, opts?: { autoJoin?: boolean }): boolean {
   if (aggressorId === targetId) return false;
   const pair = ensurePair(state, aggressorId, targetId);
   if (pair.warSince != null) return false; // already at war
   // Breaking a pact brands you — unless you denounced it and waited out the cooldown.
-  const pactBreak = hasNap(state, aggressorId, targetId) && !isPactRenounced(state, aggressorId, targetId);
+  // An ally honouring a defensive pact (autoJoin) is never branded for it.
+  const pactBreak = !opts?.autoJoin && hasNap(state, aggressorId, targetId) && !isPactRenounced(state, aggressorId, targetId);
   pair.warSince = state.turn;
   pair.agreements = []; // war voids every agreement on the pair
   pair.tribute = null;
   pair.relation = clampRelation(pair.relation + WAR_DECLARE_RELATION);
   if (pactBreak) brandOathbreaker(state, aggressorId, targetId);
+  // Defensive auto-join (§2/§9): the DEFENDER's allies enter the war against the
+  // aggressor — never on the aggressor's own aggression, and one level (no cascade).
+  if (!opts?.autoJoin) {
+    for (const ally of alliesOf(state, targetId)) {
+      if (ally !== aggressorId) enterWar(state, ally, aggressorId, { autoJoin: true });
+    }
+  }
   return true;
 }
 
@@ -193,9 +201,49 @@ export function bandAtLeast(rel: number, min: RelationBand): boolean {
   return BAND_ORDER.indexOf(relationBand(rel)) >= BAND_ORDER.indexOf(min);
 }
 
+export type ProposableAgreement = "trade-pact" | "nap" | "passage" | "defensive-alliance" | "full-alliance";
+export const ALLIANCE_HOLD = 15;             // a NAP/def-alliance must stand this long to climb
+export const ALLIANCE_TYPES = new Set(["defensive-alliance", "full-alliance"]);
+
 // The relation band each agreement requires (§2 ladder).
-export function agreementBand(type: "trade-pact" | "nap"): RelationBand {
-  return type === "nap" ? "cordial" : "neutral";
+export function agreementBand(type: ProposableAgreement): RelationBand {
+  switch (type) {
+    case "nap": return "cordial";
+    case "passage": return "cordial";
+    case "defensive-alliance": return "friendly";
+    case "full-alliance": return "friendly";
+    default: return "neutral"; // trade-pact
+  }
+}
+
+// How long a standing agreement of `type` has been held (−1 if not held).
+export function agreementHeldTurns(state: GameState, a: string, b: string, type: string): number {
+  const p = getPair(state, a, b);
+  const ag = p?.agreements.find((x) => x.type === type && (x.expires === 0 || x.expires > state.turn));
+  return ag ? state.turn - (ag.since ?? state.turn) : -1;
+}
+// The ladder prereq (§2): Defensive Alliance needs a NAP held 15 turns; Full
+// Alliance needs a Defensive Alliance held 15 turns.
+export function agreementPrereqMet(state: GameState, a: string, b: string, type: ProposableAgreement): boolean {
+  if (type === "defensive-alliance") return agreementHeldTurns(state, a, b, "nap") >= ALLIANCE_HOLD;
+  if (type === "full-alliance") return agreementHeldTurns(state, a, b, "defensive-alliance") >= ALLIANCE_HOLD;
+  return true;
+}
+
+// The civs `playerId` is in a Defensive/Full Alliance with (for auto-join).
+export function alliesOf(state: GameState, playerId: string): string[] {
+  const out: string[] = [];
+  if (!state.diplomacy) return out;
+  for (const key of Object.keys(state.diplomacy)) {
+    const [a, b] = key.split("|");
+    if (a !== playerId && b !== playerId) continue;
+    const p = state.diplomacy[key];
+    if (p.agreements.some((ag) => ALLIANCE_TYPES.has(ag.type) && (ag.expires === 0 || ag.expires > state.turn))) out.push(a === playerId ? b : a);
+  }
+  return out;
+}
+export function isFullAlly(state: GameState, a: string, b: string): boolean {
+  return hasAgreement(state, a, b, "full-alliance");
 }
 
 // A denounced pact is renounceable once the cooldown elapses — then leaving it
@@ -209,22 +257,25 @@ export function napBlocksDeclaration(state: GameState, a: string, b: string): bo
   return hasNap(state, a, b) && !isPactRenounced(state, a, b);
 }
 
-// Can `from` put a Trade-Pact / NAP proposal in front of `to` right now?
-export function canProposeAgreement(state: GameState, from: string, to: string, type: "trade-pact" | "nap"): true | string {
+// Can `from` put this pact proposal in front of `to` right now?
+export function canProposeAgreement(state: GameState, from: string, to: string, type: ProposableAgreement): true | string {
   if (from === to) return "You cannot make a pact with yourself";
   if (!state.playersById[to]) return "Unknown civ";
   if (isAtWar(state, from, to)) return "Make peace before proposing a pact";
   if (state.playersById[to].pendingProposal) return "They are still weighing another offer";
   if (hasAgreement(state, from, to, type)) return "That pact already stands";
   if (!bandAtLeast(getRelation(state, from, to), agreementBand(type))) return `Relations are too cold for that (need ${agreementBand(type)})`;
+  if (!agreementPrereqMet(state, from, to, type)) {
+    return type === "defensive-alliance" ? "A non-aggression pact must stand 15 turns first" : "A defensive alliance must stand 15 turns first";
+  }
   return true;
 }
 
-// Add (or refresh) an agreement on the pair, de-duplicated by type.
+// Add (or refresh) an agreement on the pair, de-duplicated by type; stamps `since`.
 export function addAgreement(state: GameState, a: string, b: string, type: DiploAgreement["type"], expires: number): void {
   const p = ensurePair(state, a, b);
   p.agreements = p.agreements.filter((ag) => ag.type !== type);
-  p.agreements.push({ type, expires });
+  p.agreements.push({ type, expires, since: state.turn });
   p.denouncedAt = undefined; // a fresh pact clears any prior denouncement
 }
 
@@ -256,7 +307,7 @@ export function militaryStrength(state: GameState, playerId: string): number {
 // Deterministic AI verdict on an offer put to `me` by `from`. Utility = relation
 // band + military ratio (personality weights are Phase 2).
 export function aiAcceptsProposal(
-  state: GameState, me: string, from: string, kind: "trade-pact" | "nap" | "tribute", amount = 0
+  state: GameState, me: string, from: string, kind: ProposableAgreement | "tribute", amount = 0
 ): boolean {
   if (me === from) return false;
   if (isOathbreaker(state, from)) return false; // nobody signs with an oathbreaker
@@ -264,6 +315,9 @@ export function aiAcceptsProposal(
   const mine = militaryStrength(state, me), theirs = militaryStrength(state, from) || 1;
   if (kind === "trade-pact") return !isAtWar(state, me, from) && bandAtLeast(rel, "neutral");
   if (kind === "nap") return !isAtWar(state, me, from) && bandAtLeast(rel, "cordial") && mine <= theirs * 1.8;
+  if (kind === "passage") return !isAtWar(state, me, from) && bandAtLeast(rel, "cordial");
+  // Alliances: only with a trusted friend (personality weighting is E4).
+  if (kind === "defensive-alliance" || kind === "full-alliance") return !isAtWar(state, me, from) && bandAtLeast(rel, "friendly");
   // tribute: `from` offers to pay `me`. Take the gold unless I dominate (then I'd
   // rather keep the war option) — a raider/strong power refuses to be bought off.
   return amount >= 4 && rel >= -40 && mine <= theirs * 1.8;

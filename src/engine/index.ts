@@ -2040,8 +2040,9 @@ function applyResolveProposal(state: GameState, action: ResolveProposalAction): 
   me.pendingProposal = undefined;
   const from = prop.from;
   if (!action.accept) { adjustRelation(state, action.playerId, from, DECLINE_RELATION); return; }
-  if (prop.kind === "trade-pact") addAgreement(state, action.playerId, from, "trade-pact", 0);
-  else if (prop.kind === "nap") addAgreement(state, action.playerId, from, "nap", state.turn + NAP_TURNS);
+  if (prop.kind === "trade-pact" || prop.kind === "passage" || prop.kind === "defensive-alliance" || prop.kind === "full-alliance") {
+    addAgreement(state, action.playerId, from, prop.kind, 0); // standing until war / denounce
+  } else if (prop.kind === "nap") addAgreement(state, action.playerId, from, "nap", state.turn + NAP_TURNS);
   else if (prop.kind === "tribute") {
     const pair = ensurePair(state, action.playerId, from);
     pair.warSince = undefined; // tribute buys peace

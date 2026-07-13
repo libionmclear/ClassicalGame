@@ -254,3 +254,45 @@ test("aiAcceptsProposal: takes a trade pact when peaceful, refuses an oathbreake
   s.playersById["p1"].oathbreakerUntil = s.turn + 5;
   assert.equal(aiAcceptsProposal(s, "p2", "p1", "trade-pact"), false, "nobody signs with an oathbreaker");
 });
+
+// ---- E1: alliances + defensive auto-join ----------------------------------
+
+test("the alliance ladder gates on band and 'held N turns' prereqs", () => {
+  const s = makeState(2);
+  const p = ensurePair(s, "p1", "p2");
+  assert.notEqual(canProposeAgreement(s, "p1", "p2", "passage"), true, "passage needs Cordial");
+  p.relation = 60; // friendly
+  assert.equal(canProposeAgreement(s, "p1", "p2", "passage"), true);
+  assert.notEqual(canProposeAgreement(s, "p1", "p2", "defensive-alliance"), true, "def-alliance needs a held NAP");
+  p.agreements.push({ type: "nap", expires: s.turn + 30, since: s.turn - 15 });
+  assert.equal(canProposeAgreement(s, "p1", "p2", "defensive-alliance"), true);
+  assert.notEqual(canProposeAgreement(s, "p1", "p2", "full-alliance"), true, "full needs a held def-alliance");
+  p.agreements.push({ type: "defensive-alliance", expires: 0, since: s.turn - 15 });
+  assert.equal(canProposeAgreement(s, "p1", "p2", "full-alliance"), true);
+});
+
+test("a defensive ally auto-joins the war against an aggressor", () => {
+  const s = makeState(3);
+  ensurePair(s, "p1", "p2").agreements.push({ type: "defensive-alliance", expires: 0, since: s.turn });
+  enterWar(s, "p3", "p2"); // p3 attacks p2 (p1's ally)
+  assert.ok(isAtWar(s, "p3", "p2"));
+  assert.ok(isAtWar(s, "p1", "p3"), "the ally joined the defensive war");
+  assert.ok(!isAtWar(s, "p1", "p2"), "allies are not turned against each other");
+});
+
+test("auto-join fires only for the DEFENDER, not the aggressor's side", () => {
+  const s = makeState(3);
+  ensurePair(s, "p1", "p2").agreements.push({ type: "defensive-alliance", expires: 0, since: s.turn });
+  enterWar(s, "p2", "p3"); // p2 (allied to p1) is the aggressor
+  assert.ok(isAtWar(s, "p2", "p3"));
+  assert.ok(!isAtWar(s, "p1", "p3"), "you are not dragged into your ally's own aggression");
+});
+
+test("honouring an alliance never brands you, even against a NAP partner", () => {
+  const s = makeState(3);
+  ensurePair(s, "p1", "p2").agreements.push({ type: "defensive-alliance", expires: 0, since: s.turn });
+  ensurePair(s, "p1", "p3").agreements.push({ type: "nap", expires: s.turn + 30, since: s.turn });
+  enterWar(s, "p3", "p2"); // p3 attacks p1's ally → p1 auto-joins vs p3
+  assert.ok(isAtWar(s, "p1", "p3"));
+  assert.equal(isOathbreaker(s, "p1"), false, "an ally honouring its pact is not an oathbreaker");
+});

@@ -227,6 +227,8 @@ export interface GameState {
 export interface DiploAgreement {
   type: "trade-pact" | "nap" | "passage" | "defensive-alliance" | "full-alliance";
   expires: number;
+  /** Turn it was formed (for "held N turns" ladder prerequisites). */
+  since?: number;
 }
 
 // Per civ-pair diplomatic state (Diplomacy v1 §8). Phase 1 uses `relation` +
@@ -411,7 +413,7 @@ export interface ProposeAgreementAction {
   type: "PROPOSE_AGREEMENT";
   playerId: string;
   targetId: string;
-  agreementType: "trade-pact" | "nap";
+  agreementType: "trade-pact" | "nap" | "passage" | "defensive-alliance" | "full-alliance";
 }
 export interface ResolveProposalAction {
   type: "RESOLVE_PROPOSAL";
@@ -438,7 +440,7 @@ export interface DenounceAction {
 /** A diplomatic proposal awaiting a player's yes/no (like a pending event). */
 export interface PendingProposal {
   from: string;
-  kind: "trade-pact" | "nap" | "tribute";
+  kind: "trade-pact" | "nap" | "tribute" | "passage" | "defensive-alliance" | "full-alliance";
   amount?: number;
   turns?: number;
 }
