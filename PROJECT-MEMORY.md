@@ -389,6 +389,25 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **STEP D — Diplomacy Phase 1, Slice D1 (relations core, engine).** First slice of
+  `docs/HEGEMON-DIPLOMACY-v1.md` (Phase 1 = relations, Trade Pact, NAP, tribute,
+  war+Oathbreaker; Phase 2 = alliances/passage/vassalage/victory/personalities —
+  both NOT started). New `src/engine/diplomacy.ts`: per-pair state on
+  `state.diplomacy` keyed by canonical `pairKey(a,b)` — `DiploPair {relation
+  −100..+100, agreements[], denouncedAt?, oathbreakerUntil?, tribute?, vassalOf?,
+  warSince?}` (later slices extend it, no migration). `relationBand()` five bands
+  (Hostile ≤−50 · Wary ≤−10 · Neutral · Cordial <50 · Friendly ≥50),
+  `getRelation` (self=100, unknown=0), `initDiplomacy` (every unordered pair seeded
+  Neutral in `createInitialGameState`). Driver wired: **`GIFT_GOLD` action**
+  (transfers coin, warms the pair +1/25g **diminishing** as relations rise) +
+  **long-peace drift** (+0.5/turn in `applyEndTurn`'s turn-advance block, capped at
+  Cordial `PEACE_WARM_CAP`=40 — Friendly must be earned by agreements in D3; war/
+  betrayal down-drivers arrive in D2). Read helpers exposed via `browser-entry`
+  (`relationBand/getRelation/getPair/pairKey/RELATION_BAND_LABELS`) for the D4 UI.
+  New `test/diplomacy.test.ts` (bands, pairKey, seed, gift transfer+warmth+
+  diminish+rejects, drift+cap, determinism). typecheck clean, **174/174**.
+  Engine-only — no game.js dispatch / UI yet (that's D4). **Next: D2** (DECLARE_WAR
+  + surprise-war/NAP → Oathbreaker penalties).
 - **STEP C — 3D district models (§5), the last STEP C gap.** Districts now RENDER
   on the board3d map (they had no 3D presence before). New
   `src/render3d/districtModels.js` (+ `.d.ts`) `buildDistrict(THREE, {type, style,

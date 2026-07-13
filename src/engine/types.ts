@@ -215,6 +215,32 @@ export interface GameState {
   discovered?: Record<string, string[]>;
   /** Research + build cost multiplier — bigger maps take longer to develop. */
   costScale?: number;
+  /** Diplomacy state, keyed by canonical civ-pair key (see diplomacy.ts). */
+  diplomacy?: Record<string, DiploPair>;
+}
+
+/** An agreement on a civ-pair. `expires` is the turn it lapses (0 = no expiry). */
+export interface DiploAgreement {
+  type: "trade-pact" | "nap" | "passage" | "defensive-alliance" | "full-alliance";
+  expires: number;
+}
+
+// Per civ-pair diplomatic state (Diplomacy v1 §8). Phase 1 uses `relation` +
+// `agreements`; the rest are reserved so later slices extend without a migration.
+export interface DiploPair {
+  /** −100..+100; five bands via relationBand(). */
+  relation: number;
+  agreements: DiploAgreement[];
+  /** Turn a Denounce was issued (starts the pre-hostilities cooldown). */
+  denouncedAt?: number;
+  /** Turn the Oathbreaker brand lifts, if branded. */
+  oathbreakerUntil?: number;
+  /** One-way tribute for guaranteed peace. */
+  tribute?: { to: string; amount: number; expires: number } | null;
+  /** Set on the vassal's side when subjugated. */
+  vassalOf?: string | null;
+  /** Turn the pair entered its current war (for war-weariness); absent = at peace. */
+  warSince?: number;
 }
 
 export interface ActionLogEntry {
@@ -361,6 +387,15 @@ export interface RepairDistrictAction {
   hex: string;
 }
 
+// Diplomacy (Cities/Diplomacy v1 §1) — a gift of gold warms relations.
+export interface GiftGoldAction {
+  type: "GIFT_GOLD";
+  playerId: string;
+  /** The civ receiving the gift. */
+  targetId: string;
+  amount: number;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -380,7 +415,8 @@ export type GameAction =
   | DisbandUnitAction
   | RenameCityAction
   | BuildDistrictAction
-  | RepairDistrictAction;
+  | RepairDistrictAction
+  | GiftGoldAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

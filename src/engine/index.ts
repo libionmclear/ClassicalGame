@@ -21,7 +21,8 @@ import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
 import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction } from "./types";
+import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain } from "./diplomacy";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -1523,6 +1524,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   if (state.turn !== prevTurn) {
     state.weather.current = generateWeatherByRegion(state, state.turn);
     state.weather.forecast = generateWeatherByRegion(state, state.turn + 1);
+    applyRelationDrift(state); // long-peace warming, once per game turn
   }
 
   const nextPlayer = getCurrentPlayer(state);
@@ -1770,6 +1772,7 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
   };
 
   syncOwnershipIndexes(state);
+  initDiplomacy(state); // every civ-pair starts Neutral (0)
   state.weather.current = generateWeatherByRegion(state, state.turn);
   state.weather.forecast = generateWeatherByRegion(state, state.turn + 1);
 
@@ -1969,6 +1972,21 @@ function applyBuildDistrict(state: GameState, action: BuildDistrictAction): void
   player.gold -= cost;
   city.districts.push({ hex: action.hex, type: action.districtType });
 }
+// Diplomacy v1 §1 — a gift of gold. Transfers the coin and warms the pair's
+// relation (+1 per 25g, diminishing as relations improve).
+function applyGiftGold(state: GameState, action: GiftGoldAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const giver = state.playersById[action.playerId];
+  const target = state.playersById[action.targetId];
+  if (!giver || !target) throw new Error("Unknown player in gift");
+  if (action.targetId === action.playerId) throw new Error("You cannot gift yourself");
+  const amount = Math.floor(action.amount);
+  if (!(amount > 0)) throw new Error("A gift must be a positive amount of gold");
+  if (giver.gold < amount) throw new Error("Not enough gold for that gift");
+  giver.gold -= amount;
+  target.gold += amount;
+  adjustRelation(state, action.playerId, action.targetId, giftRelationGain(amount, getRelation(state, action.playerId, action.targetId)));
+}
 function applyRepairDistrict(state: GameState, action: RepairDistrictAction): void {
   assertPlayerTurn(state, action.playerId);
   const city = state.map.cities[action.cityId];
@@ -2042,6 +2060,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "REPAIR_DISTRICT":
       applyRepairDistrict(state, action);
+      break;
+    case "GIFT_GOLD":
+      applyGiftGold(state, action);
       break;
     default: {
       const unknownAction: never = action;
