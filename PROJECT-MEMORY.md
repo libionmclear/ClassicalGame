@@ -404,9 +404,12 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   test/titles.test.ts (6). **231/231.** Browser-verified: a seeded profile shows
   "🏅 Eques · 20 laurels · 5 to Quaestor" etc. with the right thresholds, 0 errors.
   **All three missing brief systems (Discovery §10, Britons+Kush §4.1, Titles §11)
-  are now done.** Deferred polish: a dedicated Codex modal collecting the notes;
-  laurels from Crossroads outcomes/achievements (only game-end for now); civ CARDS
-  so non-admins can unlock Britons/Kush.
+  are now done.** Follow-up polish also landed: the in-game **Codex** (the existing
+  📖 encyclopedia, `buildCodex`) now has **Ruins / Minor Peoples / Titles & Offices**
+  sections (excavated ruins get a ✓), and a resolved **Crossroads** dilemma earns a
+  Laurel (`earnCrossroadsLaurel`; laurel-award refactored into shared
+  `grantLaurels`). Still open: civ CARDS so non-admins can unlock Britons/Kush
+  (§12 premium civs); a full tech BRANCH per new civ; laurels from achievements.
 - **Britons + Kush civs (Design Brief §4.1) + maps/discovery tuning.** The roster
   grew from 6 to **8** (`CIV_ROSTER` + Britons #16a085/Camulodunon and Kush
   #935116/Meroë) — everything civ-derived (colours, picker, borders) flows from

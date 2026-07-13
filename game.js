@@ -1110,6 +1110,7 @@
       btn.addEventListener("click", function () {
         logAction("⚖️ " + event.title + " — " + opt.label);
         apply({ type: "RESOLVE_EVENT", playerId: HUMAN_ID, eventId: event.id, optionIndex: i });
+        earnCrossroadsLaurel(); // §11 — a Crossroads choice earns a Laurel
       });
       eventOptionsEl.appendChild(btn);
     });
@@ -3583,6 +3584,32 @@
     }
     parts.push("</section>");
 
+    // §10.2 — the ruins of vanished cultures. A ✓ marks ones you've excavated.
+    const myCodex = state && state.playersById && state.playersById[HUMAN_ID] ? (state.playersById[HUMAN_ID].codex || []) : [];
+    parts.push('<section class="cdx-sec"><h3>Ruins of the Deeper Past</h3>');
+    for (const r of engine.RUINS || []) {
+      const found = myCodex.indexOf(r.id) !== -1;
+      parts.push('<div class="cdx-entry"><b>' + (found ? "✓ " : "") + "🏛️ " + r.name + "</b> <small>(" + r.region + ")</small><div class=\"cdx-note\">" + r.text + "</div></div>");
+    }
+    parts.push("</section>");
+
+    // §10.3 — the living villages of minor peoples.
+    parts.push('<section class="cdx-sec"><h3>Minor Peoples</h3>');
+    for (const pp of engine.MINOR_PEOPLES || []) {
+      parts.push('<div class="cdx-entry"><b>🛖 ' + pp.name + '</b><div class="cdx-note">' + pp.text + "</div></div>");
+    }
+    parts.push("</section>");
+
+    // §11 — the career ladders and real offices of each people.
+    parts.push('<section class="cdx-sec"><h3>Titles &amp; Offices</h3>');
+    for (const c of engine.CIV_ROSTER || []) {
+      const ladder = (engine.TITLE_LADDERS || {})[c.id] || [];
+      if (!ladder.length) continue;
+      parts.push('<h4><span class="cdx-dot" style="background:' + c.color + '"></span>' + c.civ + "</h4>");
+      for (const rung of ladder) parts.push('<div class="cdx-entry"><b>' + rung.name + '</b><div class="cdx-note">' + rung.note + "</div></div>");
+    }
+    parts.push("</section>");
+
     codexBodyEl.innerHTML = parts.join("");
   }
 
@@ -4135,6 +4162,27 @@
   function saveProfile(p) {
     try { window.localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch (e) {}
   }
+  // §11 — add Laurels to a civ on the loaded profile `p` and, if it lifts you to
+  // a new rung, announce the promotion. Caller saves the profile.
+  function grantLaurels(p, civId, amount) {
+    if (!civId || !amount) return;
+    p.byCiv[civId] = p.byCiv[civId] || { played: 0, wins: 0 };
+    const before = p.byCiv[civId].laurels || 0;
+    const after = before + amount;
+    p.byCiv[civId].laurels = after;
+    if (engine.titleForLaurels) {
+      const t0 = engine.titleForLaurels(civId, before);
+      const t1 = engine.titleForLaurels(civId, after);
+      if (t1 && (!t0 || t0.name !== t1.name)) {
+        logAction("🏅 " + civName(civId) + " title earned: " + t1.name + " — " + (t1.note || ""));
+        try { showCombatToast("🏅 New title: " + t1.name, "gate"); } catch (e) {}
+      }
+    }
+  }
+  // A resolved Crossroads dilemma earns the human a Laurel with their civ (§11).
+  function earnCrossroadsLaurel() {
+    try { const p = loadProfile(); grantLaurels(p, HUMAN_ID, 1); saveProfile(p); } catch (e) {}
+  }
   function recordGameResult(civId, won, victoryType) {
     const p = loadProfile();
     p.games += 1;
@@ -4150,18 +4198,7 @@
       p.byCiv[civId].played += 1;
       if (won) p.byCiv[civId].wins += 1;
       // §11 title ladder: earn Laurels with this civ and climb its career ladder.
-      const before = p.byCiv[civId].laurels || 0;
-      const gain = engine.laurelsForGame ? engine.laurelsForGame(won, victoryType) : (won ? 3 : 1);
-      const after = before + gain;
-      p.byCiv[civId].laurels = after;
-      if (engine.titleForLaurels) {
-        const t0 = engine.titleForLaurels(civId, before);
-        const t1 = engine.titleForLaurels(civId, after);
-        if (t1 && (!t0 || t0.name !== t1.name)) {
-          logAction("🏅 " + civName(civId) + " title earned: " + t1.name + " — " + (t1.note || ""));
-          try { showCombatToast("🏅 New title: " + t1.name, "gate"); } catch (e) {}
-        }
-      }
+      grantLaurels(p, civId, engine.laurelsForGame ? engine.laurelsForGame(won, victoryType) : (won ? 3 : 1));
     }
     // Coins are earned by playing (a win is worth more) — the free path: grind
     // coins, buy packs. The daily Standard pack is free on top.
