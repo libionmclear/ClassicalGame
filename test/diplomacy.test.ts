@@ -5,7 +5,8 @@ import { createInitialGameState, applyAction, computeCityStability } from "../sr
 import {
   pairKey, relationBand, getRelation, getPair, giftRelationGain,
   applyRelationDrift, PEACE_WARM_CAP, ensurePair,
-  isAtWar, isOathbreaker, enterWar, playerWarWeariness, WAR_DECLARE_RELATION, OATHBREAKER_VICTIM_HIT
+  isAtWar, isOathbreaker, enterWar, playerWarWeariness, WAR_DECLARE_RELATION, OATHBREAKER_VICTIM_HIT,
+  hasAgreement, canProposeAgreement, aiAcceptsProposal
 } from "../src/engine/diplomacy";
 import type { GameState } from "../src/engine/types";
 
@@ -136,11 +137,14 @@ test("the first attack auto-opens a war (surprise) via the engine", () => {
   assert.equal(isOathbreaker(s, "p1"), false, "no pact broken → no brand");
 });
 
-test("breaking a NAP brands the aggressor Oathbreaker with the world", () => {
+test("a NAP blocks a formal declaration; surprise-attacking it brands you", () => {
   const s0 = combatState();
-  // A standing NAP between p1 and p2 (D3 will create these through proposals).
+  // A standing NAP between p1 and p2 (D3 creates these through proposals).
   ensurePair(s0, "p1", "p2").agreements.push({ type: "nap", expires: s0.turn + 30 });
-  const s = applyAction(s0, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" });
+  // Formal declaration is forbidden while the pact holds.
+  assert.throws(() => applyAction(s0, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" }), /non-aggression pact/);
+  // Surprise-attacking anyway breaks the pact and brands you with the world.
+  const s = applyAction(s0, { type: "ATTACK", playerId: "p1", attackerId: "a", defenderId: "d" });
   assert.ok(isOathbreaker(s, "p1"), "broke the NAP → branded");
   // victim: −30 (war) then −40 (brand)
   assert.equal(getRelation(s, "p1", "p2"), WAR_DECLARE_RELATION + OATHBREAKER_VICTIM_HIT);
@@ -151,7 +155,7 @@ test("an Oathbreaker brand and war weariness both dock city stability", () => {
   const s0 = combatState();
   ensurePair(s0, "p1", "p2").agreements.push({ type: "nap", expires: s0.turn + 30 });
   const before = computeCityStability(s0, "c1");
-  const s = applyAction(s0, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" });
+  const s = applyAction(s0, { type: "ATTACK", playerId: "p1", attackerId: "a", defenderId: "d" });
   assert.ok(isOathbreaker(s, "p1"));
   assert.equal(computeCityStability(s, "c1"), before - 1, "brand costs 1 stability");
   // Age the war 30 turns → 2 weariness steps.
@@ -171,3 +175,82 @@ function enterWarState(): GameState {
   enterWar(s, "p1", "p2");
   return s;
 }
+
+// ---- D3: agreements, tribute, denounce ------------------------------------
+
+test("propose → accept forms a Trade Pact that pays both sides each turn", () => {
+  let s = makeState(2);
+  s = applyAction(s, { type: "PROPOSE_AGREEMENT", playerId: "p1", targetId: "p2", agreementType: "trade-pact" });
+  assert.deepEqual(s.playersById["p2"].pendingProposal, { from: "p1", kind: "trade-pact" });
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" });          // hand the turn to p2
+  s = applyAction(s, { type: "RESOLVE_PROPOSAL", playerId: "p2", accept: true });
+  assert.ok(hasAgreement(s, "p1", "p2", "trade-pact"));
+  const g1 = s.playersById["p1"].gold, g2 = s.playersById["p2"].gold;
+  s = applyAction(s, { type: "END_TURN", playerId: "p2" });          // p2 banks +1, turn → 2
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" });          // p1 banks +1
+  assert.equal(s.playersById["p2"].gold, g2 + 1, "p2 earned trade-pact gold");
+  assert.equal(s.playersById["p1"].gold, g1 + 1, "p1 earned trade-pact gold");
+});
+
+test("a NAP needs Cordial relations; a cold pair cannot propose one", () => {
+  const s = makeState(2);
+  assert.notEqual(canProposeAgreement(s, "p1", "p2", "nap"), true, "neutral is too cold for a NAP");
+  ensurePair(s, "p1", "p2").relation = 20; // cordial
+  assert.equal(canProposeAgreement(s, "p1", "p2", "nap"), true);
+});
+
+test("declining an offer clears it and cools relations a touch", () => {
+  let s = makeState(2);
+  s = applyAction(s, { type: "PROPOSE_AGREEMENT", playerId: "p1", targetId: "p2", agreementType: "trade-pact" });
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" });
+  s = applyAction(s, { type: "RESOLVE_PROPOSAL", playerId: "p2", accept: false });
+  assert.equal(s.playersById["p2"].pendingProposal, undefined);
+  assert.ok(!hasAgreement(s, "p1", "p2", "trade-pact"));
+  assert.ok(getRelation(s, "p1", "p2") < 0, "a snub sours relations");
+});
+
+test("tribute buys peace and flows gold from payer to receiver each turn", () => {
+  let s = enterWarState(); // p1 & p2 at war
+  s.playersById["p1"].gold = 100;
+  s.playersById["p2"].gold = 0;
+  // p1 (weaker, losing) offers p2 tribute to end the war.
+  s = applyAction(s, { type: "OFFER_TRIBUTE", playerId: "p1", targetId: "p2", amount: 8, turns: 12 });
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" });                 // hand the turn to p2
+  s = applyAction(s, { type: "RESOLVE_PROPOSAL", playerId: "p2", accept: true });
+  assert.ok(!isAtWar(s, "p1", "p2"), "tribute bought peace");
+  assert.ok(hasAgreement(s, "p1", "p2", "nap"), "and a guaranteed-peace NAP");
+  const before1 = s.playersById["p1"].gold, before2 = s.playersById["p2"].gold;
+  s = applyAction(s, { type: "END_TURN", playerId: "p2" });                 // turn → next; p2 (receiver) pays nothing
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" });                 // payer transfers on their turn
+  assert.equal(s.playersById["p1"].gold, before1 - 8);
+  assert.equal(s.playersById["p2"].gold, before2 + 8);
+});
+
+test("denounce then wait out the cooldown lets you declare war without a brand", () => {
+  const s0 = makeState(2);
+  ensurePair(s0, "p1", "p2").agreements.push({ type: "nap", expires: s0.turn + 30 });
+  let s = applyAction(s0, { type: "DENOUNCE", playerId: "p1", targetId: "p2" });
+  assert.ok(getRelation(s, "p1", "p2") < 0, "a public denouncement sours relations");
+  // Still blocked immediately after denouncing.
+  assert.throws(() => applyAction(s, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" }), /non-aggression pact/);
+  // Fast-forward past the 5-turn cooldown; now the declaration is clean.
+  s.turn += 6;
+  const after = applyAction(s, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" });
+  assert.ok(isAtWar(after, "p1", "p2"));
+  assert.equal(isOathbreaker(after, "p1"), false, "renounced pact → no brand");
+});
+
+test("expired agreements are cleaned up at the turn boundary", () => {
+  let s = makeState(2);
+  ensurePair(s, "p1", "p2").agreements.push({ type: "nap", expires: 2 });
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" });
+  s = applyAction(s, { type: "END_TURN", playerId: "p2" }); // turn → 2, expiry runs
+  assert.ok(!hasAgreement(s, "p1", "p2", "nap"), "the NAP lapsed");
+});
+
+test("aiAcceptsProposal: takes a trade pact when peaceful, refuses an oathbreaker", () => {
+  const s = makeState(2);
+  assert.equal(aiAcceptsProposal(s, "p2", "p1", "trade-pact"), true);
+  s.playersById["p1"].oathbreakerUntil = s.turn + 5;
+  assert.equal(aiAcceptsProposal(s, "p2", "p1", "trade-pact"), false, "nobody signs with an oathbreaker");
+});

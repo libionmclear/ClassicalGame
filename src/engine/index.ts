@@ -21,8 +21,8 @@ import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
 import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
-import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness } from "./diplomacy";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction } from "./types";
+import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD } from "./diplomacy";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -1503,6 +1503,8 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
     if (amount > 0) unit.hp = Math.min(unit.maxHp, unit.hp + amount);
   }
 
+  applyDiplomacyIncome(state, endingPlayer); // trade-pact gold + tribute transfer
+
   // Advance to the next player. With 3+ players we ROTATE initiative each round
   // (round r starts at seat r mod n) so no seat is permanently last — the last
   // seat was systematically squeezed (it acted after two established rivals).
@@ -1529,7 +1531,8 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   if (state.turn !== prevTurn) {
     state.weather.current = generateWeatherByRegion(state, state.turn);
     state.weather.forecast = generateWeatherByRegion(state, state.turn + 1);
-    applyRelationDrift(state); // long-peace warming, once per game turn
+    applyRelationDrift(state); // long-peace warming / war cooling, once per game turn
+    expireDiplomacy(state);    // drop lapsed agreements + tribute
   }
 
   const nextPlayer = getCurrentPlayer(state);
@@ -2000,7 +2003,81 @@ function applyDeclareWar(state: GameState, action: DeclareWarAction): void {
   if (action.targetId === action.playerId) throw new Error("You cannot declare war on yourself");
   if (!state.playersById[action.targetId]) throw new Error("Unknown target for the declaration");
   if (isAtWar(state, action.playerId, action.targetId)) throw new Error("You are already at war");
+  // A standing NAP forbids a formal declaration until you denounce it and wait
+  // out the cooldown (§2); to strike sooner you must surprise-attack (and be branded).
+  if (napBlocksDeclaration(state, action.playerId, action.targetId)) throw new Error("A non-aggression pact forbids declaring war — denounce it first");
   enterWar(state, action.playerId, action.targetId);
+}
+
+// Diplomacy §2 — put a Trade Pact / NAP in front of the target as a pending offer.
+function applyProposeAgreement(state: GameState, action: ProposeAgreementAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const ok = canProposeAgreement(state, action.playerId, action.targetId, action.agreementType);
+  if (ok !== true) throw new Error(ok);
+  state.playersById[action.targetId].pendingProposal = { from: action.playerId, kind: action.agreementType };
+}
+
+// Diplomacy §4 — offer one-way gold/turn for guaranteed peace (held as a pending
+// proposal by the receiver).
+function applyOfferTribute(state: GameState, action: OfferTributeAction): void {
+  assertPlayerTurn(state, action.playerId);
+  if (action.targetId === action.playerId) throw new Error("You cannot pay tribute to yourself");
+  const target = state.playersById[action.targetId];
+  if (!target) throw new Error("Unknown civ");
+  if (target.pendingProposal) throw new Error("They are still weighing another offer");
+  const amount = Math.floor(action.amount);
+  if (!(amount > 0)) throw new Error("Tribute must be a positive amount");
+  const turns = Math.max(TRIBUTE_MIN_TURNS, Math.min(TRIBUTE_MAX_TURNS, Math.floor(action.turns) || TRIBUTE_MIN_TURNS));
+  target.pendingProposal = { from: action.playerId, kind: "tribute", amount, turns };
+}
+
+// Diplomacy §2 — resolve the pending proposal held by action.playerId.
+function applyResolveProposal(state: GameState, action: ResolveProposalAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const me = state.playersById[action.playerId];
+  if (!me || !me.pendingProposal) throw new Error("You have no proposal to answer");
+  const prop = me.pendingProposal;
+  me.pendingProposal = undefined;
+  const from = prop.from;
+  if (!action.accept) { adjustRelation(state, action.playerId, from, DECLINE_RELATION); return; }
+  if (prop.kind === "trade-pact") addAgreement(state, action.playerId, from, "trade-pact", 0);
+  else if (prop.kind === "nap") addAgreement(state, action.playerId, from, "nap", state.turn + NAP_TURNS);
+  else if (prop.kind === "tribute") {
+    const pair = ensurePair(state, action.playerId, from);
+    pair.warSince = undefined; // tribute buys peace
+    pair.tribute = { to: action.playerId, amount: prop.amount ?? 0, expires: state.turn + (prop.turns ?? TRIBUTE_MIN_TURNS) };
+    addAgreement(state, action.playerId, from, "nap", state.turn + (prop.turns ?? TRIBUTE_MIN_TURNS));
+  }
+  adjustRelation(state, action.playerId, from, ACCEPT_RELATION);
+}
+
+function applyDenounce(state: GameState, action: DenounceAction): void {
+  assertPlayerTurn(state, action.playerId);
+  if (action.targetId === action.playerId) throw new Error("You cannot denounce yourself");
+  if (!state.playersById[action.targetId]) throw new Error("Unknown civ");
+  denounce(state, action.playerId, action.targetId);
+}
+
+// Per-turn diplomacy income for the player ending their turn: a standing Trade
+// Pact pays +1 gold; tribute flows from the payer (once, on their turn) to the
+// receiver — a payer who cannot afford it collapses the deal and sours relations.
+function applyDiplomacyIncome(state: GameState, player: Player): void {
+  if (!state.diplomacy) return;
+  for (const key of Object.keys(state.diplomacy)) {
+    const [a, b] = key.split("|");
+    if (a !== player.id && b !== player.id) continue;
+    const other = a === player.id ? b : a;
+    const pair = state.diplomacy[key];
+    if (hasAgreement(state, player.id, other, "trade-pact")) player.gold += TRADE_PACT_GOLD;
+    const trib = pair.tribute;
+    if (trib && trib.expires > state.turn && trib.to !== player.id) { // player is the payer
+      const receiver = state.playersById[trib.to];
+      const pay = Math.min(trib.amount, player.gold);
+      player.gold -= pay;
+      if (receiver) receiver.gold += pay;
+      if (pay < trib.amount) { pair.tribute = null; adjustRelation(state, player.id, other, -10); }
+    }
+  }
 }
 function applyRepairDistrict(state: GameState, action: RepairDistrictAction): void {
   assertPlayerTurn(state, action.playerId);
@@ -2081,6 +2158,18 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "DECLARE_WAR":
       applyDeclareWar(state, action);
+      break;
+    case "PROPOSE_AGREEMENT":
+      applyProposeAgreement(state, action);
+      break;
+    case "RESOLVE_PROPOSAL":
+      applyResolveProposal(state, action);
+      break;
+    case "OFFER_TRIBUTE":
+      applyOfferTribute(state, action);
+      break;
+    case "DENOUNCE":
+      applyDenounce(state, action);
       break;
     default: {
       const unknownAction: never = action;

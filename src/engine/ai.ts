@@ -1,6 +1,7 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
 import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv, computeCityStability, computePlayerIncome } from "./index";
 import { districtSlots, districtForbidden } from "./districts";
+import { canProposeAgreement, aiAcceptsProposal } from "./diplomacy";
 import { getEvent } from "./events";
 import { distance, DIRECTIONS, keyOf, parseKey, neighborsOf } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -567,11 +568,30 @@ function settlerMoveAction(state: GameState, player: Player): GameAction | null 
   return null;
 }
 
+// Diplomacy (D3): the AI seeks a Trade Pact with any civ it is at peace with and
+// warm enough toward (canProposeAgreement enforces band / no-war / no-dup / no
+// pending). Trade pacts don't block war, so this never stalls a conquest; NAP and
+// personality-driven diplomacy are Phase 2.
+function diplomacyAction(state: GameState, player: Player): GameAction | null {
+  for (const other of state.players) {
+    if (canProposeAgreement(state, player.id, other.id, "trade-pact") === true) {
+      return { type: "PROPOSE_AGREEMENT", playerId: player.id, targetId: other.id, agreementType: "trade-pact" };
+    }
+  }
+  return null;
+}
+
 export function chooseAiAction(state: GameState, playerId: string): GameAction {
   const player = state.playersById[playerId];
   if (!player) throw new Error(`Unknown player ${playerId}`);
 
   const steps: Array<() => GameAction | null> = [
+    () => {
+      // Answer any diplomatic offer on the table before anything else.
+      if (!player.pendingProposal) return null;
+      const p = player.pendingProposal;
+      return { type: "RESOLVE_PROPOSAL", playerId, accept: aiAcceptsProposal(state, playerId, p.from, p.kind, p.amount ?? 0) };
+    },
     () => {
       // Resolve any pending Crossroads dilemma first (pick the better payoff).
       if (!player.pendingEvent) return null;
@@ -596,6 +616,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => maneuverAction(state, player),
     () => navalManeuverAction(state, player),
     () => settlerMoveAction(state, player),
+    () => diplomacyAction(state, player),
     () => {
       const techId = bestBuildableTech(state, player);
       if (!techId || player.science < researchCost(techId)) return null;

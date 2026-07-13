@@ -3,7 +3,7 @@
 // gift-of-gold driver, and the slow "long peace" warming applied each turn.
 // Pure helpers + small mutators (applyAction deep-clones then mutates, so it is
 // safe for these to write into state).
-import type { GameState, DiploPair } from "./types";
+import type { GameState, DiploPair, DiploAgreement } from "./types";
 
 export const RELATION_MIN = -100;
 export const RELATION_MAX = 100;
@@ -153,7 +153,8 @@ export function enterWar(state: GameState, aggressorId: string, targetId: string
   if (aggressorId === targetId) return false;
   const pair = ensurePair(state, aggressorId, targetId);
   if (pair.warSince != null) return false; // already at war
-  const pactBreak = hasNap(state, aggressorId, targetId);
+  // Breaking a pact brands you — unless you denounced it and waited out the cooldown.
+  const pactBreak = hasNap(state, aggressorId, targetId) && !isPactRenounced(state, aggressorId, targetId);
   pair.warSince = state.turn;
   pair.agreements = []; // war voids every agreement on the pair
   pair.tribute = null;
@@ -174,6 +175,98 @@ export function playerWarWeariness(state: GameState, playerId: string): number {
     worst = Math.max(worst, Math.floor((state.turn - p.warSince) / WAR_WEARINESS_PERIOD));
   }
   return worst;
+}
+
+// ---- agreements, tribute, denounce (§2/§4, slice D3) --------------------
+
+export const NAP_TURNS = 30;
+export const TRADE_PACT_GOLD = 1;
+export const ACCEPT_RELATION = 5;
+export const DECLINE_RELATION = -2;
+export const DENOUNCE_RELATION = -10;
+export const DENOUNCE_COOLDOWN = 5;
+export const TRIBUTE_MIN_TURNS = 10;
+export const TRIBUTE_MAX_TURNS = 25;
+
+const BAND_ORDER: RelationBand[] = ["hostile", "wary", "neutral", "cordial", "friendly"];
+export function bandAtLeast(rel: number, min: RelationBand): boolean {
+  return BAND_ORDER.indexOf(relationBand(rel)) >= BAND_ORDER.indexOf(min);
+}
+
+// The relation band each agreement requires (§2 ladder).
+export function agreementBand(type: "trade-pact" | "nap"): RelationBand {
+  return type === "nap" ? "cordial" : "neutral";
+}
+
+// A denounced pact is renounceable once the cooldown elapses — then leaving it
+// (or declaring war) no longer brands you (§2).
+export function isPactRenounced(state: GameState, a: string, b: string): boolean {
+  const p = getPair(state, a, b);
+  return !!p && p.denouncedAt != null && state.turn - p.denouncedAt >= DENOUNCE_COOLDOWN;
+}
+// A NAP still binding (not yet renounced) blocks a formal declaration.
+export function napBlocksDeclaration(state: GameState, a: string, b: string): boolean {
+  return hasNap(state, a, b) && !isPactRenounced(state, a, b);
+}
+
+// Can `from` put a Trade-Pact / NAP proposal in front of `to` right now?
+export function canProposeAgreement(state: GameState, from: string, to: string, type: "trade-pact" | "nap"): true | string {
+  if (from === to) return "You cannot make a pact with yourself";
+  if (!state.playersById[to]) return "Unknown civ";
+  if (isAtWar(state, from, to)) return "Make peace before proposing a pact";
+  if (state.playersById[to].pendingProposal) return "They are still weighing another offer";
+  if (hasAgreement(state, from, to, type)) return "That pact already stands";
+  if (!bandAtLeast(getRelation(state, from, to), agreementBand(type))) return `Relations are too cold for that (need ${agreementBand(type)})`;
+  return true;
+}
+
+// Add (or refresh) an agreement on the pair, de-duplicated by type.
+export function addAgreement(state: GameState, a: string, b: string, type: DiploAgreement["type"], expires: number): void {
+  const p = ensurePair(state, a, b);
+  p.agreements = p.agreements.filter((ag) => ag.type !== type);
+  p.agreements.push({ type, expires });
+  p.denouncedAt = undefined; // a fresh pact clears any prior denouncement
+}
+
+export function denounce(state: GameState, from: string, to: string): void {
+  const p = ensurePair(state, from, to);
+  p.denouncedAt = state.turn;
+  p.relation = clampRelation(p.relation + DENOUNCE_RELATION);
+}
+
+// Drop expired agreements and lapsed tribute from every pair (called each turn).
+export function expireDiplomacy(state: GameState): void {
+  if (!state.diplomacy) return;
+  for (const key of Object.keys(state.diplomacy)) {
+    const p = state.diplomacy[key];
+    p.agreements = p.agreements.filter((ag) => ag.expires === 0 || ag.expires > state.turn);
+    if (p.tribute && p.tribute.expires <= state.turn) p.tribute = null;
+  }
+}
+
+// Rough military weight for AI proposal utility (unit + city count; avoids an
+// import cycle with the combat scorer). Personalities come in Phase 2.
+export function militaryStrength(state: GameState, playerId: string): number {
+  let n = 0;
+  for (const u of Object.values(state.map.units)) if (u.ownerId === playerId) n += 1;
+  for (const c of Object.values(state.map.cities)) if (c.ownerId === playerId) n += 2;
+  return n;
+}
+
+// Deterministic AI verdict on an offer put to `me` by `from`. Utility = relation
+// band + military ratio (personality weights are Phase 2).
+export function aiAcceptsProposal(
+  state: GameState, me: string, from: string, kind: "trade-pact" | "nap" | "tribute", amount = 0
+): boolean {
+  if (me === from) return false;
+  if (isOathbreaker(state, from)) return false; // nobody signs with an oathbreaker
+  const rel = getRelation(state, me, from);
+  const mine = militaryStrength(state, me), theirs = militaryStrength(state, from) || 1;
+  if (kind === "trade-pact") return !isAtWar(state, me, from) && bandAtLeast(rel, "neutral");
+  if (kind === "nap") return !isAtWar(state, me, from) && bandAtLeast(rel, "cordial") && mine <= theirs * 1.8;
+  // tribute: `from` offers to pay `me`. Take the gold unless I dominate (then I'd
+  // rather keep the war option) — a raider/strong power refuses to be bought off.
+  return amount >= 4 && rel >= -40 && mine <= theirs * 1.8;
 }
 
 function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)); }

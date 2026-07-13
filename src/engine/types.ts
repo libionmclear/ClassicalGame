@@ -168,6 +168,8 @@ export interface Player {
   };
   /** Turn the Oathbreaker brand lifts (Diplomacy §3); absent = not branded. */
   oathbreakerUntil?: number;
+  /** A diplomatic offer awaiting this player's decision (Diplomacy §2). */
+  pendingProposal?: PendingProposal;
 }
 
 export interface GameMap {
@@ -403,6 +405,44 @@ export interface DeclareWarAction {
   targetId: string;
 }
 
+// Diplomacy §2 — propose a Trade Pact or NAP; the target holds it as a pending
+// proposal until they RESOLVE it.
+export interface ProposeAgreementAction {
+  type: "PROPOSE_AGREEMENT";
+  playerId: string;
+  targetId: string;
+  agreementType: "trade-pact" | "nap";
+}
+export interface ResolveProposalAction {
+  type: "RESOLVE_PROPOSAL";
+  /** The player holding the pending proposal (the one deciding). */
+  playerId: string;
+  accept: boolean;
+}
+// Diplomacy §4 — offer one-way gold/turn for guaranteed peace.
+export interface OfferTributeAction {
+  type: "OFFER_TRIBUTE";
+  playerId: string;
+  targetId: string;
+  amount: number;
+  turns: number;
+}
+// Diplomacy §2 — a public denouncement (relation hit; starts the cooldown that
+// lets you later leave a pact without the Oathbreaker brand).
+export interface DenounceAction {
+  type: "DENOUNCE";
+  playerId: string;
+  targetId: string;
+}
+
+/** A diplomatic proposal awaiting a player's yes/no (like a pending event). */
+export interface PendingProposal {
+  from: string;
+  kind: "trade-pact" | "nap" | "tribute";
+  amount?: number;
+  turns?: number;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -424,7 +464,11 @@ export type GameAction =
   | BuildDistrictAction
   | RepairDistrictAction
   | GiftGoldAction
-  | DeclareWarAction;
+  | DeclareWarAction
+  | ProposeAgreementAction
+  | ResolveProposalAction
+  | OfferTributeAction
+  | DenounceAction;
 
 export interface VictoryStatus {
   winnerId: string | null;
