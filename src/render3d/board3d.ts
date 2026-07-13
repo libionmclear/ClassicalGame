@@ -25,7 +25,10 @@ function cityTierForPop(pop: number): number {
   return tier;
 }
 function cityStyleFor(civ?: string): string {
-  return civ || "rome"; // civ ids map 1:1 to cityModels styles (greece = Athens)
+  // Civ ids map 1:1 to cityModels styles (greece = Athens); civs without their own
+  // architecture borrow the nearest one (Britons → Gallic, Kush → Egyptian).
+  const alias: Record<string, string> = { britons: "gaul", kush: "egypt" };
+  return (civ && alias[civ]) || civ || "rome";
 }
 
 const TERRAIN_COLOR: Record<string, number> = {
@@ -973,7 +976,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const top = topOf(d.t || "plains");
       const seed = (((d.q * 73856093) ^ (d.r * 19349663)) >>> 0) % 100000;
       const model = buildDistrict(THREE, {
-        type: d.type, style: d.style, seed, accent: d.accent, pillaged: d.pillaged, work: d.work
+        type: d.type, style: cityStyleFor(d.style), seed, accent: d.accent, pillaged: d.pillaged, work: d.work
       }) as THREE.Group;
       model.scale.setScalar(0.9);       // fit the hex, matching the city scale
       model.position.set(w.x, top + 0.01, w.z);

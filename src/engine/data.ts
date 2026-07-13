@@ -304,6 +304,18 @@ export const UNITS: Record<string, UnitRule> = {
     requiresTech: "chariotry", civ: "egypt", category: "mounted", counters: { ranged: 0.5, infantry: 0.2 },
     upgradesFrom: "horseman"
   },
+  // Britons — the chariot of the isles: hit-and-run — keeps moving after it strikes.
+  "chariot-isles": {
+    domain: "land", movement: 4, attack: 22, defense: 14, maxHp: 20, range: 1, upkeep: 2, mounted: true,
+    requiresTech: "horseback-riding", civ: "britons", category: "mounted", counters: { ranged: 0.4, infantry: 0.15 },
+    upgradesFrom: "horseman", special: "hit-and-run"
+  },
+  // Kush — the archer of Meroë: the finest bowmen of the early ages (Ta-Seti, "land of the bow").
+  "meroe-archer": {
+    domain: "land", movement: 2, attack: 24, defense: 13, maxHp: 20, range: 2, upkeep: 1,
+    requiresTech: "archery", civ: "kush", category: "ranged", counters: { infantry: 0.2 },
+    upgradesFrom: "archer"
+  },
   // Gaul — the gaesatae: ferocious naked charge, murderous but poorly guarded.
   gaesatae: {
     domain: "land", movement: 2, attack: 32, defense: 15, maxHp: 22, range: 1, upkeep: 2,
@@ -393,6 +405,8 @@ export interface BuildingRule {
   coastalOnly?: boolean;
   /** Extra gold per OTHER building of this same id the owner holds (trade network). */
   networkGold?: number;
+  /** Civ id this building is unique to — only that people may raise it. */
+  civ?: string;
   note: string;
 }
 
@@ -490,6 +504,23 @@ export const BUILDINGS: Record<string, BuildingRule> = {
     requiresTech: "res-publica",
     yields: { gold: 2 },
     note: "Market, court and rostra in one square — the civic engine of a Roman town. Effect: +2 gold (Forums research adds more)."
+  },
+  // Britons — the Nemeton: a sacred grove of the druids (§4.1 unique building).
+  nemeton: {
+    name: "Nemeton",
+    cost: 16,
+    civ: "britons",
+    yields: { science: 2 },
+    note: "A sacred grove where the druids kept the lore of the tribe — no roof but the oak canopy. Effect: +2 science."
+  },
+  // Kush — the Iron Furnaces of Meroë (§4.1 unique building).
+  "iron-furnaces": {
+    name: "Iron Furnaces of Meroë",
+    cost: 18,
+    civ: "kush",
+    requiresTech: "iron-working",
+    yields: { production: 2 },
+    note: "Meroë smelted iron on a scale that earned it the name 'the Birmingham of Africa'. Effect: +2 production."
   }
 };
 
@@ -689,6 +720,8 @@ export const UNIT_BUILD_COSTS: Record<string, number> = {
   hoplite: 22,
   "war-elephant": 24,
   "war-chariot": 24,
+  "chariot-isles": 22,
+  "meroe-archer": 20,
   gaesatae: 20,
   "horse-archer": 24,
   // v2 branch units

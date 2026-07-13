@@ -123,7 +123,9 @@ export const CIV_ROSTER: ReadonlyArray<CivInfo> = [
   { id: "greece", civ: "Athens", color: "#2e86de", adjective: "Athenian", capital: "Athenai" },
   { id: "egypt", civ: "Egypt", color: "#d4ac0d", adjective: "Egyptian", capital: "Memphis" },
   { id: "gaul", civ: "Gaul", color: "#27ae60", adjective: "Gallic", capital: "Bibracte" },
-  { id: "parthia", civ: "Parthia", color: "#e67e22", adjective: "Parthian", capital: "Ktesiphon" }
+  { id: "parthia", civ: "Parthia", color: "#e67e22", adjective: "Parthian", capital: "Ktesiphon" },
+  { id: "britons", civ: "Britons", color: "#16a085", adjective: "British", capital: "Camulodunon" },
+  { id: "kush", civ: "Kush", color: "#935116", adjective: "Kushite", capital: "Meroë" }
 ];
 
 export const MAX_PLAYERS = CIV_ROSTER.length;
@@ -135,8 +137,8 @@ export const DEFAULT_PLAYERS: Record<MapSize, number> = {
   large: 4,
   xl: 5,
   huge: 6,
-  xxl: 6,
-  xxxl: 6
+  xxl: 7,
+  xxxl: 8
 };
 
 // Land tiles a basic (unteched) land unit can traverse — used for connectivity so

@@ -64,6 +64,8 @@ export interface UnitRule {
   upgradesFrom?: string;
   /** Max this player may ever have alive+queued (elite guards: praetorian, spartiate). */
   buildCap?: number;
+  /** A named special behaviour (e.g. "hit-and-run" — keep moving after attacking). */
+  special?: string;
 }
 
 export interface TechRule {

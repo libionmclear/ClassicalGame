@@ -590,7 +590,9 @@ function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTA
   // loosing; everyone else spends the turn on the attack.
   const atkDefC = UNITS[attacker.type];
   const parthian = !!atkDefC.mounted && atkDefC.range > 1 && (state.playersById[attacker.ownerId]?.techs.includes("parthian-shot") ?? false);
-  attacker.movementRemaining = parthian ? Math.max(1, Math.floor(atkDefC.movement / 2)) : 0;
+  // Britons' chariot of the isles: hit-and-run — it keeps moving after it strikes.
+  const hitRun = atkDefC.special === "hit-and-run";
+  attacker.movementRemaining = (parthian || hitRun) ? Math.max(1, Math.floor(atkDefC.movement / 2)) : 0;
 
   const defenderPos: Coord = { q: defender.position.q, r: defender.position.r };
 
@@ -1069,6 +1071,8 @@ export function effectiveItemCost(state: GameState, ownerId: string, id: string)
   let mult = buildDiscount(state, ownerId, id) * (state.costScale || 1);
   // Carthage's thalassocracy — her shipyards turn out warships 25% cheaper.
   if (UNITS[id]?.domain === "naval" && (state.playersById[ownerId]?.techs.includes("thalassocracy") ?? false)) mult *= 0.75;
+  // Kush — Bowmen of Ta-Seti: ranged units cost 25% less (§4.1 trait).
+  if (UNITS[id]?.category === "ranged" && String(state.playersById[ownerId]?.civ || "").toLowerCase() === "kush") mult *= 0.75;
   // Slice 2: build-faster (all items) + unit-cost % (units only, incl. per-category).
   const owner = state.playersById[ownerId];
   const faster = playerPctMod(owner, "buildFasterPct");
@@ -1132,7 +1136,8 @@ function completeQueueItem(state: GameState, city: City, id: string): void {
       hp: def.maxHp,
       maxHp: def.maxHp,
       movementRemaining: 0,
-      veterancy: "recruit",
+      // Kush — Bowmen of Ta-Seti: her ranged units are born veterans (§4.1 trait).
+      veterancy: def.category === "ranged" && String(state.playersById[city.ownerId]?.civ || "").toLowerCase() === "kush" ? "veteran" : "recruit",
       homeCityId: city.id // Cities v3 §1 — where a disbanded citizen returns
     };
     syncOwnershipIndexes(state);
@@ -1208,6 +1213,9 @@ function applyBuildBuilding(state: GameState, action: BuildBuildingAction): void
   if ((city.queue ?? []).includes(action.buildingId)) throw new Error(`${action.buildingId} already queued`);
 
   const player = state.playersById[action.playerId];
+  if (building.civ && String(player.civ || "").toLowerCase() !== building.civ) {
+    throw new Error(`${building.name} is unique to the ${building.civ}`);
+  }
   if (building.requiresTech && !player.techs.includes(building.requiresTech)) {
     throw new Error(`Building ${action.buildingId} requires tech ${building.requiresTech}`);
   }

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { generateMap, MAP_SIZES, type MapSize } from "../src/engine/mapgen";
+import { generateMap, MAP_SIZES, MAX_PLAYERS, type MapSize } from "../src/engine/mapgen";
 import { createInitialGameState, findPath, UNITS } from "../src/engine/index";
 import { distance, parseKey } from "../src/engine/hex";
 
@@ -59,7 +59,7 @@ test("generateMap places N dispersed capitals, all reachable from player 0", () 
 
 test("generateMap clamps player count to the roster range", () => {
   const tooMany = generateMap({ size: "medium", seed: "clamp-hi", playerCount: 99 });
-  assert.equal(Object.values(tooMany.map?.cities ?? {}).filter((c) => c.isCapital).length, 6);
+  assert.equal(Object.values(tooMany.map?.cities ?? {}).filter((c) => c.isCapital).length, MAX_PLAYERS);
   const tooFew = generateMap({ size: "medium", seed: "clamp-lo", playerCount: 1 });
   assert.equal(Object.values(tooFew.map?.cities ?? {}).filter((c) => c.isCapital).length, 2);
 });

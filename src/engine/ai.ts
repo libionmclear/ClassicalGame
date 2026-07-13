@@ -313,6 +313,7 @@ function buildingAction(state: GameState, player: Player): GameAction | null {
     const built = new Set([...(city.buildings ?? []), ...(city.queue ?? [])]);
     for (const [id, b] of Object.entries(BUILDINGS)) {
       if (built.has(id)) continue;
+      if (b.civ && String(player.civ || "").toLowerCase() !== b.civ) continue; // civ-unique
       if (b.requiresTech && !player.techs.includes(b.requiresTech)) continue;
       if (b.coastalOnly && !isCoastalCity(state, cityId)) continue;
       return { type: "BUILD_BUILDING", playerId: player.id, cityId, buildingId: id };

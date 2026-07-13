@@ -389,6 +389,27 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Britons + Kush civs (Design Brief §4.1) + maps/discovery tuning.** The roster
+  grew from 6 to **8** (`CIV_ROSTER` + Britons #16a085/Camulodunon and Kush
+  #935116/Meroë) — everything civ-derived (colours, picker, borders) flows from
+  it; `MAX_PLAYERS`=8, xxl/xxxl default 7/8. **Unique units:** Britons `chariot-isles`
+  (mounted, `special:"hit-and-run"` → keeps ½ movement after attacking, wired in
+  `applyCombat` alongside the Parthian shot) and Kush `meroe-archer` (strong Age I–II
+  bowman), both civ-locked via `civ`+trunk `requiresTech`. **Unique buildings**
+  (BuildingRule gained `civ`, enforced in `applyBuildBuilding` + the AI's
+  `buildingAction` skips other civs' — that AI filter was needed or the AI stalls):
+  Britons **Nemeton** (+2 science) and Kush **Iron Furnaces of Meroë** (+2 prod,
+  needs iron-working). **Traits:** Kush "Bowmen of Ta-Seti" — ranged units cost 25%
+  less (`effectiveItemCost`) and spawn as **veterans** (`processCityQueue`). City
+  render: `cityStyleFor` aliases britons→Gallic, kush→Egyptian (cities + districts).
+  New test/civs.test.ts (6); browser-verified the picker lists all 8. **Also:**
+  every map size +33% (small 15×13→20×17 … huge 48×38→64×51) plus new **XXL 85×68**
+  and **XXXL 113×90**; discovery (§10.4) is now a **seeded random subset** (≤60% of
+  the pool, ≤10/16 ruins & ≤9/14 villages) so matches vary. **225/225.** STILL
+  from the brief: **title ladders** (§11), and Britons/Kush need civ **cards** in
+  `cards-data-v2.js` to be unlockable by non-admin players (§12 premium civs); a
+  full tech BRANCH per new civ; the trait fine print (Nemeton forest-faith,
+  Iron-Furnaces desert-hill yield are flat +science/+prod for now).
 - **Discovery & Exploration (Design Brief `docs/HEGEMON_game_design_brief_2.md`
   §10) — X1–X3.** The brief is ~90% already built; its three MISSING systems are
   Discovery (§10), the Britons+Kush civs (§4.1), and title ladders (§11).
