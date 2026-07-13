@@ -200,6 +200,7 @@
           <button id="standings-btn" class="hud-icon" title="Standings" aria-label="Standings">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><rect x="3" y="13" width="4.4" height="8" rx="1"/><rect x="9.8" y="8" width="4.4" height="13" rx="1"/><rect x="16.6" y="3" width="4.4" height="18" rx="1"/></svg>
           </button>
+          <button id="diplomacy-btn" class="hud-icon" title="Diplomacy — relations, pacts, war">🕊️</button>
           <button id="hand-btn" class="hud-icon" title="Your campaign cards">🎴</button>
         </div>
         <div id="standings-panel" class="standings-panel hidden"><div id="ranking" class="ranking"></div></div>
@@ -282,6 +283,26 @@
       <h2 id="event-title"></h2>
       <p id="event-situation" class="event-situation"></p>
       <div id="event-options" class="event-options"></div>
+    </div>
+  </div>
+
+  <div id="diplomacy-modal" class="result-modal hidden">
+    <div class="result-card diplomacy-card">
+      <div class="codex-header">
+        <h2>🕊️ Diplomacy</h2>
+        <button id="diplomacy-close-btn" class="codex-close" title="Close">×</button>
+      </div>
+      <p id="diplomacy-status" class="event-situation"></p>
+      <div id="diplomacy-list" class="diplomacy-list"></div>
+    </div>
+  </div>
+
+  <div id="proposal-modal" class="result-modal hidden">
+    <div class="result-card event-card">
+      <div class="event-tag">🕊️ Envoy</div>
+      <h2 id="proposal-title"></h2>
+      <p id="proposal-situation" class="event-situation"></p>
+      <div id="proposal-options" class="event-options"></div>
     </div>
   </div>
 

@@ -389,6 +389,31 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **STEP D — Diplomacy Phase 1 COMPLETE (slices D2–D4).** Per
+  `docs/HEGEMON-DIPLOMACY-v1.md`. **D2 (war + Oathbreaker, engine):** `DECLARE_WAR`
+  + per-pair `warSince`; the first ATTACK/ATTACK_CITY auto-opens a war (idempotent
+  `enterWar`); opening hostilities cools −30. **Oathbreaker** (`Player.oathbreakerUntil`,
+  25t) brands you for breaking a BINDING PACT (NAP/alliance) — by declaration or
+  surprise blow — −40 victim / −15 world (**design call:** plain undeclared war with
+  no pact does NOT brand, else every AI war brands everyone; keeps NAPs meaningful).
+  Penalties: −1 stability while branded + war-weariness (−1/15 war turns) in
+  `computeCityStability` (un-flags the Phase-5 war-weariness); at-war pairs COOL each
+  turn. **D3 (pacts, engine + AI):** pending-offer flow (`PROPOSE_AGREEMENT`
+  trade-pact≥Neutral / nap≥Cordial → `target.pendingProposal`; `RESOLVE_PROPOSAL`
+  accept/decline, +5/−2), `OFFER_TRIBUTE` (gold/turn buys peace + a NAP),
+  `DENOUNCE` (−10, starts the 5-turn cooldown after which leaving a pact no longer
+  brands, `isPactRenounced`). Effects in `applyEndTurn`: trade-pact +1 gold/side/turn,
+  tribute payer→receiver, expiry sweep; NAP now BLOCKS a formal `DECLARE_WAR`. AI
+  answers offers (`aiAcceptsProposal`: band + military ratio, refuses oathbreakers)
+  and seeks trade-pacts (only — they don't block war, so no conquest stalls;
+  personalities are Phase 2). **D4 (UI, game.js/html/css):** a 🕊️ topbar button opens
+  the **Diplomacy screen** — a row per rival (civ-colour edge, Oathbreaker
+  broken-laurel, relation band + gradient meter, agreement chips, Gift/Trade-Pact/
+  NAP/Tribute/Denounce/Declare buttons gated by legality); incoming AI offers arrive
+  as a **Crossroads-style Envoy card** (Accept/Decline). All diplomacy read helpers
+  exposed on `window.HegemonEngine`. Browser-verified (screen renders, envoy sent,
+  incoming proposal accepted, 0 errors). **Phase 1 done; Phase 2** = alliances,
+  passage rights, vassalage, alliance victory, the §5 civ personalities.
 - **STEP D — Diplomacy Phase 1, Slice D1 (relations core, engine).** First slice of
   `docs/HEGEMON-DIPLOMACY-v1.md` (Phase 1 = relations, Trade Pact, NAP, tribute,
   war+Oathbreaker; Phase 2 = alliances/passage/vassalage/victory/personalities —
@@ -406,8 +431,7 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   (`relationBand/getRelation/getPair/pairKey/RELATION_BAND_LABELS`) for the D4 UI.
   New `test/diplomacy.test.ts` (bands, pairKey, seed, gift transfer+warmth+
   diminish+rejects, drift+cap, determinism). typecheck clean, **174/174**.
-  Engine-only — no game.js dispatch / UI yet (that's D4). **Next: D2** (DECLARE_WAR
-  + surprise-war/NAP → Oathbreaker penalties).
+  Engine-only. *(D2–D4 now complete — see the entry above; Phase 1 shipped, 187/187.)*
 - **STEP C — 3D district models (§5), the last STEP C gap.** Districts now RENDER
   on the board3d map (they had no 3D presence before). New
   `src/render3d/districtModels.js` (+ `.d.ts`) `buildDistrict(THREE, {type, style,

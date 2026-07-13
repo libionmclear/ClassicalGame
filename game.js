@@ -83,6 +83,15 @@
   const handModalEl = document.getElementById("hand-modal");
   const handBodyEl = document.getElementById("hand-body");
   const handCloseBtn = document.getElementById("hand-close-btn");
+  const diplomacyBtn = document.getElementById("diplomacy-btn");
+  const diplomacyModalEl = document.getElementById("diplomacy-modal");
+  const diplomacyCloseBtn = document.getElementById("diplomacy-close-btn");
+  const diplomacyListEl = document.getElementById("diplomacy-list");
+  const diplomacyStatusEl = document.getElementById("diplomacy-status");
+  const proposalModalEl = document.getElementById("proposal-modal");
+  const proposalTitleEl = document.getElementById("proposal-title");
+  const proposalSituationEl = document.getElementById("proposal-situation");
+  const proposalOptionsEl = document.getElementById("proposal-options");
   const fullscreenBtn = document.getElementById("fullscreen-btn");
   const turnIndicatorEl = document.getElementById("turn-indicator");
   const standingsBtn = document.getElementById("standings-btn");
@@ -1103,6 +1112,116 @@
     });
     eventModalEl.classList.remove("hidden");
   }
+
+  // ===== Diplomacy screen (Diplomacy v1 §7) =====
+  function diploBandColor(band) {
+    return { hostile: "#c05545", wary: "#c99a3a", neutral: "#8a97a5", cordial: "#3a9aa0", friendly: "#2f9a55" }[band] || "#8a97a5";
+  }
+
+  function renderDiplomacy() {
+    if (!diplomacyListEl || !state) return;
+    const me = HUMAN_ID;
+    const myTurn = isHumanTurn();
+    if (diplomacyStatusEl) {
+      if (engine.isOathbreaker && engine.isOathbreaker(state, me)) {
+        const until = (human() && human().oathbreakerUntil) || state.turn;
+        diplomacyStatusEl.innerHTML = '<span style="color:var(--bad)">🥀 You are branded an <b>Oathbreaker</b> for ' + Math.max(0, until - state.turn) +
+          " more turns — no one signs pacts above Trade with you and every city loses stability.</span>";
+      } else {
+        diplomacyStatusEl.textContent = myTurn ? "Manage relations with the other powers." : "Diplomacy is available on your turn.";
+      }
+    }
+    diplomacyListEl.innerHTML = "";
+    const labels = engine.RELATION_BAND_LABELS || {};
+    state.players.filter(function (p) { return p.id !== me; }).forEach(function (p) {
+      const id = p.id;
+      const rel = engine.getRelation(state, me, id);
+      const band = engine.relationBand(rel);
+      const pair = engine.getPair ? engine.getPair(state, me, id) : null;
+      const atWar = engine.isAtWar(state, me, id);
+      const row = document.createElement("div");
+      row.className = "diplo-row";
+      row.style.setProperty("--rowciv", CIV_COLORS[id] || "#888");
+
+      const oath = engine.isOathbreaker && engine.isOathbreaker(state, id) ? ' <span class="diplo-oath" title="Broke a sworn pact">🥀 Oathbreaker</span>' : "";
+      const head = document.createElement("div");
+      head.className = "diplo-head";
+      head.innerHTML = '<span class="diplo-name">' + civName(id) + oath + "</span>" +
+        '<span class="diplo-band" style="color:' + diploBandColor(band) + '">' + (labels[band] || band) + " (" + Math.round(rel) + ")</span>";
+      row.appendChild(head);
+
+      const meter = document.createElement("div");
+      meter.className = "diplo-meter";
+      meter.innerHTML = '<span class="pin" style="left:' + Math.max(0, Math.min(100, (rel + 100) / 2)) + '%"></span>';
+      row.appendChild(meter);
+
+      const chips = document.createElement("div");
+      chips.className = "diplo-chips";
+      let chipHtml = "";
+      if (atWar) chipHtml += '<span class="diplo-chip war">⚔️ At War</span>';
+      if (engine.hasAgreement(state, me, id, "trade-pact")) chipHtml += '<span class="diplo-chip pact">🤝 Trade Pact</span>';
+      if (engine.hasAgreement(state, me, id, "nap")) chipHtml += '<span class="diplo-chip pact">🕊️ Non-Aggression</span>';
+      if (pair && pair.tribute && pair.tribute.expires > state.turn) {
+        chipHtml += '<span class="diplo-chip tribute">💰 Tribute ' + (pair.tribute.to === me ? "from " + civName(id) : "to " + civName(pair.tribute.to)) + "</span>";
+      }
+      if (!chipHtml) chipHtml = '<span class="diplo-chip">Peace</span>';
+      chips.innerHTML = chipHtml;
+      row.appendChild(chips);
+
+      const acts = document.createElement("div");
+      acts.className = "diplo-actions";
+      const gold = (human() && human().gold) || 0;
+      function addBtn(label, enabled, danger, fn) {
+        const b = document.createElement("button");
+        b.textContent = label;
+        if (danger) b.className = "danger";
+        b.disabled = !enabled;
+        if (enabled) b.addEventListener("click", fn);
+        acts.appendChild(b);
+      }
+      addBtn("🎁 Gift 25g", myTurn && gold >= 25, false, function () { apply({ type: "GIFT_GOLD", playerId: me, targetId: id, amount: 25 }); });
+      addBtn("🤝 Trade Pact", myTurn && engine.canProposeAgreement(state, me, id, "trade-pact") === true, false, function () {
+        apply({ type: "PROPOSE_AGREEMENT", playerId: me, targetId: id, agreementType: "trade-pact" }); showCombatToast("🕊️ Envoy sent to " + civName(id), "gate");
+      });
+      addBtn("🕊️ Non-Aggression", myTurn && engine.canProposeAgreement(state, me, id, "nap") === true, false, function () {
+        apply({ type: "PROPOSE_AGREEMENT", playerId: me, targetId: id, agreementType: "nap" }); showCombatToast("🕊️ Envoy sent to " + civName(id), "gate");
+      });
+      if (atWar) addBtn("💰 Offer Tribute 5/t", myTurn && gold >= 5, false, function () { apply({ type: "OFFER_TRIBUTE", playerId: me, targetId: id, amount: 5, turns: 15 }); });
+      addBtn("📣 Denounce", myTurn && !atWar, true, function () { apply({ type: "DENOUNCE", playerId: me, targetId: id }); });
+      if (!atWar) {
+        const napBlock = engine.napBlocksDeclaration && engine.napBlocksDeclaration(state, me, id);
+        addBtn(napBlock ? "⚔️ Declare (denounce first)" : "⚔️ Declare War", myTurn && !napBlock, true, function () { apply({ type: "DECLARE_WAR", playerId: me, targetId: id }); });
+      }
+      row.appendChild(acts);
+      diplomacyListEl.appendChild(row);
+    });
+  }
+
+  // Incoming AI proposal → a Crossroads-style Accept / Decline card.
+  function showProposalModal(victory) {
+    if (!proposalModalEl) return;
+    const p = human();
+    const prop = p && p.pendingProposal;
+    if (!prop || !isHumanTurn() || (victory && victory.winnerId)) { proposalModalEl.classList.add("hidden"); return; }
+    const fromName = civName(prop.from);
+    const what = prop.kind === "trade-pact" ? "a <b>Trade Pact</b> — +1 gold to us both each turn"
+      : prop.kind === "nap" ? "a <b>Non-Aggression Pact</b> — no war between us for 30 turns"
+        : "<b>tribute</b> of " + prop.amount + " gold/turn for " + prop.turns + " turns, in exchange for peace";
+    proposalTitleEl.textContent = "An envoy from " + fromName;
+    proposalSituationEl.innerHTML = fromName + " proposes " + what + ".";
+    proposalOptionsEl.innerHTML = "";
+    [["✓ Accept", true], ["✗ Decline", false]].forEach(function (o) {
+      const btn = document.createElement("button");
+      btn.className = "event-option";
+      btn.innerHTML = '<span class="eo-label">' + o[0] + "</span>";
+      btn.addEventListener("click", function () { apply({ type: "RESOLVE_PROPOSAL", playerId: HUMAN_ID, accept: o[1] }); });
+      proposalOptionsEl.appendChild(btn);
+    });
+    proposalModalEl.classList.remove("hidden");
+  }
+
+  if (diplomacyBtn) diplomacyBtn.addEventListener("click", function () { if (diplomacyModalEl) { renderDiplomacy(); diplomacyModalEl.classList.remove("hidden"); } });
+  if (diplomacyCloseBtn) diplomacyCloseBtn.addEventListener("click", function () { if (diplomacyModalEl) diplomacyModalEl.classList.add("hidden"); });
 
   function getHumanVisibility() {
     if (!state) {
@@ -2618,6 +2737,7 @@
       renderHud();
       renderLegend();
       renderRanking();
+      if (diplomacyModalEl && !diplomacyModalEl.classList.contains("hidden")) renderDiplomacy();
       renderTechTree(victory);
       updateResearchIndicator();
       updatePanelState(victory);
@@ -2631,6 +2751,7 @@
         endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
         showResultModal(victory);
         showEventModal(victory);
+        showProposalModal(victory);
       } catch (overlayErr) {
         console.error("Overlay error:", overlayErr);
       }

@@ -3183,3 +3183,40 @@ body.fullscreen .app {
 body.fullscreen .status-panel {
   display: none;
 }
+
+/* ===== Diplomacy (Diplomacy v1 §7) ===== */
+.diplomacy-card { max-width: 580px; width: 92vw; max-height: 84vh; overflow-y: auto; }
+.diplomacy-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.diplo-row {
+  border: 1px solid var(--line); border-left: 3px solid var(--rowciv, #888);
+  border-radius: 8px; padding: 10px 12px; background: var(--panel-2);
+}
+.diplo-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.diplo-name { font-family: var(--display, serif); font-weight: 700; letter-spacing: 0.02em; }
+.diplo-oath { color: var(--bad); font-size: 0.74rem; font-weight: 600; }
+.diplo-band { font-size: 0.78rem; color: var(--muted, #9fb0c0); }
+.diplo-meter {
+  position: relative; height: 8px; border-radius: 5px; margin: 9px 0 7px;
+  background: linear-gradient(90deg, #b23b3b, #c99a3a 33%, #7a7a7a 50%, #3a9aa0 67%, #2f9a55);
+}
+.diplo-meter .pin {
+  position: absolute; top: -3px; width: 3px; height: 14px; background: #fff;
+  border: 1px solid #10161f; border-radius: 2px; transform: translateX(-50%);
+}
+.diplo-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 8px; }
+.diplo-chip {
+  font-size: 0.7rem; padding: 1px 8px; border-radius: 10px;
+  border: 1px solid var(--line); color: var(--parchment, #e9e2d0);
+}
+.diplo-chip.pact { border-color: var(--ok); color: var(--ok); }
+.diplo-chip.war { border-color: var(--bad); color: var(--bad); }
+.diplo-chip.tribute { border-color: var(--coin); color: var(--coin); }
+.diplo-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.diplo-actions button {
+  font-size: 0.75rem; padding: 3px 9px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--parchment, #e9e2d0);
+  cursor: pointer;
+}
+.diplo-actions button:hover:not(:disabled) { border-color: var(--gold); }
+.diplo-actions button.danger:hover:not(:disabled) { border-color: var(--bad); }
+.diplo-actions button:disabled { opacity: 0.4; cursor: default; }
