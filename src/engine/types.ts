@@ -188,6 +188,8 @@ export interface GameMap {
   units: Record<string, Unit>;
   /** Ancient ruins to excavate (§10.2), keyed by tile "q,r". */
   ruins?: Record<string, { ruinId: string; excavated?: boolean; by?: string }>;
+  /** Minor-People villages (§10.3), keyed by tile "q,r". */
+  villages?: Record<string, { peopleId: string; disposition: "open" | "wary" | "hostile"; befriendedBy?: string; contacted?: boolean }>;
 }
 
 export interface WeatherState {
@@ -461,6 +463,12 @@ export interface ReleaseVassalAction {
   targetId: string;
 }
 
+// Minor Peoples (§10.3) — interact with a village (identified by its tile "q,r").
+export interface BefriendVillageAction { type: "BEFRIEND_VILLAGE"; playerId: string; hex: string; }
+export interface DemandTributeVillageAction { type: "DEMAND_TRIBUTE_VILLAGE"; playerId: string; hex: string; }
+export interface ConquerVillageAction { type: "CONQUER_VILLAGE"; playerId: string; hex: string; }
+export interface AbsorbVillageAction { type: "ABSORB_VILLAGE"; playerId: string; hex: string; mode: "join" | "migrate"; }
+
 /** A diplomatic proposal awaiting a player's yes/no (like a pending event). */
 export interface PendingProposal {
   from: string;
@@ -498,7 +506,11 @@ export type GameAction =
   | OfferTributeAction
   | DenounceAction
   | ProposeVassalageAction
-  | ReleaseVassalAction;
+  | ReleaseVassalAction
+  | BefriendVillageAction
+  | DemandTributeVillageAction
+  | ConquerVillageAction
+  | AbsorbVillageAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

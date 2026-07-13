@@ -6,7 +6,7 @@ import type { Coord, CreateGameConfig, TerrainType } from "./types";
 
 // Deterministic 0..1 hash of a string (FNV-1a), so resource placement is stable
 // for a given seed without threading an RNG object through the terrain builder.
-function hash01(s: string): number {
+export function hash01(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i += 1) {
     h ^= s.charCodeAt(i);

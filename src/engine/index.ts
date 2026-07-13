@@ -24,6 +24,8 @@ import { cityTier, districtSlots, districtType, districtName, districtForbidden,
 import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE, fullAlliancesHeld, ALLIANCE_VICTORY_HOLD } from "./diplomacy";
 import { scatterRuins } from "./mapgen";
 import { excavateRuins } from "./discovery";
+import { scatterVillages, PEOPLE_BY_ID, unitNear, applyVillageBenefit, BEFRIEND_COST, TRIBUTE_GAIN, CONQUEST_REPUTATION_HIT, DISPOSITIONS } from "./peoples";
+import type { BefriendVillageAction, DemandTributeVillageAction, ConquerVillageAction, AbsorbVillageAction } from "./types";
 import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
 import type {
   AttackCityAction,
@@ -1507,6 +1509,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
 
   applyDiplomacyIncome(state, endingPlayer); // trade-pact gold + tribute transfer
   excavateRuins(state, endingPlayer.id);     // §10.2: units ending on a ruin dig it up
+  contactVillages(state, endingPlayer.id);   // §10.3: an Explorer warms a wary village
 
   // Advance to the next player. With 3+ players we ROTATE initiative each round
   // (round r starts at seat r mod n) so no seat is permanently last — the last
@@ -1797,6 +1800,7 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
   syncOwnershipIndexes(state);
   initDiplomacy(state); // every civ-pair starts Neutral (0)
   if (!state.map.ruins) state.map.ruins = scatterRuins(state.map, state.seed); // §10.2 discovery sites
+  if (!state.map.villages) state.map.villages = scatterVillages(state.map, state.seed, new Set(Object.keys(state.map.ruins))); // §10.3 minor peoples
   state.weather.current = generateWeatherByRegion(state, state.turn);
   state.weather.forecast = generateWeatherByRegion(state, state.turn + 1);
 
@@ -2117,6 +2121,75 @@ function applyReleaseVassal(state: GameState, action: ReleaseVassalAction): void
   releaseVassal(state, action.playerId, action.targetId);
 }
 
+// ---- Minor Peoples §10.3 -------------------------------------------------
+function villageAt(state: GameState, hex: string) {
+  const v = state.map.villages?.[hex];
+  if (!v) throw new Error("There is no village there");
+  return v;
+}
+function makeTown(state: GameState, playerId: string, hex: string, pop: number): void {
+  const at = parseKey(hex);
+  if (Object.values(state.map.cities).some((c) => c.position.q === at.q && c.position.r === at.r)) return;
+  const id = `${playerId}_town_${at.q}_${at.r}`;
+  state.map.cities[id] = { id, ownerId: playerId, position: { q: at.q, r: at.r }, population: pop, hp: 24, maxHp: 24 };
+}
+function applyBefriendVillage(state: GameState, action: BefriendVillageAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const v = villageAt(state, action.hex);
+  if (v.disposition === "hostile") throw new Error("They are hostile — win them over with an Explorer, or take them by force");
+  if (!unitNear(state, action.playerId, action.hex)) throw new Error("Move a unit beside the village first");
+  const player = state.playersById[action.playerId];
+  if (player.gold < BEFRIEND_COST) throw new Error("Not enough gold to court them");
+  player.gold -= BEFRIEND_COST;
+  applyVillageBenefit(state, action.playerId, PEOPLE_BY_ID[v.peopleId].benefit, parseKey(action.hex), false);
+  v.befriendedBy = action.playerId;
+  v.disposition = "open";
+  syncOwnershipIndexes(state); // a recruited levy needs indexing
+}
+function applyDemandTributeVillage(state: GameState, action: DemandTributeVillageAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const v = villageAt(state, action.hex);
+  if (!unitNear(state, action.playerId, action.hex)) throw new Error("Move a unit beside the village first");
+  state.playersById[action.playerId].gold += TRIBUTE_GAIN;
+  v.disposition = DISPOSITIONS[Math.max(0, DISPOSITIONS.indexOf(v.disposition) - 1)]; // they sour
+  v.befriendedBy = undefined;
+}
+function applyConquerVillage(state: GameState, action: ConquerVillageAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const v = villageAt(state, action.hex);
+  if (!unitNear(state, action.playerId, action.hex, true)) throw new Error("Bring a soldier to take the village");
+  applyVillageBenefit(state, action.playerId, PEOPLE_BY_ID[v.peopleId].benefit, parseKey(action.hex), true); // knowledge burns
+  makeTown(state, action.playerId, action.hex, 1);
+  for (const other of state.players) if (other.id !== action.playerId) adjustRelation(state, action.playerId, other.id, CONQUEST_REPUTATION_HIT);
+  delete state.map.villages![action.hex];
+  syncOwnershipIndexes(state);
+}
+function applyAbsorbVillage(state: GameState, action: AbsorbVillageAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const v = villageAt(state, action.hex);
+  if (v.befriendedBy !== action.playerId) throw new Error("Befriend them before you absorb them");
+  if (action.mode === "join") makeTown(state, action.playerId, action.hex, 2);
+  else applyVillageBenefit(state, action.playerId, { pop: 2 }, parseKey(action.hex), false); // migrate
+  delete state.map.villages![action.hex];
+  syncOwnershipIndexes(state);
+}
+// An Explorer that ends adjacent to an un-contacted village warms it a step (§10.3).
+function contactVillages(state: GameState, playerId: string): void {
+  if (!state.map.villages) return;
+  const units = (state.playersById[playerId]?.unitIds ?? []).map((id) => state.map.units[id]).filter((u) => u && u.type === "explorer");
+  if (!units.length) return;
+  for (const key of Object.keys(state.map.villages)) {
+    const v = state.map.villages[key];
+    if (v.contacted) continue;
+    const at = parseKey(key);
+    const ring = new Set([key, ...neighborsOf(at).map((n) => `${n.q},${n.r}`)]);
+    if (units.some((u) => ring.has(`${u.position.q},${u.position.r}`))) {
+      v.contacted = true;
+      v.disposition = DISPOSITIONS[Math.min(DISPOSITIONS.length - 1, DISPOSITIONS.indexOf(v.disposition) + 1)];
+    }
+  }
+}
+
 // Per-turn diplomacy income for the player ending their turn: a standing Trade
 // Pact pays +1 gold; tribute flows from the payer (once, on their turn) to the
 // receiver — a payer who cannot afford it collapses the deal and sours relations.
@@ -2245,6 +2318,18 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "RELEASE_VASSAL":
       applyReleaseVassal(state, action);
+      break;
+    case "BEFRIEND_VILLAGE":
+      applyBefriendVillage(state, action);
+      break;
+    case "DEMAND_TRIBUTE_VILLAGE":
+      applyDemandTributeVillage(state, action);
+      break;
+    case "CONQUER_VILLAGE":
+      applyConquerVillage(state, action);
+      break;
+    case "ABSORB_VILLAGE":
+      applyAbsorbVillage(state, action);
       break;
     default: {
       const unknownAction: never = action;
