@@ -122,7 +122,7 @@
             var q = j * 2;
             var t = type === "harbour" ? "coast" : "plains";
             addTile(q, r, t);
-            districts.push({ q: q, r: r, type: type, style: sc[0], accent: sc[1], t: t, work: type === "greatwork" ? DWORK[sc[0]] : null });
+            districts.push({ q: q, r: r, type: type, style: sc[0], accent: sc[1], t: t, cq: q, cr: r - 1, work: type === "greatwork" ? DWORK[sc[0]] : null });
           });
         });
         var pilR = distRow0 + 4; addTile(0, pilR); addTile(2, pilR); addTile(4, pilR);

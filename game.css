@@ -3234,3 +3234,14 @@ body.fullscreen .status-panel {
 /* Title ladder (Brief §11) — current career title per people on the profile. */
 .pf-civ { flex-wrap: wrap; }
 .pf-civtitle { flex-basis: 100%; font-size: 0.76rem; color: var(--gold); margin-top: 3px; letter-spacing: 0.01em; }
+
+/* Build-a-district panel (click an empty hex beside your city) */
+#district-build-group .build-menu { display: flex; flex-direction: column; gap: 5px; }
+.db-head { font-size: 0.8rem; color: var(--muted, #9fb0c0); margin-bottom: 3px; }
+.db-head b { color: var(--parchment, #e9e2d0); }
+.db-cost { float: right; color: var(--coin); }
+.db-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--parchment, #e9e2d0); cursor: pointer; }
+.db-opt:hover:not(:disabled) { border-color: var(--gold); }
+.db-opt:disabled { opacity: 0.45; cursor: default; }
+.db-name { font-weight: 600; font-size: 0.82rem; }
+.db-benefit { font-size: 0.74rem; color: var(--ok); }

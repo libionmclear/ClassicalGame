@@ -43,6 +43,8 @@
   const improveMenuEl = document.getElementById("improve-menu");
   const discoveryGroupEl = document.getElementById("discovery-group");
   const discoveryMenuEl = document.getElementById("discovery-menu");
+  const districtBuildGroupEl = document.getElementById("district-build-group");
+  const districtBuildMenuEl = document.getElementById("district-build-menu");
   const buildingMenuEl = document.getElementById("building-menu");
   const buildQueueEl = document.getElementById("build-queue");
   const techTreeEl = document.getElementById("tech-tree");
@@ -2147,7 +2149,8 @@
         const dtile = state.map.tiles[d.hex];
         districts.push({
           q: +c[0], r: +c[1], type: d.type, style: style, accent: accent,
-          t: dtile ? dtile.terrain : "plains", pillaged: !!d.pillaged, work: d.work || null
+          t: dtile ? dtile.terrain : "plains", pillaged: !!d.pillaged, work: d.work || null,
+          cq: city.position.q, cr: city.position.r // the city this district hugs
         });
       }
     }
@@ -2414,6 +2417,7 @@
     renderBuildQueue(selectedCity);
     renderImproveMenu(isTurn);
     renderDiscovery(isTurn);
+    renderTileDistricts(isTurn);
 
     // ---- Float the panel at the selection and show only the relevant groups ----
     positionContextPanel(selectedUnit, selectedCity);
@@ -2549,6 +2553,69 @@
       if (ring.has(u.position.q + "," + u.position.r)) return true;
     }
     return false;
+  }
+
+  // A short, readable summary of what a district gives a city.
+  function districtBenefitStr(dt) {
+    const e = (dt && dt.effect) || {};
+    const YI = { food: "🌾", production: "⚒", gold: "🪙", science: "🔬", stability: "🌿" };
+    const parts = [];
+    const cy = e.cityYield || {};
+    for (const k in cy) if (cy[k]) parts.push((cy[k] > 0 ? "+" : "") + cy[k] + " " + (YI[k] || k));
+    if (e.popCapPlus) parts.push("+" + e.popCapPlus + " pop cap");
+    if (e.growthPct) parts.push("+" + e.growthPct + "% growth");
+    if (e.trainFasterPct) parts.push("trains " + e.trainFasterPct + "% faster");
+    if (e.cityDefPlus) parts.push("+" + e.cityDefPlus + " city defense");
+    if (e.special) parts.push(String(e.special).replace(/[-,]/g, " ").replace(/\s+/g, " ").trim());
+    return parts.join(" · ") || "a new district";
+  }
+
+  // Click an empty hex beside your city (Cities v3 §2) → offer the districts you
+  // can raise there, each showing the benefit it brings.
+  function renderTileDistricts(isTurn) {
+    if (!districtBuildGroupEl || !districtBuildMenuEl) return;
+    districtBuildGroupEl.style.display = "none";
+    const key = selectedTileKey;
+    if (!isTurn || !key || !engine.DISTRICT_TYPES || !state.map.tiles[key]) return;
+    if (state.map.villages && state.map.villages[key]) return; // a village tile, not a district plot
+    const tile = state.map.tiles[key];
+    const c = engine.parseKey(key);
+    // Which of your cities does this hex sit beside (adjacent, worked by it, free slot, empty)?
+    let city = null;
+    for (const cid of human().cityIds) {
+      const cc = state.map.cities[cid];
+      if (!cc) continue;
+      if (!AXIAL_DIRS.some((d) => cc.position.q + d[0] === c.q && cc.position.r + d[1] === c.r)) continue;
+      if ((cc.districts || []).some((d) => d.hex === key)) continue;
+      if (engine.districtSlots && (cc.districts || []).length >= engine.districtSlots(cc)) continue;
+      const claim = engine.claimingCity ? engine.claimingCity(state, c) : null;
+      if (!claim || claim.id !== cc.id) continue;
+      city = cc; break;
+    }
+    if (!city) return;
+
+    const isWater = tile.terrain === "sea" || tile.terrain === "coast";
+    const civId = String(human().civ || HUMAN_ID || "").toLowerCase();
+    const cost = Math.round(40 * (state.costScale || 1));
+    const gold = (human() && human().gold) || 0;
+    districtBuildGroupEl.style.display = "";
+    districtBuildMenuEl.innerHTML = '<div class="db-head">Raise a district beside <b>' + (citySpriteName ? citySpriteName(HUMAN_ID, city) : "your city") + "</b> <span class=\"db-cost\">" + cost + "💰 each</span></div>";
+    let any = false;
+    for (const dt of engine.DISTRICT_TYPES) {
+      if (dt.id === "greatwork") continue;
+      const nm = engine.districtName && engine.districtName(dt.id, civId);
+      if (nm && nm.forbidden) continue;
+      if (dt.requires === "coast" && tile.terrain !== "coast") continue;
+      if (dt.requires !== "coast" && isWater) continue;
+      any = true;
+      const b = document.createElement("button");
+      b.className = "db-opt";
+      b.disabled = gold < cost;
+      b.innerHTML = '<span class="db-name">🏛 ' + districtLabel(dt.id, civId) + "</span><span class=\"db-benefit\">" + districtBenefitStr(dt) + "</span>";
+      if (gold >= cost) b.addEventListener("click", function () { apply({ type: "BUILD_DISTRICT", playerId: HUMAN_ID, cityId: city.id, districtType: dt.id, hex: key }); });
+      districtBuildMenuEl.appendChild(b);
+    }
+    if (!any) { districtBuildGroupEl.style.display = "none"; }
   }
 
   // city that works the tile. Hidden unless one of your own tiles is selected.

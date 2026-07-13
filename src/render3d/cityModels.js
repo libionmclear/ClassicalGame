@@ -40,6 +40,16 @@ export function buildCity(THREE, opts = {}) {
 
   // ---- houses in radial clusters with lanes
   const lanes = 3 + Math.floor(tier / 3);      // gaps the eye reads as streets
+  // Paved streets radiating from the plaza — turns a scatter of huts into a town.
+  for (let i = 0; i < lanes; i++) {
+    const a = (i / lanes) * Math.PI * 2;
+    const len = ringMax - plazaR * 0.4;
+    const street = new THREE.Mesh(new THREE.BoxGeometry(len, 0.012, 0.05 + tier * 0.004), mat(S.plaza, 0.25));
+    const mid = plazaR * 0.4 + len / 2;
+    street.position.set(Math.cos(a) * mid, 0.012, Math.sin(a) * mid);
+    street.rotation.y = -a;
+    g.add(street);
+  }
   for (let i = 0; i < nBuildings; i++) {
     const lane = Math.floor(rng() * lanes);
     const a = (lane / lanes) * Math.PI * 2 + (0.25 + rng() * 0.5) * ((Math.PI * 2) / lanes);
@@ -132,6 +142,16 @@ function makeHouse(THREE, S, rng, w, h, d, mat) {
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(S.wall, 1));
   body.position.y = h / 2;
   grp.add(body);
+  // Doorway + a window or two so the little houses read at board distance.
+  const door = new THREE.Mesh(new THREE.BoxGeometry(w * 0.26, h * 0.5, 0.006), mat(0x2b2018));
+  door.position.set((rng() - 0.5) * w * 0.4, h * 0.25, d / 2 + 0.003);
+  grp.add(door);
+  const nWin = rng() < 0.7 ? 1 + Math.floor(rng() * 2) : 0;
+  for (let i = 0; i < nWin; i++) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(w * 0.16, h * 0.18, 0.005), mat(0x3a4650));
+    win.position.set(-w * 0.3 + rng() * w * 0.6, h * (0.45 + rng() * 0.35), d / 2 + 0.003);
+    grp.add(win);
+  }
   const roofH = h * (0.5 + rng() * 0.3);
   let roof;
   switch (S.roof) {

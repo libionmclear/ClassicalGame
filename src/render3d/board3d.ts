@@ -71,7 +71,7 @@ export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; 
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 // A district built on a hex adjacent to a city (Cities v3 §5). t = the hex's
 // terrain (for surface height); style = the owning civ; work = Great Work id.
-export interface DistrictView { q: number; r: number; type: string; style: string; t?: string; accent?: string; pillaged?: boolean; work?: string; }
+export interface DistrictView { q: number; r: number; type: string; style: string; t?: string; accent?: string; pillaged?: boolean; work?: string; cq?: number; cr?: number; }
 // A segment between two tiles: rivers run along the shared edge, roads along the
 // centre line (from tile q,r to neighbour nq,nr).
 export interface EdgeView { q: number; r: number; nq: number; nr: number; }
@@ -804,6 +804,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
+  // Keyboard roaming (WASD / arrows) — glide the focus across the ground plane,
+  // relative to where the camera is facing, at a speed that scales with zoom.
+  const UP = new THREE.Vector3(0, 1, 0);
+  const panKeys = new Set<string>();
+  const PAN_VEC: Record<string, [number, number]> = { w: [0, 1], s: [0, -1], a: [-1, 0], d: [1, 0], arrowup: [0, 1], arrowdown: [0, -1], arrowleft: [-1, 0], arrowright: [1, 0] };
+  const isTyping = () => { const el = document.activeElement as HTMLElement | null; return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable); };
+  const onKeyDown = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); if (PAN_VEC[k] && !isTyping()) { panKeys.add(k); if (k.startsWith("arrow")) e.preventDefault(); } };
+  const onKeyUp = (e: KeyboardEvent) => { panKeys.delete(e.key.toLowerCase()); };
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+
   const ambLight = new THREE.AmbientLight(0xbfd4ff, 0.62);
   const hemiLight = new THREE.HemisphereLight(0xcfe4ff, 0x36342f, 0.5);
   scene.add(ambLight, hemiLight);
@@ -974,13 +985,33 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     for (const d of view.districts ?? []) {
       const w = axialToWorld(d.q, d.r);
       const top = topOf(d.t || "plains");
+      // Attach the district to its city: shift it onto the city-facing edge of its
+      // hex and lay a short paved path back toward the centre so the two read as one
+      // growing settlement, not an isolated build.
+      let px = w.x, pz = w.z; let ux = 0, uz = 0;
+      if (d.cq != null && d.cr != null) {
+        const cw = axialToWorld(d.cq, d.cr);
+        const dx = cw.x - w.x, dz = cw.z - w.z, len = Math.hypot(dx, dz) || 1;
+        ux = dx / len; uz = dz / len;
+        px = w.x + ux * SIZE * 0.42;
+        pz = w.z + uz * SIZE * 0.42;
+      }
       const seed = (((d.q * 73856093) ^ (d.r * 19349663)) >>> 0) % 100000;
       const model = buildDistrict(THREE, {
         type: d.type, style: cityStyleFor(d.style), seed, accent: d.accent, pillaged: d.pillaged, work: d.work
       }) as THREE.Group;
-      model.scale.setScalar(0.9);       // fit the hex, matching the city scale
-      model.position.set(w.x, top + 0.01, w.z);
+      model.scale.setScalar(0.85);
+      model.position.set(px, top + 0.01, pz);
+      if (model.rotation) model.rotation.y = Math.atan2(-uz, ux); // face the approach
       districtGroup.add(model);
+      if (ux || uz) {
+        const plen = SIZE * 0.7;
+        const path = new THREE.Mesh(new THREE.BoxGeometry(plen, 0.02, SIZE * 0.13), new THREE.MeshStandardMaterial({ color: 0xbdae8c, roughness: 0.96, metalness: 0, flatShading: true }));
+        path.rotation.y = Math.atan2(-uz, ux);
+        path.position.set(px + ux * plen * 0.5, top + 0.02, pz + uz * plen * 0.5);
+        path.receiveShadow = true;
+        districtGroup.add(path);
+      }
     }
   }
 
@@ -1581,6 +1612,21 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   let stormy = false;
   const loop = () => {
     if (!running) return;
+    // WASD / arrow-key roaming: slide target + camera together across the ground.
+    if (panKeys.size && !isTyping()) {
+      const fwd = new THREE.Vector3();
+      camera.getWorldDirection(fwd); fwd.y = 0;
+      if (fwd.lengthSq() > 1e-6) {
+        fwd.normalize();
+        const right = new THREE.Vector3().crossVectors(fwd, UP).normalize();
+        const move = new THREE.Vector3();
+        for (const k of panKeys) { const v = PAN_VEC[k]; move.addScaledVector(right, v[0]); move.addScaledVector(fwd, v[1]); }
+        if (move.lengthSq() > 1e-6) {
+          move.normalize().multiplyScalar(camera.position.distanceTo(controls.target) * 0.016);
+          controls.target.add(move); camera.position.add(move);
+        }
+      }
+    }
     controls.update();
     // Keep the focus on the ground plane and inside the map. With the target
     // pinned to y=0 and the polar angle bounded below the horizon, the eye stays
@@ -1744,7 +1790,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     onHover(fn) { hoverFn = fn; },
     strike,
     resize,
-    dispose() { running = false; renderer.dispose(); }
+    dispose() { running = false; window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); renderer.dispose(); }
   };
 }
 
