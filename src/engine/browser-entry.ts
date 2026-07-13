@@ -57,7 +57,7 @@ import { generateMap, MAP_SIZES, TURN_LIMITS, CIV_ROSTER, DEFAULT_PLAYERS, MAX_P
 import { EVENTS, getEvent } from "./events";
 import { BRANCHES } from "./branch-data";
 import { cityTier, districtSlots, districtType, districtName, DISTRICT_TYPES, GREAT_WORKS, greatWork } from "./districts";
-import { relationBand, getRelation, getPair, pairKey, RELATION_BAND_LABELS, isAtWar, isOathbreaker, hasAgreement, playerWarWeariness, canProposeAgreement, napBlocksDeclaration, agreementBand, bandAtLeast, alliesOf, isFullAlly, agreementHeldTurns } from "./diplomacy";
+import { relationBand, getRelation, getPair, pairKey, RELATION_BAND_LABELS, isAtWar, isOathbreaker, hasAgreement, playerWarWeariness, canProposeAgreement, napBlocksDeclaration, agreementBand, bandAtLeast, alliesOf, isFullAlly, agreementHeldTurns, isVassal, vassalsOf, topOverlord, canDemandVassalage } from "./diplomacy";
 
 // Every symbol the browser demo (game.js) reads off window.HegemonEngine must be
 // re-exported here — esbuild only surfaces what this entry module exports.
@@ -148,5 +148,9 @@ export {
   bandAtLeast,
   alliesOf,
   isFullAlly,
-  agreementHeldTurns
+  agreementHeldTurns,
+  isVassal,
+  vassalsOf,
+  topOverlord,
+  canDemandVassalage
 };

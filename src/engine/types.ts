@@ -170,6 +170,10 @@ export interface Player {
   oathbreakerUntil?: number;
   /** A diplomatic offer awaiting this player's decision (Diplomacy §2). */
   pendingProposal?: PendingProposal;
+  /** Overlord's id if this player is a vassal (Diplomacy §4); absent = sovereign. */
+  vassalOf?: string;
+  /** Overlord's military strength when vassalage began (rebellion trigger). */
+  overlordMilBaseline?: number;
 }
 
 export interface GameMap {
@@ -241,8 +245,6 @@ export interface DiploPair {
   denouncedAt?: number;
   /** One-way tribute for guaranteed peace. */
   tribute?: { to: string; amount: number; expires: number } | null;
-  /** Set on the vassal's side when subjugated. */
-  vassalOf?: string | null;
   /** Turn the pair entered its current war (for war-weariness); absent = at peace. */
   warSince?: number;
 }
@@ -436,13 +438,31 @@ export interface DenounceAction {
   playerId: string;
   targetId: string;
 }
+// Diplomacy §4 — propose a vassalage: DEMAND (vassalId === targetId, needs a 2:1
+// military edge) or SUBMIT (vassalId === playerId). The target decides.
+export interface ProposeVassalageAction {
+  type: "PROPOSE_VASSALAGE";
+  playerId: string;
+  targetId: string;
+  /** Which party becomes the vassal — playerId (submit) or targetId (demand). */
+  vassalId: string;
+}
+// Diplomacy §4 — an overlord frees a vassal.
+export interface ReleaseVassalAction {
+  type: "RELEASE_VASSAL";
+  playerId: string;
+  /** The vassal being released. */
+  targetId: string;
+}
 
 /** A diplomatic proposal awaiting a player's yes/no (like a pending event). */
 export interface PendingProposal {
   from: string;
-  kind: "trade-pact" | "nap" | "tribute" | "passage" | "defensive-alliance" | "full-alliance";
+  kind: "trade-pact" | "nap" | "tribute" | "passage" | "defensive-alliance" | "full-alliance" | "vassalage";
   amount?: number;
   turns?: number;
+  /** For a vassalage offer — which party would become the vassal. */
+  vassalId?: string;
 }
 
 export type GameAction =
@@ -470,7 +490,9 @@ export type GameAction =
   | ProposeAgreementAction
   | ResolveProposalAction
   | OfferTributeAction
-  | DenounceAction;
+  | DenounceAction
+  | ProposeVassalageAction
+  | ReleaseVassalAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

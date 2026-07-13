@@ -21,8 +21,8 @@ import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
 import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
-import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD } from "./diplomacy";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction } from "./types";
+import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE } from "./diplomacy";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -1533,6 +1533,17 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
     state.weather.forecast = generateWeatherByRegion(state, state.turn + 1);
     applyRelationDrift(state); // long-peace warming / war cooling, once per game turn
     expireDiplomacy(state);    // drop lapsed agreements + tribute
+    // Vassal revolts: an overlord grown weak, or a content vassal that hates you,
+    // throws off the yoke — independence + a war of secession (§4).
+    for (const p of state.players) {
+      if (p.vassalOf && shouldRebel(state, p.id, (cid) => computeCityStability(state, cid))) {
+        const overlord = p.vassalOf;
+        p.vassalOf = undefined;
+        p.overlordMilBaseline = undefined;
+        adjustRelation(state, p.id, overlord, -60);
+        enterWar(state, p.id, overlord);
+      }
+    }
   }
 
   const nextPlayer = getCurrentPlayer(state);
@@ -1910,11 +1921,12 @@ export function computeScores(state: GameState): Record<string, number> {
 export function getVictoryStatus(state: GameState): VictoryStatus {
   const capitals = Object.values(state.map.cities).filter((city) => city.isCapital);
 
-  // Domination: one player holds every capital.
+  // Domination: one sovereign controls every capital — directly or through vassals
+  // (§4: a hegemon can win without razing the world).
   if (capitals.length > 0) {
-    const owner = capitals[0].ownerId;
-    if (capitals.every((city) => city.ownerId === owner)) {
-      return { winnerId: owner, type: "domination", reason: `${owner} controls all capitals` };
+    const owner = topOverlord(state, capitals[0].ownerId);
+    if (capitals.every((city) => topOverlord(state, city.ownerId) === owner)) {
+      return { winnerId: owner, type: "domination", reason: `${owner} controls all capitals (directly or through vassals)` };
     }
   }
 
@@ -2043,7 +2055,11 @@ function applyResolveProposal(state: GameState, action: ResolveProposalAction): 
   if (prop.kind === "trade-pact" || prop.kind === "passage" || prop.kind === "defensive-alliance" || prop.kind === "full-alliance") {
     addAgreement(state, action.playerId, from, prop.kind, 0); // standing until war / denounce
   } else if (prop.kind === "nap") addAgreement(state, action.playerId, from, "nap", state.turn + NAP_TURNS);
-  else if (prop.kind === "tribute") {
+  else if (prop.kind === "vassalage") {
+    const vassalId = prop.vassalId as string;
+    const overlordId = vassalId === from ? action.playerId : from;
+    establishVassalage(state, overlordId, vassalId);
+  } else if (prop.kind === "tribute") {
     const pair = ensurePair(state, action.playerId, from);
     pair.warSince = undefined; // tribute buys peace
     pair.tribute = { to: action.playerId, amount: prop.amount ?? 0, expires: state.turn + (prop.turns ?? TRIBUTE_MIN_TURNS) };
@@ -2057,6 +2073,31 @@ function applyDenounce(state: GameState, action: DenounceAction): void {
   if (action.targetId === action.playerId) throw new Error("You cannot denounce yourself");
   if (!state.playersById[action.targetId]) throw new Error("Unknown civ");
   denounce(state, action.playerId, action.targetId);
+}
+
+// Diplomacy §4 — put a vassalage (demand or submission) before the target.
+function applyProposeVassalage(state: GameState, action: ProposeVassalageAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const target = state.playersById[action.targetId];
+  if (!target) throw new Error("Unknown civ");
+  if (action.targetId === action.playerId) throw new Error("You cannot vassalise yourself");
+  if (target.pendingProposal) throw new Error("They are still weighing another offer");
+  if (action.vassalId !== action.playerId && action.vassalId !== action.targetId) throw new Error("The vassal must be one of the two parties");
+  if (isVassal(state, action.vassalId)) throw new Error("That civ already serves an overlord");
+  const overlordId = action.vassalId === action.playerId ? action.targetId : action.playerId;
+  // A DEMAND (you propose the OTHER submit) needs the 2:1 edge; a submission does not.
+  if (action.vassalId === action.targetId) {
+    const ok = canDemandVassalage(state, overlordId, action.vassalId);
+    if (ok !== true) throw new Error(ok);
+  }
+  target.pendingProposal = { from: action.playerId, kind: "vassalage", vassalId: action.vassalId };
+}
+
+function applyReleaseVassal(state: GameState, action: ReleaseVassalAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const vassal = state.playersById[action.targetId];
+  if (!vassal || vassal.vassalOf !== action.playerId) throw new Error("That civ is not your vassal");
+  releaseVassal(state, action.playerId, action.targetId);
 }
 
 // Per-turn diplomacy income for the player ending their turn: a standing Trade
@@ -2077,6 +2118,16 @@ function applyDiplomacyIncome(state: GameState, player: Player): void {
       player.gold -= pay;
       if (receiver) receiver.gold += pay;
       if (pay < trib.amount) { pair.tribute = null; adjustRelation(state, player.id, other, -10); }
+    }
+  }
+  // A vassal remits a share of its gold income to its overlord (§4).
+  if (player.vassalOf) {
+    const overlord = state.playersById[player.vassalOf];
+    if (overlord) {
+      const share = Math.floor(VASSAL_GOLD_SHARE * Math.max(0, computePlayerIncome(state, player.id).gold));
+      const pay = Math.min(share, player.gold);
+      player.gold -= pay;
+      overlord.gold += pay;
     }
   }
 }
@@ -2171,6 +2222,12 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "DENOUNCE":
       applyDenounce(state, action);
+      break;
+    case "PROPOSE_VASSALAGE":
+      applyProposeVassalage(state, action);
+      break;
+    case "RELEASE_VASSAL":
+      applyReleaseVassal(state, action);
       break;
     default: {
       const unknownAction: never = action;

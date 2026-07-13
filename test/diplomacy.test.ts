@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createInitialGameState, applyAction, computeCityStability } from "../src/engine";
+import { createInitialGameState, applyAction, computeCityStability, getVictoryStatus } from "../src/engine";
 import {
   pairKey, relationBand, getRelation, getPair, giftRelationGain,
   applyRelationDrift, PEACE_WARM_CAP, ensurePair,
   isAtWar, isOathbreaker, enterWar, playerWarWeariness, WAR_DECLARE_RELATION, OATHBREAKER_VICTIM_HIT,
-  hasAgreement, canProposeAgreement, aiAcceptsProposal
+  hasAgreement, canProposeAgreement, aiAcceptsProposal,
+  canDemandVassalage, establishVassalage, isVassal
 } from "../src/engine/diplomacy";
 import type { GameState } from "../src/engine/types";
 
@@ -295,4 +296,83 @@ test("honouring an alliance never brands you, even against a NAP partner", () =>
   enterWar(s, "p3", "p2"); // p3 attacks p1's ally → p1 auto-joins vs p3
   assert.ok(isAtWar(s, "p1", "p3"));
   assert.equal(isOathbreaker(s, "p1"), false, "an ally honouring its pact is not an oathbreaker");
+});
+
+// ---- E2: vassalage --------------------------------------------------------
+
+function powerState(): GameState {
+  const tiles: Record<string, { terrain: "plains"; region: string }> = {};
+  for (let r = 0; r < 5; r += 1) for (let q = 0; q < 5; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
+  const units: NonNullable<NonNullable<Parameters<typeof createInitialGameState>[0]["map"]>["units"]> = {};
+  for (let i = 0; i < 4; i += 1) units["u" + i] = { id: "u" + i, type: "warrior", ownerId: "p1", position: { q: i, r: 0 } };
+  units["w"] = { id: "w", type: "warrior", ownerId: "p2", position: { q: 0, r: 2 } };
+  return createInitialGameState({
+    seed: "vass",
+    players: [{ id: "p1", civ: "Rome", gold: 50 }, { id: "p2", civ: "Carthage", gold: 50 }, { id: "p3", civ: "Egypt", gold: 50 }],
+    map: {
+      width: 5, height: 5, regions: ["core"], tiles, units,
+      cities: {
+        c1: { id: "c1", ownerId: "p1", position: { q: 4, r: 4 }, population: 2, isCapital: true, hp: 24, maxHp: 24 },
+        c2: { id: "c2", ownerId: "p2", position: { q: 0, r: 4 }, population: 8, isCapital: true, hp: 24, maxHp: 24 }
+      }
+    }
+  });
+}
+
+test("DEMAND vassalage needs a 2:1 military edge", () => {
+  const s = powerState(); // p1 strength 6, p2 strength 3
+  assert.equal(canDemandVassalage(s, "p1", "p2"), true);
+  assert.notEqual(canDemandVassalage(s, "p2", "p1"), true, "the weak cannot demand submission of the strong");
+});
+
+test("accepting a demand makes a vassal whose capital counts for domination", () => {
+  let s = powerState();
+  s = applyAction(s, { type: "PROPOSE_VASSALAGE", playerId: "p1", targetId: "p2", vassalId: "p2" });
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" });
+  s = applyAction(s, { type: "RESOLVE_PROPOSAL", playerId: "p2", accept: true });
+  assert.ok(isVassal(s, "p2"));
+  assert.equal(s.playersById["p2"].vassalOf, "p1");
+  assert.equal(getVictoryStatus(s).winnerId, "p1", "a hegemon wins through its vassal's capital");
+});
+
+test("a vassal remits a quarter of its gold income to the overlord", () => {
+  let s = powerState();
+  establishVassalage(s, "p1", "p2");
+  s = applyAction(s, { type: "END_TURN", playerId: "p1" });   // p1 takes its own income
+  const p1mid = s.playersById["p1"].gold;
+  s = applyAction(s, { type: "END_TURN", playerId: "p2" });   // p2 remits its share
+  assert.ok(s.playersById["p1"].gold > p1mid, "the overlord received the vassal's remittance");
+});
+
+test("a vassal joins its overlord's defensive war", () => {
+  const s = powerState();
+  establishVassalage(s, "p1", "p2");
+  enterWar(s, "p3", "p1");                                     // p3 attacks the overlord
+  assert.ok(isAtWar(s, "p2", "p3"), "the vassal defends its overlord");
+});
+
+test("a vassal revolts when the overlord's army halves", () => {
+  const s = powerState();
+  establishVassalage(s, "p1", "p2");                           // baseline p1 strength = 6
+  for (const id of Object.keys(s.map.units)) if (s.map.units[id].ownerId === "p1") delete s.map.units[id];
+  s.playersById["p1"].unitIds = [];                            // p1 strength now 2 ( <= 3 )
+  let cur = s;
+  const start = cur.turn;
+  for (let g = 0; cur.turn === start && g < 8; g += 1) cur = applyAction(cur, { type: "END_TURN", playerId: cur.players[cur.currentPlayerIndex].id });
+  assert.equal(isVassal(cur, "p2"), false, "the vassal threw off the yoke");
+  assert.ok(isAtWar(cur, "p1", "p2"), "a war of secession");
+});
+
+test("a vassal cannot make its own alliances", () => {
+  const s = powerState();
+  establishVassalage(s, "p1", "p2");
+  ensurePair(s, "p2", "p3").relation = 60;
+  assert.notEqual(canProposeAgreement(s, "p2", "p3", "defensive-alliance"), true, "a vassal follows its overlord's policy");
+});
+
+test("an overlord can release its vassal", () => {
+  let s = powerState();
+  establishVassalage(s, "p1", "p2");
+  s = applyAction(s, { type: "RELEASE_VASSAL", playerId: "p1", targetId: "p2" });
+  assert.equal(isVassal(s, "p2"), false);
 });

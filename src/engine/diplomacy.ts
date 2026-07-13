@@ -164,7 +164,7 @@ export function enterWar(state: GameState, aggressorId: string, targetId: string
   // Defensive auto-join (§2/§9): the DEFENDER's allies enter the war against the
   // aggressor — never on the aggressor's own aggression, and one level (no cascade).
   if (!opts?.autoJoin) {
-    for (const ally of alliesOf(state, targetId)) {
+    for (const ally of defensivePartnersOf(state, targetId)) {
       if (ally !== aggressorId) enterWar(state, ally, aggressorId, { autoJoin: true });
     }
   }
@@ -264,6 +264,7 @@ export function canProposeAgreement(state: GameState, from: string, to: string, 
   if (isAtWar(state, from, to)) return "Make peace before proposing a pact";
   if (state.playersById[to].pendingProposal) return "They are still weighing another offer";
   if (hasAgreement(state, from, to, type)) return "That pact already stands";
+  if ((type === "defensive-alliance" || type === "full-alliance") && (isVassal(state, from) || isVassal(state, to))) return "A vassal follows its overlord's foreign policy";
   if (!bandAtLeast(getRelation(state, from, to), agreementBand(type))) return `Relations are too cold for that (need ${agreementBand(type)})`;
   if (!agreementPrereqMet(state, from, to, type)) {
     return type === "defensive-alliance" ? "A non-aggression pact must stand 15 turns first" : "A defensive alliance must stand 15 turns first";
@@ -307,7 +308,7 @@ export function militaryStrength(state: GameState, playerId: string): number {
 // Deterministic AI verdict on an offer put to `me` by `from`. Utility = relation
 // band + military ratio (personality weights are Phase 2).
 export function aiAcceptsProposal(
-  state: GameState, me: string, from: string, kind: ProposableAgreement | "tribute", amount = 0
+  state: GameState, me: string, from: string, kind: ProposableAgreement | "tribute" | "vassalage", amount = 0, vassalId?: string
 ): boolean {
   if (me === from) return false;
   if (isOathbreaker(state, from)) return false; // nobody signs with an oathbreaker
@@ -318,9 +319,89 @@ export function aiAcceptsProposal(
   if (kind === "passage") return !isAtWar(state, me, from) && bandAtLeast(rel, "cordial");
   // Alliances: only with a trusted friend (personality weighting is E4).
   if (kind === "defensive-alliance" || kind === "full-alliance") return !isAtWar(state, me, from) && bandAtLeast(rel, "friendly");
+  if (kind === "vassalage") {
+    // If I'd be the vassal, submit only when clearly outmatched (survival);
+    // if I'd be the overlord, a free vassal is always welcome.
+    if (vassalId === me) return theirs >= mine * VASSAL_DEMAND_RATIO;
+    return true;
+  }
   // tribute: `from` offers to pay `me`. Take the gold unless I dominate (then I'd
   // rather keep the war option) — a raider/strong power refuses to be bought off.
   return amount >= 4 && rel >= -40 && mine <= theirs * 1.8;
+}
+
+// ---- vassalage (§4, slice E2) -------------------------------------------
+
+export const VASSAL_GOLD_SHARE = 0.25;   // of gold income, paid to the overlord
+export const VASSAL_DEMAND_RATIO = 2;    // military edge to DEMAND submission
+export const REBEL_MIL_FRACTION = 0.5;   // overlord's strength halves → revolt
+export const REBEL_STABILITY = 3;        // a content vassal that hates you revolts
+
+export function isVassal(state: GameState, playerId: string): boolean {
+  return !!state.playersById[playerId]?.vassalOf;
+}
+export function vassalsOf(state: GameState, overlordId: string): string[] {
+  return state.players.filter((p) => p.vassalOf === overlordId).map((p) => p.id);
+}
+// Follow the vassalage chain to the sovereign at the top (who counts for domination).
+export function topOverlord(state: GameState, playerId: string): string {
+  let cur = playerId, guard = 0;
+  while (state.playersById[cur]?.vassalOf && guard++ < 32) cur = state.playersById[cur]!.vassalOf!;
+  return cur;
+}
+// Who joins `playerId`'s DEFENSIVE wars: alliance partners + overlord + vassals.
+export function defensivePartnersOf(state: GameState, playerId: string): string[] {
+  const set = new Set(alliesOf(state, playerId));
+  const of = state.playersById[playerId]?.vassalOf;
+  if (of) set.add(of);
+  for (const v of vassalsOf(state, playerId)) set.add(v);
+  set.delete(playerId);
+  return [...set];
+}
+
+// May `overlord` DEMAND `vassal` submit? Needs a 2:1 military edge and a free vassal.
+export function canDemandVassalage(state: GameState, overlord: string, vassal: string): true | string {
+  if (overlord === vassal) return "You cannot vassalise yourself";
+  if (!state.playersById[vassal] || !state.playersById[overlord]) return "Unknown civ";
+  if (isVassal(state, vassal)) return "They already serve an overlord";
+  if (state.playersById[vassal].pendingProposal) return "They are weighing another offer";
+  if (militaryStrength(state, overlord) < VASSAL_DEMAND_RATIO * (militaryStrength(state, vassal) || 1)) return "You need a 2:1 military edge to demand submission";
+  return true;
+}
+
+// Establish overlord→vassal: record it, snapshot the overlord's strength, end any
+// war between them, and warm relations (a protectorate is not an enmity).
+export function establishVassalage(state: GameState, overlordId: string, vassalId: string): void {
+  const vassal = state.playersById[vassalId];
+  if (!vassal || overlordId === vassalId) return;
+  vassal.vassalOf = overlordId;
+  vassal.overlordMilBaseline = militaryStrength(state, overlordId);
+  const pair = ensurePair(state, overlordId, vassalId);
+  pair.warSince = undefined;
+  pair.tribute = null;
+  pair.relation = clampRelation(Math.max(pair.relation, 15)); // protectorate → at least cordial
+}
+
+// Free a vassal (by the overlord's choice).
+export function releaseVassal(state: GameState, overlordId: string, vassalId: string): void {
+  const vassal = state.playersById[vassalId];
+  if (!vassal || vassal.vassalOf !== overlordId) return;
+  vassal.vassalOf = undefined;
+  vassal.overlordMilBaseline = undefined;
+  adjustRelation(state, overlordId, vassalId, ACCEPT_RELATION); // gratitude
+}
+
+// Does this vassal revolt now? Overlord's army has halved since submission, OR the
+// vassal is content (stability ≥ +3) while it Hates its overlord (§4).
+export function shouldRebel(state: GameState, vassalId: string, cityStability: (cityId: string) => number): boolean {
+  const vassal = state.playersById[vassalId];
+  if (!vassal?.vassalOf) return false;
+  const overlord = vassal.vassalOf;
+  if (vassal.overlordMilBaseline != null && militaryStrength(state, overlord) <= vassal.overlordMilBaseline * REBEL_MIL_FRACTION) return true;
+  if (relationBand(getRelation(state, vassalId, overlord)) === "hostile") {
+    for (const cid of vassal.cityIds) if (cityStability(cid) >= REBEL_STABILITY) return true;
+  }
+  return false;
 }
 
 function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)); }

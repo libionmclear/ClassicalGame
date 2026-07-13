@@ -590,7 +590,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
       // Answer any diplomatic offer on the table before anything else.
       if (!player.pendingProposal) return null;
       const p = player.pendingProposal;
-      return { type: "RESOLVE_PROPOSAL", playerId, accept: aiAcceptsProposal(state, playerId, p.from, p.kind, p.amount ?? 0) };
+      return { type: "RESOLVE_PROPOSAL", playerId, accept: aiAcceptsProposal(state, playerId, p.from, p.kind, p.amount ?? 0, p.vassalId) };
     },
     () => {
       // Resolve any pending Crossroads dilemma first (pick the better payoff).
