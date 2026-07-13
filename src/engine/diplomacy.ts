@@ -84,17 +84,96 @@ export function giftRelationGain(amount: number, currentRelation: number): numbe
 
 export const LONG_PEACE_DRIFT = 0.5;
 // Passive peace warms relations, but only up to Cordial — Friendly must be
-// EARNED with active agreements (arrives in slice D3). War / betrayal drivers
-// that pull relations down arrive in D2. So today this is the one drift term.
+// EARNED with active agreements (slice D3). Pairs AT WAR cool instead of warming.
 export const PEACE_WARM_CAP = 40;
+export const WAR_COOL_DRIFT = 1;
 
-// Apply the once-per-turn "long peace" warming to every pair below the cap.
+// Apply the once-per-turn relation drift: at-war pairs cool, peaceful pairs warm
+// (up to the cap). Called from applyEndTurn when the game turn advances.
 export function applyRelationDrift(state: GameState): void {
   if (!state.diplomacy) return;
   for (const key of Object.keys(state.diplomacy)) {
     const p = state.diplomacy[key];
-    if (p.relation < PEACE_WARM_CAP) p.relation = Math.min(PEACE_WARM_CAP, p.relation + LONG_PEACE_DRIFT);
+    if (p.warSince != null) p.relation = clampRelation(p.relation - WAR_COOL_DRIFT);
+    else if (p.relation < PEACE_WARM_CAP) p.relation = Math.min(PEACE_WARM_CAP, p.relation + LONG_PEACE_DRIFT);
   }
+}
+
+// ---- war & reputation (§3) ----------------------------------------------
+
+export const WAR_DECLARE_RELATION = -30;   // opening hostilities cools the pair
+export const OATHBREAKER_TURNS = 25;
+export const OATHBREAKER_VICTIM_HIT = -40;
+export const OATHBREAKER_WORLD_HIT = -15;
+export const WAR_WEARINESS_PERIOD = 15;    // −1 stability per this many war turns
+
+// A binding pact whose breach makes you an Oathbreaker.
+const BINDING_PACTS = new Set(["nap", "defensive-alliance", "full-alliance"]);
+
+export function isAtWar(state: GameState, a: string, b: string): boolean {
+  if (a === b) return false;
+  return getPair(state, a, b)?.warSince != null;
+}
+
+// Does a non-expired agreement of `type` stand between the pair?
+export function hasAgreement(state: GameState, a: string, b: string, type: string): boolean {
+  const p = getPair(state, a, b);
+  if (!p) return false;
+  return p.agreements.some((ag) => ag.type === type && (ag.expires === 0 || ag.expires > state.turn));
+}
+export function hasNap(state: GameState, a: string, b: string): boolean {
+  const p = getPair(state, a, b);
+  return !!p && p.agreements.some((ag) => BINDING_PACTS.has(ag.type) && (ag.expires === 0 || ag.expires > state.turn));
+}
+
+export function isOathbreaker(state: GameState, playerId: string): boolean {
+  const p = state.playersById[playerId];
+  return !!p && p.oathbreakerUntil != null && p.oathbreakerUntil > state.turn;
+}
+
+// Brand a player an Oathbreaker: the 25-turn mark, −40 with the victim, −15 with
+// everyone else (§3). The stability / merc-price bite is read where those are
+// computed (computeCityStability; merc price when a hire path exists).
+export function brandOathbreaker(state: GameState, playerId: string, victimId: string): void {
+  const p = state.playersById[playerId];
+  if (!p) return;
+  p.oathbreakerUntil = state.turn + OATHBREAKER_TURNS;
+  for (const other of state.players) {
+    if (other.id === playerId) continue;
+    adjustRelation(state, playerId, other.id, other.id === victimId ? OATHBREAKER_VICTIM_HIT : OATHBREAKER_WORLD_HIT);
+  }
+}
+
+// Enter a state of war (idempotent — only the peace→war transition has effects).
+// Breaking a binding pact (NAP/alliance) — by a formal declaration OR a surprise
+// blow — brands the aggressor an Oathbreaker. Plain undeclared war between civs
+// with no pact is just war (design call: otherwise every AI war brands everyone).
+// Returns true if this call started the war.
+export function enterWar(state: GameState, aggressorId: string, targetId: string): boolean {
+  if (aggressorId === targetId) return false;
+  const pair = ensurePair(state, aggressorId, targetId);
+  if (pair.warSince != null) return false; // already at war
+  const pactBreak = hasNap(state, aggressorId, targetId);
+  pair.warSince = state.turn;
+  pair.agreements = []; // war voids every agreement on the pair
+  pair.tribute = null;
+  pair.relation = clampRelation(pair.relation + WAR_DECLARE_RELATION);
+  if (pactBreak) brandOathbreaker(state, aggressorId, targetId);
+  return true;
+}
+
+// −1 city stability per WAR_WEARINESS_PERIOD turns in the player's longest war (§3).
+export function playerWarWeariness(state: GameState, playerId: string): number {
+  if (!state.diplomacy) return 0;
+  let worst = 0;
+  for (const key of Object.keys(state.diplomacy)) {
+    const [a, b] = key.split("|");
+    if (a !== playerId && b !== playerId) continue;
+    const p = state.diplomacy[key];
+    if (p.warSince == null) continue;
+    worst = Math.max(worst, Math.floor((state.turn - p.warSince) / WAR_WEARINESS_PERIOD));
+  }
+  return worst;
 }
 
 function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)); }

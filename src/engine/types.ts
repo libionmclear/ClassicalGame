@@ -166,6 +166,8 @@ export interface Player {
     /** Flat move / heal from equipped cards (Slice 4). */
     movePlus?: number; navalMovePlus?: number; healPlus?: number;
   };
+  /** Turn the Oathbreaker brand lifts (Diplomacy §3); absent = not branded. */
+  oathbreakerUntil?: number;
 }
 
 export interface GameMap {
@@ -233,8 +235,6 @@ export interface DiploPair {
   agreements: DiploAgreement[];
   /** Turn a Denounce was issued (starts the pre-hostilities cooldown). */
   denouncedAt?: number;
-  /** Turn the Oathbreaker brand lifts, if branded. */
-  oathbreakerUntil?: number;
   /** One-way tribute for guaranteed peace. */
   tribute?: { to: string; amount: number; expires: number } | null;
   /** Set on the vassal's side when subjugated. */
@@ -396,6 +396,13 @@ export interface GiftGoldAction {
   amount: number;
 }
 
+// Diplomacy §3 — a formal war declaration (the alternative to a surprise attack).
+export interface DeclareWarAction {
+  type: "DECLARE_WAR";
+  playerId: string;
+  targetId: string;
+}
+
 export type GameAction =
   | MoveUnitAction
   | AttackAction
@@ -416,7 +423,8 @@ export type GameAction =
   | RenameCityAction
   | BuildDistrictAction
   | RepairDistrictAction
-  | GiftGoldAction;
+  | GiftGoldAction
+  | DeclareWarAction;
 
 export interface VictoryStatus {
   winnerId: string | null;

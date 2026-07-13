@@ -21,8 +21,8 @@ import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
 import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
-import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain } from "./diplomacy";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction } from "./types";
+import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness } from "./diplomacy";
+import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -577,6 +577,7 @@ function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTA
   if (attacker.ownerId !== action.playerId) throw new Error("Cannot attack with enemy unit");
   if (defender.ownerId === action.playerId) throw new Error("Cannot attack friendly unit");
   if (isEmbarked(state, attacker)) throw new Error("Embarked units must land before they can fight");
+  enterWar(state, action.playerId, defender.ownerId); // the first blow opens a war (§3)
 
   const preview = computeCombatPreview(state, attacker.id, defender.id);
   attacker.hp = preview.attackerRemainingHp;
@@ -639,6 +640,7 @@ function applyAttackCity(state: GameState, action: AttackCityAction): void {
   if (attacker.ownerId !== action.playerId) throw new Error("Cannot attack city with enemy unit");
   if (city.ownerId === action.playerId) throw new Error("Cannot attack friendly city");
   if (isEmbarked(state, attacker)) throw new Error("Embarked units must land before they can assault a city");
+  enterWar(state, action.playerId, city.ownerId); // assaulting a city opens a war (§3)
 
   const attackerDef = UNITS[attacker.type];
   if (distance(attacker.position, city.position) > attackerDef.range) {
@@ -846,6 +848,9 @@ export function computeCityStability(state: GameState, cityId: string): number {
   if (owner) {
     for (const techId of Object.keys(TECH_STABILITY)) if (owner.techs.includes(techId)) s += TECH_STABILITY[techId];
     s += owner.perks?.stability ?? 0;
+    // Diplomacy §3: an Oathbreaker brand shames every city; long wars breed weariness.
+    if (isOathbreaker(state, owner.id)) s -= 1;
+    s -= playerWarWeariness(state, owner.id);
   }
   if (Object.values(state.map.units).some((u) => u.ownerId === city.ownerId && u.position.q === city.position.q && u.position.r === city.position.r)) s += 1;
   if (city.capturedTurn != null) s -= Math.max(0, 2 - (state.turn - city.capturedTurn));
@@ -1987,6 +1992,16 @@ function applyGiftGold(state: GameState, action: GiftGoldAction): void {
   target.gold += amount;
   adjustRelation(state, action.playerId, action.targetId, giftRelationGain(amount, getRelation(state, action.playerId, action.targetId)));
 }
+
+// Diplomacy §3 — a formal war declaration (the defender's 1-turn alert is
+// flavour for now). Breaking a NAP this way brands you (handled in enterWar).
+function applyDeclareWar(state: GameState, action: DeclareWarAction): void {
+  assertPlayerTurn(state, action.playerId);
+  if (action.targetId === action.playerId) throw new Error("You cannot declare war on yourself");
+  if (!state.playersById[action.targetId]) throw new Error("Unknown target for the declaration");
+  if (isAtWar(state, action.playerId, action.targetId)) throw new Error("You are already at war");
+  enterWar(state, action.playerId, action.targetId);
+}
 function applyRepairDistrict(state: GameState, action: RepairDistrictAction): void {
   assertPlayerTurn(state, action.playerId);
   const city = state.map.cities[action.cityId];
@@ -2063,6 +2078,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "GIFT_GOLD":
       applyGiftGold(state, action);
+      break;
+    case "DECLARE_WAR":
+      applyDeclareWar(state, action);
       break;
     default: {
       const unknownAction: never = action;

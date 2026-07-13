@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createInitialGameState, applyAction } from "../src/engine";
+import { createInitialGameState, applyAction, computeCityStability } from "../src/engine";
 import {
   pairKey, relationBand, getRelation, getPair, giftRelationGain,
-  applyRelationDrift, PEACE_WARM_CAP, ensurePair
+  applyRelationDrift, PEACE_WARM_CAP, ensurePair,
+  isAtWar, isOathbreaker, enterWar, playerWarWeariness, WAR_DECLARE_RELATION, OATHBREAKER_VICTIM_HIT
 } from "../src/engine/diplomacy";
 import type { GameState } from "../src/engine/types";
 
@@ -95,3 +96,78 @@ test("gifting is deterministic", () => {
   const b = applyAction(makeState(2), { type: "GIFT_GOLD", playerId: "p1", targetId: "p2", amount: 75 });
   assert.equal(getRelation(a, "p1", "p2"), getRelation(b, "p1", "p2"));
 });
+
+// ---- D2: war & Oathbreaker ------------------------------------------------
+
+function combatState(): GameState {
+  const tiles: Record<string, { terrain: "plains"; region: string }> = {};
+  for (let r = 0; r < 4; r += 1) for (let q = 0; q < 4; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
+  return createInitialGameState({
+    seed: "war",
+    players: [{ id: "p1", civ: "Rome", gold: 100 }, { id: "p2", civ: "Carthage", gold: 100 }, { id: "p3", civ: "Egypt", gold: 100 }],
+    map: {
+      width: 4, height: 4, regions: ["core"], tiles,
+      units: {
+        a: { id: "a", type: "warrior", ownerId: "p1", position: { q: 1, r: 1 }, movementRemaining: 1 },
+        d: { id: "d", type: "warrior", ownerId: "p2", position: { q: 2, r: 1 } }
+      },
+      cities: { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 2, hp: 24, maxHp: 24 } }
+    }
+  });
+}
+
+test("DECLARE_WAR opens a war and cools the pair (no brand without a pact)", () => {
+  const s = applyAction(combatState(), { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" });
+  assert.ok(isAtWar(s, "p1", "p2"));
+  assert.equal(getRelation(s, "p1", "p2"), WAR_DECLARE_RELATION);
+  assert.equal(isOathbreaker(s, "p1"), false, "plain declaration is not oathbreaking");
+});
+
+test("DECLARE_WAR rejects self and repeat declarations", () => {
+  const s = combatState();
+  assert.throws(() => applyAction(s, { type: "DECLARE_WAR", playerId: "p1", targetId: "p1" }), /yourself/);
+  const s2 = applyAction(s, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" });
+  assert.throws(() => applyAction(s2, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" }), /already at war/);
+});
+
+test("the first attack auto-opens a war (surprise) via the engine", () => {
+  const s = applyAction(combatState(), { type: "ATTACK", playerId: "p1", attackerId: "a", defenderId: "d" });
+  assert.ok(isAtWar(s, "p1", "p2"), "attacking a peaceful neighbour starts the war");
+  assert.equal(isOathbreaker(s, "p1"), false, "no pact broken → no brand");
+});
+
+test("breaking a NAP brands the aggressor Oathbreaker with the world", () => {
+  const s0 = combatState();
+  // A standing NAP between p1 and p2 (D3 will create these through proposals).
+  ensurePair(s0, "p1", "p2").agreements.push({ type: "nap", expires: s0.turn + 30 });
+  const s = applyAction(s0, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" });
+  assert.ok(isOathbreaker(s, "p1"), "broke the NAP → branded");
+  // victim: −30 (war) then −40 (brand)
+  assert.equal(getRelation(s, "p1", "p2"), WAR_DECLARE_RELATION + OATHBREAKER_VICTIM_HIT);
+  assert.equal(getRelation(s, "p1", "p3"), -15, "everyone else sours by −15");
+});
+
+test("an Oathbreaker brand and war weariness both dock city stability", () => {
+  const s0 = combatState();
+  ensurePair(s0, "p1", "p2").agreements.push({ type: "nap", expires: s0.turn + 30 });
+  const before = computeCityStability(s0, "c1");
+  const s = applyAction(s0, { type: "DECLARE_WAR", playerId: "p1", targetId: "p2" });
+  assert.ok(isOathbreaker(s, "p1"));
+  assert.equal(computeCityStability(s, "c1"), before - 1, "brand costs 1 stability");
+  // Age the war 30 turns → 2 weariness steps.
+  getPair(s, "p1", "p2")!.warSince = s.turn - 30;
+  assert.equal(playerWarWeariness(s, "p1"), 2);
+});
+
+test("relations cool while at war instead of warming", () => {
+  const s = enterWarState();
+  const before = getRelation(s, "p1", "p2");
+  applyRelationDrift(s);
+  assert.ok(getRelation(s, "p1", "p2") < before, "war cools the pair");
+});
+
+function enterWarState(): GameState {
+  const s = makeState(2);
+  enterWar(s, "p1", "p2");
+  return s;
+}
