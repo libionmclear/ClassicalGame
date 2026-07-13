@@ -408,8 +408,10 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   📖 encyclopedia, `buildCodex`) now has **Ruins / Minor Peoples / Titles & Offices**
   sections (excavated ruins get a ✓), and a resolved **Crossroads** dilemma earns a
   Laurel (`earnCrossroadsLaurel`; laurel-award refactored into shared
-  `grantLaurels`). Still open: civ CARDS so non-admins can unlock Britons/Kush
-  (§12 premium civs); a full tech BRANCH per new civ; laurels from achievements.
+  `grantLaurels`). And Britons/Kush are now **unlockable civ cards**
+  (`CIV_CARDS` in `cards-data-v2.js`, playable rare, `civ-britons`/`civ-kush`) so
+  non-admin players can earn them (§12). Still open: a full tech BRANCH per new
+  civ; laurels from achievements.
 - **Britons + Kush civs (Design Brief §4.1) + maps/discovery tuning.** The roster
   grew from 6 to **8** (`CIV_ROSTER` + Britons #16a085/Camulodunon and Kush
   #935116/Meroë) — everything civ-derived (colours, picker, borders) flows from

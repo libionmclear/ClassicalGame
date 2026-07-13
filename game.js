@@ -3781,7 +3781,7 @@
   // vocabulary onto the engine's hooks; anything the engine can't do yet is
   // catalogued as "flagged" (see cardFlags / CARD_FLAG_KEYS below).
   const V2 = (window.HEGEMON_CARDS_V2) || { CIV_CARDS: [], LEGENDS: [], EDICTS: [], EVENT_CARDS: [] };
-  const CIV_ICON = { rome: "🦅", greece: "🏛️", egypt: "🔺", carthage: "🐘", gaul: "⚔️", parthia: "🏹", sparta: "🛡️", macedon: "🐎", persia: "👑", han: "🀄", maurya: "🐘", scythia: "🐎", phoenicia: "⚓", etruria: "🏺", thrace: "🗡️", ptolemies: "👁️", seleucids: "🐘", numidia: "🐎", epirus: "🐘", pontus: "☠️", armenia: "⛰️", judea: "✡️", kush: "🏹", celtiberia: "🗡️", germania: "🌲", britannia: "🗿", dacia: "🐺", illyria: "⚓", pergamon: "📜", bactria: "🐎" };
+  const CIV_ICON = { rome: "🦅", greece: "🏛️", egypt: "🔺", carthage: "🐘", gaul: "⚔️", parthia: "🏹", britons: "🗿", sparta: "🛡️", macedon: "🐎", persia: "👑", han: "🀄", maurya: "🐘", scythia: "🐎", phoenicia: "⚓", etruria: "🏺", thrace: "🗡️", ptolemies: "👁️", seleucids: "🐘", numidia: "🐎", epirus: "🐘", pontus: "☠️", armenia: "⛰️", judea: "✡️", kush: "🏹", celtiberia: "🗡️", germania: "🌲", britannia: "🗿", dacia: "🐺", illyria: "⚓", pergamon: "📜", bactria: "🐎" };
   const ROLE_ICON = { commander: "⚔️", statesman: "🏛️", sage: "📜", builder: "🏗️", navigator: "⚓" };
 
   // Effect vocabulary → engine hooks. TODAY the engine only supports a flat

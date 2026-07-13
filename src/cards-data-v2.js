@@ -23,6 +23,8 @@ export const CIV_CARDS = [
   { id: "carthage",  name: "Carthage",          rarity: "rare",    playable: true },
   { id: "gaul",      name: "Gaul",              rarity: "rare",    playable: true },
   { id: "parthia",   name: "Parthia",           rarity: "rare",    playable: true },
+  { id: "britons",   name: "Britons",           rarity: "rare",    playable: true },
+  { id: "kush",      name: "Kush",              rarity: "rare",    playable: true },
   // wave 2 — next playable
   { id: "sparta",    name: "Sparta",            rarity: "rare",    playable: false, wave: 2 },
   { id: "macedon",   name: "Macedon",           rarity: "epic",    playable: false, wave: 2 },
