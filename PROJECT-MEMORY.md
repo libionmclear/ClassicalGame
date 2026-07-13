@@ -389,6 +389,24 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **STEP C — Slices C2–C5 (districts, complete on the engine/UI side).** C2 Great
+  Works (buildable + heritage, `civ:null` universals, Seven-Wonders badge), C3 the
+  units-v2 wave-2 addendum merge (60 uniques total), C4 the **district builder UI**
+  in the DOM city panel (slots readout, existing-district rows, type+hex picker →
+  `BUILD_DISTRICT`), and **C5 the district-building AI** (`districtAction` in
+  `ai.ts`, §6.7): raises the district a city needs — barracks under threat,
+  leisure/civic on low stability, aqueduct when empire **net** food (after upkeep,
+  via `computePlayerIncome`) is tight, else market/civic/temple/… Merc hiring still
+  skipped (no HIRE action path). New ai.test.ts cases; **159/159**. Also **camera
+  pan-limit** (`board3d.ts`): `screenSpacePanning=false` + a per-frame clamp pinning
+  `controls.target.y=0` and the target's XZ to the board bounds — you can no longer
+  pan under the hexes or off the map (WebGL-smoke verified). Committed
+  `src/districts-data-v2.js` + `src/units-v2-addendum.js` (the engine had imported
+  them while untracked) and the three new `docs/*-v2.md`. **Remaining STEP C: the 3D
+  side — districts are NOT rendered on the board3d map at all yet** (the C1 "flat
+  marker stub" was never built; `board3d.ts` has no district code, `build3DView`
+  passes no district data). Next slice: thread districts through the 3D view +
+  render them (`districtModels`, §5).
 - **STEP C — District system, Slice C1 (engine core).** Cities v3 §2: `city.districts`
   (`{hex,type,pillaged,work}`), `cityTier(pop)` (Phase-4 thresholds) → `districtSlots`
   (2:1/4:2/5:3/6:4/8:5/10:6). Data bridged from `districts-data-v2.js` via
@@ -399,10 +417,8 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   feeds `computeCityStability`. **Pillage-on-enter:** a combat unit stepping onto an
   enemy district hex pillages it (yields nothing until repaired). Exposed
   `cityTier/districtSlots/districtType/districtName/DISTRICT_TYPES` to the browser.
-  New `test/districts.test.ts`. 150/150. **Remaining STEP C slices:** C2 Great Works
-  (new card kind, built/heritage, civ:null universal, Seven-Wonders badge), C3
-  units-v2-addendum merge (60 uniques), C4 UI (city-panel picker + flat-marker render),
-  C5 AI §6.7. District BUILD is engine-only until C4 wires the UI.
+  New `test/districts.test.ts`. 150/150. *(C2–C5 now done — see the newest entry
+  above; the only STEP C gap left is 3D district rendering.)*
 - **Effect wiring — Slice 1: combat %** (the "un‑flag" pass; user reordered the plan
   to wire effects → art → resume A–F). Branch‑tech and equipped‑card combat % now
   actually reach the combat calc (`techCardCombat` in `index.ts`): flat `atkPct`/
