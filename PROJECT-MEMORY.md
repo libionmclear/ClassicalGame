@@ -389,6 +389,24 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Title ladders (Design Brief §11) — the last of the three missing brief
+  systems.** New `src/engine/titles.ts`: `TITLE_LADDERS` for all 8 civs
+  (Rome's cursus honorum Servus→Princeps, Egypt Peasant→Regent, Greece
+  Metic→Hegemon, Carthage Deckhand→Shophet, Gaul Farmhand→Vergobret, Britons
+  Herdsman→High King, Parthia Herdsman→King of Kings, Kush Farmer→Qore/Kandake),
+  each rung with a one-line Codex note (the educational layer). Shared cumulative
+  `LAUREL_THRESHOLDS` [0,3,7,12,…,90]; `titleForLaurels/titleIndexForLaurels/
+  nextTitleInfo` (with greeks/gauls/nubia aliases) + `laurelsForGame` (loss 1, win
+  3, domination 4). Client wiring (game.js): `recordGameResult` awards laurels to
+  `profile.byCiv[civ].laurels`, detects a promotion (title changed) → an action-log
+  line + a "🏅 New title" toast; the Profile screen shows each played people's
+  current title + laurels + "N to <next>". Exposed on `window.HegemonEngine`. New
+  test/titles.test.ts (6). **231/231.** Browser-verified: a seeded profile shows
+  "🏅 Eques · 20 laurels · 5 to Quaestor" etc. with the right thresholds, 0 errors.
+  **All three missing brief systems (Discovery §10, Britons+Kush §4.1, Titles §11)
+  are now done.** Deferred polish: a dedicated Codex modal collecting the notes;
+  laurels from Crossroads outcomes/achievements (only game-end for now); civ CARDS
+  so non-admins can unlock Britons/Kush.
 - **Britons + Kush civs (Design Brief §4.1) + maps/discovery tuning.** The roster
   grew from 6 to **8** (`CIV_ROSTER` + Britons #16a085/Camulodunon and Kush
   #935116/Meroë) — everything civ-derived (colours, picker, borders) flows from

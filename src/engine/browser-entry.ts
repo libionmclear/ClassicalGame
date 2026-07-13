@@ -60,6 +60,7 @@ import { cityTier, districtSlots, districtType, districtName, DISTRICT_TYPES, GR
 import { relationBand, getRelation, getPair, pairKey, RELATION_BAND_LABELS, isAtWar, isOathbreaker, hasAgreement, playerWarWeariness, canProposeAgreement, napBlocksDeclaration, agreementBand, bandAtLeast, alliesOf, isFullAlly, agreementHeldTurns, isVassal, vassalsOf, topOverlord, canDemandVassalage, personalityOf } from "./diplomacy";
 import { RUINS, RUIN_BY_ID } from "./discovery";
 import { MINOR_PEOPLES, PEOPLE_BY_ID, BEFRIEND_COST, TRIBUTE_GAIN } from "./peoples";
+import { TITLE_LADDERS, titleForLaurels, nextTitleInfo, laurelsForGame, LAUREL_THRESHOLDS } from "./titles";
 
 // Every symbol the browser demo (game.js) reads off window.HegemonEngine must be
 // re-exported here — esbuild only surfaces what this entry module exports.
@@ -161,5 +162,10 @@ export {
   MINOR_PEOPLES,
   PEOPLE_BY_ID,
   BEFRIEND_COST,
-  TRIBUTE_GAIN
+  TRIBUTE_GAIN,
+  TITLE_LADDERS,
+  titleForLaurels,
+  nextTitleInfo,
+  laurelsForGame,
+  LAUREL_THRESHOLDS
 };

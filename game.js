@@ -4149,6 +4149,19 @@
       p.byCiv[civId] = p.byCiv[civId] || { played: 0, wins: 0 };
       p.byCiv[civId].played += 1;
       if (won) p.byCiv[civId].wins += 1;
+      // §11 title ladder: earn Laurels with this civ and climb its career ladder.
+      const before = p.byCiv[civId].laurels || 0;
+      const gain = engine.laurelsForGame ? engine.laurelsForGame(won, victoryType) : (won ? 3 : 1);
+      const after = before + gain;
+      p.byCiv[civId].laurels = after;
+      if (engine.titleForLaurels) {
+        const t0 = engine.titleForLaurels(civId, before);
+        const t1 = engine.titleForLaurels(civId, after);
+        if (t1 && (!t0 || t0.name !== t1.name)) {
+          logAction("🏅 " + civName(civId) + " title earned: " + t1.name + " — " + (t1.note || ""));
+          try { showCombatToast("🏅 New title: " + t1.name, "gate"); } catch (e) {}
+        }
+      }
     }
     // Coins are earned by playing (a win is worth more) — the free path: grind
     // coins, buy packs. The daily Standard pack is free on top.
@@ -4373,11 +4386,20 @@
     for (const c of engine.CIV_ROSTER || []) {
       const s = p.byCiv[c.id] || { played: 0, wins: 0 };
       const locked = p.unlockedCivs.indexOf(c.id) === -1;
+      // §11 title ladder — your current career title with this people.
+      let titleLine = "";
+      if (s.played && engine.titleForLaurels) {
+        const laur = s.laurels || 0;
+        const t = engine.titleForLaurels(c.id, laur);
+        const nx = engine.nextTitleInfo ? engine.nextTitleInfo(c.id, laur) : null;
+        if (t) titleLine = '<span class="pf-civtitle" title="' + esc(t.note || "") + '">🏅 ' + esc(t.name) + " · " + laur + " laurels" + (nx ? " · " + nx.need + " to " + esc(nx.name) : " · at the summit") + "</span>";
+      }
       parts.push(
         '<div class="pf-civ' + (s.played ? "" : " dim") + '">' +
         '<span class="pf-dot" style="background:' + (CIV_COLORS[c.id] || c.color) + '"></span>' +
         '<span class="pf-civname">' + c.civ + (locked ? " 🔒" : "") + "</span>" +
         '<span class="pf-civstat">' + (locked ? "locked — find its card" : s.played + " played · " + s.wins + " won <small>(" + pct(s.wins, s.played) + ")</small>") + "</span>" +
+        titleLine +
         "</div>"
       );
     }
