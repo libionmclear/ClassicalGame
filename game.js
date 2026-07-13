@@ -1958,6 +1958,23 @@
         badge: embarked ? "⛵" : (UNIT_GLYPHS[unit.type] || "•")
       });
     }
+    // Districts (Cities v3 §5): the urban scenes on hexes adjacent to a city.
+    // Static structures, so they show on any DISCOVERED hex (like improvements).
+    const districts = [];
+    for (const city of Object.values(state.map.cities)) {
+      if (!city.districts || !city.districts.length) continue;
+      const style = city.ownerId; // civ id maps 1:1 to an architectural style
+      const accent = CIV_COLORS[city.ownerId] || "#888";
+      for (const d of city.districts) {
+        if (!visibility.discovered.has(d.hex)) continue;
+        const c = d.hex.split(",");
+        const dtile = state.map.tiles[d.hex];
+        districts.push({
+          q: +c[0], r: +c[1], type: d.type, style: style, accent: accent,
+          t: dtile ? dtile.terrain : "plains", pillaged: !!d.pillaged, work: d.work || null
+        });
+      }
+    }
     // Rivers: keyed by shared edge "q,r|q,r"; show where either side is discovered.
     const rivers = [];
     if (state.map.rivers) {
@@ -1999,7 +2016,7 @@
       skyWx = (region && state.weather.current[region]) || "clear";
     }
     updateSoundscape(skyWx, tiles);
-    const view = { tiles: tiles, sprites: sprites, borders: borders, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx };
+    const view = { tiles: tiles, sprites: sprites, borders: borders, districts: districts, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx };
     if (pendingRecenter) {
       const home =
         Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||

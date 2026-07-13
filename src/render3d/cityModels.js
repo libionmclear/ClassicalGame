@@ -105,7 +105,7 @@ export function buildCity(THREE, opts = {}) {
 
 // ============================================================ helpers
 
-function mulberry32(a) {
+export function mulberry32(a) {
   return function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -114,7 +114,7 @@ function mulberry32(a) {
   };
 }
 
-function jitterColor(THREE, hex, rng, amt) {
+export function jitterColor(THREE, hex, rng, amt) {
   const c = new THREE.Color(hex);
   if (amt > 0) {
     const hsl = {}; c.getHSL(hsl);
@@ -155,7 +155,7 @@ function makeHouse(THREE, S, rng, w, h, d, mat) {
 }
 
 // Gable prism (triangular cross-section) as BufferGeometry
-function prism(THREE, w, h, d) {
+export function prism(THREE, w, h, d) {
   const g = new THREE.BufferGeometry();
   const x = w / 2, z = d / 2;
   const v = new Float32Array([
@@ -170,7 +170,7 @@ function prism(THREE, w, h, d) {
   return g;
 }
 
-function colonnade(THREE, S, mat, w, d, colH, nx, nz) {
+export function colonnade(THREE, S, mat, w, d, colH, nx, nz) {
   const grp = new THREE.Group();
   const col = new THREE.CylinderGeometry(0.012, 0.014, colH, 6);
   for (let i = 0; i < nx; i++) for (const zz of [-d / 2, d / 2]) {
@@ -186,7 +186,7 @@ function colonnade(THREE, S, mat, w, d, colH, nx, nz) {
   return grp;
 }
 
-function classicalTemple(THREE, S, mat, scale = 1) {
+export function classicalTemple(THREE, S, mat, scale = 1) {
   const grp = new THREE.Group();
   const w = 0.26 * scale, d = 0.16 * scale, colH = 0.14 * scale;
   const podium = new THREE.Mesh(new THREE.BoxGeometry(w * 1.15, 0.03, d * 1.15), mat(S.stone));
@@ -253,7 +253,7 @@ function makeWagonRing(THREE, S, rng, mat, R, tier) {
 // wall = house walls · roofColor · roof type · stone = monumental stone
 // plaza · wallRing = city wall colour · gold = gilded accent
 
-const STYLES = {
+export const STYLES = {
   rome: sty(0xd9c9a8, 0xa8503c, "gable", 0xe8e0cf, 0x9c9483, 0xb8a888, {
     shrine: (T,r,m)=>classicalTemple(T,STYLES.rome,m,0.5),
     monument:(T,r,m)=>classicalTemple(T,STYLES.rome,m,1),

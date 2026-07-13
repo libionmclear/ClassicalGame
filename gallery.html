@@ -36,6 +36,7 @@
       <p style="margin:8px 0 3px"><b>Unit columns →</b><br/>
         <span class="tag">Warrior</span><span class="tag">Spearman</span><span class="tag">Archer</span><span class="tag">Horseman</span><span class="tag">Elephant</span><span class="tag">Siege</span><span class="tag">Trireme</span><span class="tag">Settler</span> · then each civ's <b>★ special unit</b> (Legionary, Hoplite, War Chariot, War Elephant, Gaesatae, Cataphract).</p>
       <p style="margin:3px 0"><b>City styles → all 12</b> (2 rows of 6, below the units), at the tier below.</p>
+      <p style="margin:3px 0"><b>Districts →</b> below the cities: 10 types (Civic · Market · Affluent · Insulae · Aqueduct · Barracks · Harbour · Baths · Temple · Great Work) in Rome & Egypt styles, then a burnt (pillaged) row.</p>
       <p style="margin:6px 0 2px"><b>City tier:</b>
         <input id="tier" type="range" min="1" max="10" value="5" style="width:180px;vertical-align:middle" />
         <b id="tierlabel">5 · Market town</b></p>
@@ -78,8 +79,12 @@
         { id: "maurya", name: "Maurya", color: "#a16207" }, { id: "scythia", name: "Scythia", color: "#4d7c0f" }
       ]);
       var TIER_NAMES = ["", "Hamlet", "Village", "Town", "Walled town", "Market town", "City", "Great city", "Metropolis", "Imperial city", "Wonder of the age"];
+      // Districts (Cities v3 §5): one column per type, shown in two civ styles.
+      var DTYPES = ["civic", "market", "affluent", "crammed", "aqueduct", "barracks", "harbour", "leisure", "temple", "greatwork"];
+      var DWORK = { rome: "gw-colosseum", egypt: "gw-pyramids" }; // Great Work per style row
       var specialCol = UNITS.length + 1;   // one gap after the generic line
       var cityRow0 = CIVS.length * 2 + 2;  // the city block starts below the unit rows
+      var distRow0 = cityRow0 + 4;         // districts sit below the city block
 
       // Row legend (colour swatch per civ).
       var rows = document.getElementById("civ-rows");
@@ -93,7 +98,7 @@
       var board = Board3D.createBoard(document.getElementById("gal"));
 
       function buildView(tier) {
-        var tiles = [], sprites = [], seen = {};
+        var tiles = [], sprites = [], districts = [], seen = {};
         function addTile(q, r, t) { var k = q + "," + r; if (seen[k]) return; seen[k] = 1; tiles.push({ q: q, r: r, t: t || "plains", v: 2, o: null, h: 0, res: null, imp: null, wx: "clear" }); }
         // Unit rows — 6 civs.
         CIVS.forEach(function (c, i) {
@@ -109,10 +114,25 @@
           addTile(q, r);
           sprites.push({ civ: c.id, kind: "city", name: "", color: c.color, q: q, r: r, t: "plains", tier: tier, pop: 1 });
         });
+        // District block — one column per type, in two civ styles (Rome, Egypt),
+        // plus a pillaged example, so the 10 anchors + burnt state are all visible.
+        [["rome", "#c0392b"], ["egypt", "#d4ac0d"]].forEach(function (sc, si) {
+          var r = distRow0 + si * 2;
+          DTYPES.forEach(function (type, j) {
+            var q = j * 2;
+            var t = type === "harbour" ? "coast" : "plains";
+            addTile(q, r, t);
+            districts.push({ q: q, r: r, type: type, style: sc[0], accent: sc[1], t: t, work: type === "greatwork" ? DWORK[sc[0]] : null });
+          });
+        });
+        var pilR = distRow0 + 4; addTile(0, pilR); addTile(2, pilR); addTile(4, pilR);
+        districts.push({ q: 0, r: pilR, type: "temple", style: "rome", accent: "#c0392b", t: "plains", pillaged: true });
+        districts.push({ q: 2, r: pilR, type: "market", style: "rome", accent: "#c0392b", t: "plains", pillaged: true });
+        districts.push({ q: 4, r: pilR, type: "aqueduct", style: "rome", accent: "#c0392b", t: "plains", pillaged: true });
         // Pad a continuous board under everything.
-        var maxR = cityRow0 + 2;
-        for (var rr = -1; rr <= maxR + 1; rr++) for (var qq = -2; qq <= 12; qq++) addTile(qq, rr);
-        return { tiles: tiles, sprites: sprites, borders: [], civColors: civColors, rivers: [], roads: [], focus: { q: 5, r: cityRow0 - 2 } };
+        var maxR = pilR;
+        for (var rr = -1; rr <= maxR + 1; rr++) for (var qq = -2; qq <= 20; qq++) addTile(qq, rr);
+        return { tiles: tiles, sprites: sprites, districts: districts, borders: [], civColors: civColors, rivers: [], roads: [], focus: { q: 5, r: cityRow0 - 2 } };
       }
 
       function render(tier) {

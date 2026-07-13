@@ -389,6 +389,27 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **STEP C — 3D district models (§5), the last STEP C gap.** Districts now RENDER
+  on the board3d map (they had no 3D presence before). New
+  `src/render3d/districtModels.js` (+ `.d.ts`) `buildDistrict(THREE, {type, style,
+  seed, accent, pillaged, work})` → a THREE.Group per district: a **ground
+  treatment** (paved forum / pool / quays / drill square), a bespoke **anchor per
+  type** (civic colonnaded hall, market stalls+awnings, insulae tall blocks,
+  aqueduct arch row, barracks drill-square+palisade+tower, harbour breakwater+
+  shipsheds, baths dome+pool, temple precinct, affluent villas), civ-style filler
+  buildings, and **Great Works** (bespoke Colosseum ring / pyramids / trilithon /
+  great-wall / lighthouse / stupa, else a gilded grand temple). **Pillaged** =
+  blackened material swap + two smoke columns. Reuses cityModels helpers (now
+  exported: `STYLES, prism, colonnade, classicalTemple, mulberry32, jitterColor`).
+  board3d: `DistrictView` + `BoardView.districts`, a `districtGroup`, `placeDistricts`
+  (positions each at its hex `axialToWorld`+`topOf(terrain)`, scale 0.9, disposes on
+  rebuild), called in `render()`. game.js `build3DView` emits `view.districts` for
+  every DISCOVERED district hex (civ→style, owner colour→accent, terrain, pillaged,
+  work). `gallery.html` gains a **district showcase** (10 types × Rome/Egypt + a
+  burnt row). New headless `test/districtmodels.test.ts` (all types×12 styles + GW +
+  pillaged + fallback build non-empty). typecheck clean, **164/164**, WebGL-smoke
+  verified in the gallery (distinct civ-styled anchors + blackened pillaged row, 0
+  errors). **STEP C is now complete.**
 - **STEP C — Slices C2–C5 (districts, complete on the engine/UI side).** C2 Great
   Works (buildable + heritage, `civ:null` universals, Seven-Wonders badge), C3 the
   units-v2 wave-2 addendum merge (60 uniques total), C4 the **district builder UI**
@@ -402,11 +423,9 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   `controls.target.y=0` and the target's XZ to the board bounds — you can no longer
   pan under the hexes or off the map (WebGL-smoke verified). Committed
   `src/districts-data-v2.js` + `src/units-v2-addendum.js` (the engine had imported
-  them while untracked) and the three new `docs/*-v2.md`. **Remaining STEP C: the 3D
-  side — districts are NOT rendered on the board3d map at all yet** (the C1 "flat
-  marker stub" was never built; `board3d.ts` has no district code, `build3DView`
-  passes no district data). Next slice: thread districts through the 3D view +
-  render them (`districtModels`, §5).
+  them while untracked) and the three new `docs/*-v2.md`. *(The 3D-rendering gap
+  noted here — districts invisible on the board3d map — was closed by the next
+  entry above, `districtModels` §5.)*
 - **STEP C — District system, Slice C1 (engine core).** Cities v3 §2: `city.districts`
   (`{hex,type,pillaged,work}`), `cityTier(pop)` (Phase-4 thresholds) → `districtSlots`
   (2:1/4:2/5:3/6:4/8:5/10:6). Data bridged from `districts-data-v2.js` via

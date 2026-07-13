@@ -15,6 +15,7 @@ import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
 import type { GameState } from "../engine/types";
 import { buildCity as buildCityV2 } from "./cityModels.js";
+import { buildDistrict } from "./districtModels.js";
 
 // City visual tier (1..10) from population — HEGEMON-VISUALS-v2.md §1 thresholds.
 const CITY_TIER_POP = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55];
@@ -65,6 +66,9 @@ const topOf = (t: string): number => (WATER.has(t) ? SEA_TOP : (TERRAIN_ELEV[t] 
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; }
 export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; id?: string; badge?: string; color?: string; t?: string; form?: string; utype?: string; pop?: number; tier?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
+// A district built on a hex adjacent to a city (Cities v3 §5). t = the hex's
+// terrain (for surface height); style = the owning civ; work = Great Work id.
+export interface DistrictView { q: number; r: number; type: string; style: string; t?: string; accent?: string; pillaged?: boolean; work?: string; }
 // A segment between two tiles: rivers run along the shared edge, roads along the
 // centre line (from tile q,r to neighbour nq,nr).
 export interface EdgeView { q: number; r: number; nq: number; nr: number; }
@@ -72,6 +76,7 @@ export interface BoardView {
   tiles: TileView[];
   sprites: SpriteView[];
   borders: BorderView[];
+  districts?: DistrictView[];
   civColors: Record<string, string>;
   rivers?: EdgeView[];
   roads?: EdgeView[];
@@ -943,8 +948,36 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   scene.add(spriteGroup);
   const scatterGroup = new THREE.Group();
   scene.add(scatterGroup);
+  const districtGroup = new THREE.Group();
+  scene.add(districtGroup);
   const borderGroup = new THREE.Group();
   scene.add(borderGroup);
+
+  // Districts (Cities v3 §5): a small procedural urban scene on each built hex
+  // adjacent to a city. Rebuilt on each render() (not per-frame). buildDistrict
+  // allocates fresh geometry/materials, so dispose the previous batch first.
+  function placeDistricts(view: BoardView): void {
+    districtGroup.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) {
+        m.geometry?.dispose();
+        const mm = m.material as THREE.Material | THREE.Material[];
+        if (Array.isArray(mm)) mm.forEach((x) => x.dispose()); else mm?.dispose();
+      }
+    });
+    districtGroup.clear();
+    for (const d of view.districts ?? []) {
+      const w = axialToWorld(d.q, d.r);
+      const top = topOf(d.t || "plains");
+      const seed = (((d.q * 73856093) ^ (d.r * 19349663)) >>> 0) % 100000;
+      const model = buildDistrict(THREE, {
+        type: d.type, style: d.style, seed, accent: d.accent, pillaged: d.pillaged, work: d.work
+      }) as THREE.Group;
+      model.scale.setScalar(0.9);       // fit the hex, matching the city scale
+      model.position.set(w.x, top + 0.01, w.z);
+      districtGroup.add(model);
+    }
+  }
 
   // Trees on forests, rocks on hills/mountains, denser on timber/ore deposits —
   // only on fully-visible tiles (bounded by vision) and not where a unit/city sits.
@@ -1642,6 +1675,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       paintTiles(view);
       placeSprites(view);
       placeScatter(view);
+      placeDistricts(view);
       drawBorders(view);
       drawWaterways(view);
       // Rain over the wet region's footprint — but only when a real part of the
