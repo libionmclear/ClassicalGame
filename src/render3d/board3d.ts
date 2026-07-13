@@ -63,7 +63,7 @@ const topOf = (t: string): number => (WATER.has(t) ? SEA_TOP : (TERRAIN_ELEV[t] 
 
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
-export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; }
+export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; ruin?: number; village?: string | null; }
 export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; id?: string; badge?: string; color?: string; t?: string; form?: string; utype?: string; pop?: number; tier?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 // A district built on a hex adjacent to a city (Cities v3 §5). t = the hex's
@@ -950,6 +950,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   scene.add(scatterGroup);
   const districtGroup = new THREE.Group();
   scene.add(districtGroup);
+  const markerGroup = new THREE.Group(); // ruin / village discovery markers (§10)
+  scene.add(markerGroup);
   const borderGroup = new THREE.Group();
   scene.add(borderGroup);
 
@@ -976,6 +978,24 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       model.scale.setScalar(0.9);       // fit the hex, matching the city scale
       model.position.set(w.x, top + 0.01, w.z);
       districtGroup.add(model);
+    }
+  }
+
+  // Discovery markers (§10): a floating glyph over each un-excavated Ruin and each
+  // Minor-People village. Rebuilt each render; billboards face the camera.
+  function placeMarkers(view: BoardView): void {
+    for (const o of markerGroup.children) { const m = (o as THREE.Sprite).material as THREE.SpriteMaterial | undefined; m?.dispose(); }
+    markerGroup.clear();
+    for (const tv of view.tiles) {
+      const glyph = tv.ruin ? "🏛️" : tv.village ? "🛖" : null;
+      if (!glyph) continue;
+      const w = axialToWorld(tv.q, tv.r);
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(glyph), transparent: true, depthWrite: false, depthTest: false }));
+      spr.center.set(0.5, 0);
+      spr.scale.set(0.75, 0.75, 0.75);
+      spr.position.set(w.x, topOf(tv.t) + 0.55, w.z);
+      spr.renderOrder = 998;
+      markerGroup.add(spr);
     }
   }
 
@@ -1676,6 +1696,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       placeSprites(view);
       placeScatter(view);
       placeDistricts(view);
+      placeMarkers(view);
       drawBorders(view);
       drawWaterways(view);
       // Rain over the wet region's footprint — but only when a real part of the

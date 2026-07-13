@@ -389,6 +389,31 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Discovery & Exploration (Design Brief `docs/HEGEMON_game_design_brief_2.md`
+  §10) — X1–X3.** The brief is ~90% already built; its three MISSING systems are
+  Discovery (§10), the Britons+Kush civs (§4.1), and title ladders (§11).
+  Exploration shipped first. **X1 (Explorer + Ruins):** new civilian **Explorer**
+  unit (move 4, attack 0). `src/engine/discovery.ts` — 16 authored **Ruins** with
+  region flavour + terrain hint + a fixed reward (gold/science/all-unit-XP/reveal/
+  nearest-city prod-food-walls/a lasting perk-gold trade good). `mapgen.scatterRuins`
+  seeds them on every map at `createInitialGameState`; `excavateRuins` in
+  `applyEndTurn` — a unit ending on one digs it up (Explorer = full + a Player.codex
+  entry; other unit = half, no Codex; site consumed). **X2 (Minor Peoples):**
+  `src/engine/peoples.ts` — 14 villages (disposition Open/Wary/Hostile, seeded).
+  Actions: BEFRIEND_VILLAGE (pay 30g → full benefit incl. knowledge, turn Open),
+  DEMAND_TRIBUTE_VILLAGE (quick gold, cool a step), CONQUER_VILLAGE (soldier
+  adjacent → town + material gains but the science/knowledge burns + a diplomacy
+  reputation hit), ABSORB_VILLAGE (join → town / migrate → +2 pop). Explorer
+  first-contact (`contactVillages`) warms a wary village. Benefits → pop/science/
+  gold/perk-gold/recruited levy/walls. **X3 (UI):** ruin/village markers on the 3D
+  board (`placeMarkers` glyph billboards, verified) + 2D tile badges; a **Discovery
+  panel** in the context menu (ruin text; village befriend/tribute/conquer/absorb
+  buttons gated by a unit-near check) — needed `onTileClick` to also select
+  neutral discovery-site tiles; a Ruin-excavated **toast**. All exposed on
+  `window.HegemonEngine`. New test/discovery.test.ts (6) + test/peoples.test.ts (9);
+  **219/219**. STILL from the brief: **Britons + Kush civs**, **title ladders**,
+  and a couple flagged bits (a dedicated Codex modal; Explorer forest/hills-cost-1
+  + vision bonus; augury/desert-immunity village perks approximated as science).
 - **STEP D — Diplomacy Phase 2 COMPLETE (slices E1–E5).** All of
   `docs/HEGEMON-DIPLOMACY-v1.md` is now shipped. **E1 (alliance ladder):**
   PROPOSE_AGREEMENT gained passage / defensive-alliance / full-alliance;

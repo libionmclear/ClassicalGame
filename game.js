@@ -41,6 +41,8 @@
   const buildMenuEl = document.getElementById("build-menu");
   const improveGroupEl = document.getElementById("improve-group");
   const improveMenuEl = document.getElementById("improve-menu");
+  const discoveryGroupEl = document.getElementById("discovery-group");
+  const discoveryMenuEl = document.getElementById("discovery-menu");
   const buildingMenuEl = document.getElementById("building-menu");
   const buildQueueEl = document.getElementById("build-queue");
   const techTreeEl = document.getElementById("tech-tree");
@@ -1616,10 +1618,12 @@
         return;
       }
 
-      // Empty land you own: select the tile so you can improve it (farm, mine…).
+      // Empty land you own (improve it), OR a discovery site — a Ruin or a
+      // Minor-People village — so its Discovery panel opens (§10).
       if (!clickedCity && clickedUnits.length === 0) {
         const territory = engine.computeTerritory ? engine.computeTerritory(state) : {};
-        if (territory[key] === HUMAN_ID) {
+        const hasSite = (state.map.ruins && state.map.ruins[key] && !state.map.ruins[key].excavated) || (state.map.villages && state.map.villages[key]);
+        if (territory[key] === HUMAN_ID || hasSite) {
           selectedTileKey = key;
           selectedCityId = null;
           selectedUnitId = null;
@@ -1868,6 +1872,13 @@
       inner += '<span class="tile-resource">' + (rr ? rr.glyph : "◆") + "</span>";
       tip.push("Resource: " + (rr ? rr.name + " — " + resYieldStr(rr) : tile.resource));
     }
+    // Discovery sites (§10): an un-excavated Ruin or a Minor-People village.
+    if (isVisible || isDiscovered) {
+      const rn = state.map.ruins && state.map.ruins[key];
+      const vg = state.map.villages && state.map.villages[key];
+      if (rn && !rn.excavated) { inner += '<span class="tile-site">🏛️</span>'; tip.push("Ancient ruin — send an Explorer"); }
+      else if (vg) { inner += '<span class="tile-site">🛖</span>'; tip.push("Village of a minor people"); }
+    }
 
     let hoverHint = "";
     if (isVisible && selectedUnit) {
@@ -1937,6 +1948,19 @@
   // Draw the OUTER edge of each realm only — a coloured line on every hex edge
   // that faces a different owner (or the sea), not a ring around every cell.
   const AXIAL_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+  // Toast a Ruin the human just excavated (§10) — the educational discovery beat.
+  let discoveredRuinKeys = new Set();
+  function checkDiscoveries() {
+    if (!state || !state.map.ruins) return;
+    for (const key in state.map.ruins) {
+      const r = state.map.ruins[key];
+      if (r.excavated && r.by === HUMAN_ID && !discoveredRuinKeys.has(key)) {
+        discoveredRuinKeys.add(key);
+        const def = engine.RUIN_BY_ID && engine.RUIN_BY_ID[r.ruinId];
+        if (def) { showCombatToast("🏛️ Excavated: " + def.name, "gate"); logAction("🏛️ Discovery — " + def.name + ": " + def.text); }
+      }
+    }
+  }
   function renderBorders(geom, visibility, pos, territory) {
     const edgeLen = geom.hexW / SQRT3 + 1; // hex side length (+1 to close corners)
     for (const key of Object.keys(state.map.tiles)) {
@@ -2057,7 +2081,9 @@
       else if (hints.reachable.has(key)) h = 1;
       else if (hoveredPathKeys.has(key)) h = 5;
       const wx = v === 2 && state.weather && state.weather.current ? (state.weather.current[tile.region] || "clear") : "clear";
-      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null, wx: wx });
+      const ruinHere = v > 0 && state.map.ruins && state.map.ruins[key] && !state.map.ruins[key].excavated ? 1 : 0;
+      const vilHere = v > 0 && state.map.villages && state.map.villages[key] ? state.map.villages[key] : null;
+      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null, wx: wx, ruin: ruinHere, village: vilHere ? vilHere.disposition : null });
       if (owner && v > 0) {
         for (const d of AXIAL_DIRS) {
           const nk = q + d[0] + "," + (r + d[1]);
@@ -2386,6 +2412,7 @@
     renderCityOutput(selectedCity);
     renderBuildQueue(selectedCity);
     renderImproveMenu(isTurn);
+    renderDiscovery(isTurn);
 
     // ---- Float the panel at the selection and show only the relevant groups ----
     positionContextPanel(selectedUnit, selectedCity);
@@ -2466,6 +2493,63 @@
   }
 
   // Improvements for the selected land tile: build a farm/mine/… funded by the
+  // Discovery panel (§10): shows the Ruin / Minor-People on the selected tile,
+  // with the interactions your position allows.
+  function renderDiscovery(isTurn) {
+    if (!discoveryGroupEl || !discoveryMenuEl) return;
+    const key = selectedTileKey;
+    const ruin = key && state.map.ruins ? state.map.ruins[key] : null;
+    const village = key && state.map.villages ? state.map.villages[key] : null;
+    if ((!ruin || ruin.excavated) && !village) { discoveryGroupEl.style.display = "none"; return; }
+    discoveryGroupEl.style.display = "";
+    discoveryMenuEl.innerHTML = "";
+
+    if (ruin && !ruin.excavated) {
+      const def = engine.RUIN_BY_ID ? engine.RUIN_BY_ID[ruin.ruinId] : null;
+      discoveryMenuEl.innerHTML = '<div class="disc-site"><b>🏛️ ' + (def ? def.name : "Ancient Ruin") + "</b>" +
+        (def ? '<div class="disc-text">' + def.text + "</div>" : "") +
+        '<div class="disc-hint">End an <b>Explorer\'s</b> turn here to excavate it fully (any other unit gets half, no Codex).</div></div>';
+      return;
+    }
+    // A Minor People.
+    const people = engine.PEOPLE_BY_ID ? engine.PEOPLE_BY_ID[village.peopleId] : null;
+    const dispIcon = { open: "🟢 Open", wary: "🟡 Wary", hostile: "🔴 Hostile" }[village.disposition] || village.disposition;
+    const near = isTurn && anyUnitNear(key, false);
+    const soldierNear = isTurn && anyUnitNear(key, true);
+    const wrap = document.createElement("div");
+    wrap.className = "disc-site";
+    wrap.innerHTML = "<b>🛖 " + (people ? people.name : "Village") + "</b> <span class=\"disc-disp\">" + dispIcon + "</span>" +
+      (people ? '<div class="disc-text">' + people.text + "</div>" : "") +
+      (near ? "" : '<div class="disc-hint">Move a unit beside them to interact.</div>');
+    discoveryMenuEl.appendChild(wrap);
+    const acts = document.createElement("div");
+    acts.className = "diplo-actions";
+    const gold = (human() && human().gold) || 0;
+    function addBtn(label, enabled, danger, fn) { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.disabled = !enabled; if (enabled) b.addEventListener("click", fn); acts.appendChild(b); }
+    if (village.befriendedBy === HUMAN_ID) {
+      addBtn("🏘️ Absorb (join)", near, false, function () { apply({ type: "ABSORB_VILLAGE", playerId: HUMAN_ID, hex: key, mode: "join" }); });
+      addBtn("🚶 Absorb (migrate)", near, false, function () { apply({ type: "ABSORB_VILLAGE", playerId: HUMAN_ID, hex: key, mode: "migrate" }); });
+    } else {
+      addBtn("🤝 Befriend (" + engine.BEFRIEND_COST + "g)", near && village.disposition !== "hostile" && gold >= engine.BEFRIEND_COST, false, function () { apply({ type: "BEFRIEND_VILLAGE", playerId: HUMAN_ID, hex: key }); });
+      addBtn("💰 Demand tribute", near, false, function () { apply({ type: "DEMAND_TRIBUTE_VILLAGE", playerId: HUMAN_ID, hex: key }); });
+    }
+    addBtn("⚔️ Conquer", soldierNear, true, function () { apply({ type: "CONQUER_VILLAGE", playerId: HUMAN_ID, hex: key }); });
+    discoveryMenuEl.appendChild(acts);
+  }
+
+  // Any of the human's units on or adjacent to a tile key (militaryOnly → attack > 0).
+  function anyUnitNear(key, militaryOnly) {
+    const c = key.split(","); const at = { q: +c[0], r: +c[1] };
+    const ring = new Set([key]);
+    for (const d of AXIAL_DIRS) ring.add((at.q + d[0]) + "," + (at.r + d[1]));
+    for (const u of Object.values(state.map.units)) {
+      if (u.ownerId !== HUMAN_ID) continue;
+      if (militaryOnly && (engine.UNITS[u.type].attack || 0) <= 0) continue;
+      if (ring.has(u.position.q + "," + u.position.r)) return true;
+    }
+    return false;
+  }
+
   // city that works the tile. Hidden unless one of your own tiles is selected.
   function renderImproveMenu(isTurn) {
     if (!improveGroupEl || !improveMenuEl) return;
@@ -2772,6 +2856,7 @@
       updateResearchIndicator();
       updatePanelState(victory);
       renderLog();
+      checkDiscoveries();
     } catch (err) {
       console.error("Render error:", err);
     } finally {
@@ -3216,6 +3301,7 @@
     state = engine.createInitialGameState(config);
     state.playedEvents = {}; // one-use event cards refresh each campaign
     resultRecorded = false; // a fresh game's result hasn't been counted yet
+    discoveredRuinKeys = new Set(); // reset discovery toasts for the new map
     clearSelection();
     // Start with nothing selected — the in-play menu opens where you click.
     actionLog = ["New game started: " + label];
