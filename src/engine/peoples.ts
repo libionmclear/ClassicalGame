@@ -72,7 +72,9 @@ export function scatterVillages(
   const land = Object.keys(map.tiles).filter((k) => { const t = map.tiles[k].terrain; return t && t !== "sea" && t !== "coast"; });
   if (!land.length) return out;
   const used = new Set<string>([...avoid, ...Object.values(map.cities).map((c) => `${c.position.q},${c.position.r}`)]);
-  const n = Math.max(4, Math.min(20, Math.round(land.length / 30)));
+  // A seeded RANDOM SUBSET of the peoples — not the whole roster every match (§10.4).
+  const cap = Math.max(4, Math.ceil(MINOR_PEOPLES.length * 0.6));
+  const n = Math.max(4, Math.min(cap, Math.round(land.length / 45)));
   const pool = [...MINOR_PEOPLES].sort((a, b) => hash01(seed + ":vord:" + a.id) - hash01(seed + ":vord:" + b.id));
   let placed = 0;
   for (const people of pool) {

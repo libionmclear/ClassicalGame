@@ -48,7 +48,10 @@ export function scatterRuins(
   const land = Object.keys(map.tiles).filter((k) => { const t = map.tiles[k].terrain; return t && t !== "sea" && t !== "coast"; });
   if (!land.length) return out;
   const used = new Set<string>(Object.values(map.cities).map((c) => `${c.position.q},${c.position.r}`));
-  const nRuins = Math.max(3, Math.min(18, Math.round(land.length / 40)));
+  // A seeded RANDOM SUBSET — never the whole catalogue, so matches stay varied
+  // (§10.4). Capped well under the pool size even on giant maps.
+  const cap = Math.max(3, Math.ceil(RUINS.length * 0.6));
+  const nRuins = Math.max(3, Math.min(cap, Math.round(land.length / 55)));
   const pool = [...RUINS].sort((a, b) => hash01(seed + ":ruinord:" + a.id) - hash01(seed + ":ruinord:" + b.id));
   let placed = 0;
   for (const ruin of pool) {
@@ -64,7 +67,7 @@ export function scatterRuins(
   return out;
 }
 
-export type MapSize = "small" | "medium" | "large" | "xl" | "huge";
+export type MapSize = "small" | "medium" | "large" | "xl" | "huge" | "xxl" | "xxxl";
 
 interface SizeSpec {
   width: number;
@@ -76,12 +79,15 @@ interface SizeSpec {
 
 // width = offset columns, height = offset rows. Bigger and much squarer than
 // before (near-equal cols/rows read as a square board, not a wide strip).
+// All sizes enlarged ~33% from the previous set, plus two new giants (XXL, XXXL).
 export const MAP_SIZES: Record<MapSize, SizeSpec> = {
-  small: { width: 15, height: 13, bands: 2, rivers: 2, label: "Small" },
-  medium: { width: 21, height: 18, bands: 3, rivers: 3, label: "Medium" },
-  large: { width: 27, height: 24, bands: 3, rivers: 5, label: "Large" },
-  xl: { width: 34, height: 30, bands: 4, rivers: 6, label: "XL" },
-  huge: { width: 48, height: 38, bands: 5, rivers: 9, label: "Huge (ludicrous)" }
+  small: { width: 20, height: 17, bands: 2, rivers: 3, label: "Small" },
+  medium: { width: 28, height: 24, bands: 3, rivers: 4, label: "Medium" },
+  large: { width: 36, height: 32, bands: 3, rivers: 7, label: "Large" },
+  xl: { width: 45, height: 40, bands: 4, rivers: 8, label: "XL" },
+  huge: { width: 64, height: 51, bands: 5, rivers: 12, label: "Huge" },
+  xxl: { width: 85, height: 68, bands: 6, rivers: 16, label: "XXL (ludicrous)" },
+  xxxl: { width: 113, height: 90, bands: 7, rivers: 21, label: "XXXL (colossal)" }
 };
 
 // Odd-r offset (pointy-top) <-> axial. Generation walks a rectangle in offset
@@ -128,7 +134,9 @@ export const DEFAULT_PLAYERS: Record<MapSize, number> = {
   medium: 3,
   large: 4,
   xl: 5,
-  huge: 6
+  huge: 6,
+  xxl: 6,
+  xxxl: 6
 };
 
 // Land tiles a basic (unteched) land unit can traverse — used for connectivity so
@@ -498,7 +506,9 @@ export const TURN_LIMITS: Record<MapSize, number> = {
   medium: 60,
   large: 80,
   xl: 100,
-  huge: 140
+  huge: 140,
+  xxl: 180,
+  xxxl: 220
 };
 
 // A guaranteed-valid map: all plains rectangle, two capitals on opposite sides.
