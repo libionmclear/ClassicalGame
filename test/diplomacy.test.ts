@@ -303,7 +303,7 @@ test("honouring an alliance never brands you, even against a NAP partner", () =>
 function powerState(): GameState {
   const tiles: Record<string, { terrain: "plains"; region: string }> = {};
   for (let r = 0; r < 5; r += 1) for (let q = 0; q < 5; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
-  const units: NonNullable<NonNullable<Parameters<typeof createInitialGameState>[0]["map"]>["units"]> = {};
+  const units: Record<string, { id: string; type: "warrior"; ownerId: string; position: { q: number; r: number } }> = {};
   for (let i = 0; i < 4; i += 1) units["u" + i] = { id: "u" + i, type: "warrior", ownerId: "p1", position: { q: i, r: 0 } };
   units["w"] = { id: "w", type: "warrior", ownerId: "p2", position: { q: 0, r: 2 } };
   return createInitialGameState({
@@ -375,4 +375,40 @@ test("an overlord can release its vassal", () => {
   establishVassalage(s, "p1", "p2");
   s = applyAction(s, { type: "RELEASE_VASSAL", playerId: "p1", targetId: "p2" });
   assert.equal(isVassal(s, "p2"), false);
+});
+
+// ---- E3: alliance victory -------------------------------------------------
+
+function twoCapitalState(): GameState {
+  const tiles: Record<string, { terrain: "plains"; region: string }> = {};
+  for (let r = 0; r < 3; r += 1) for (let q = 0; q < 3; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
+  return createInitialGameState({
+    seed: "ally-win",
+    players: [{ id: "p1", civ: "Rome" }, { id: "p2", civ: "Athens" }],
+    map: {
+      width: 3, height: 3, regions: ["core"], tiles,
+      cities: {
+        c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 2, isCapital: true, hp: 24, maxHp: 24 },
+        c2: { id: "c2", ownerId: "p2", position: { q: 2, r: 2 }, population: 2, isCapital: true, hp: 24, maxHp: 24 }
+      }
+    }
+  });
+}
+
+test("two long-standing Full Allies win jointly (alliance victory)", () => {
+  const s = twoCapitalState();
+  ensurePair(s, "p1", "p2").agreements.push({ type: "full-alliance", expires: 0, since: s.turn - 30 });
+  const v = getVictoryStatus(s);
+  assert.equal(v.type, "alliance");
+  assert.deepEqual((v.allies ?? []).slice().sort(), ["p1", "p2"]);
+  assert.ok(v.winnerId === "p1" || v.winnerId === "p2");
+});
+
+test("a young Full Alliance does not win, and the setup toggle disables it", () => {
+  const s = twoCapitalState();
+  ensurePair(s, "p1", "p2").agreements.push({ type: "full-alliance", expires: 0, since: s.turn - 5 });
+  assert.equal(getVictoryStatus(s).type, null, "5 turns is too young to win jointly");
+  ensurePair(s, "p1", "p2").agreements[0].since = s.turn - 30; // now old enough...
+  s.allianceVictory = false;                                    // ...but switched off
+  assert.equal(getVictoryStatus(s).type, null, "alliance victory disabled at setup");
 });

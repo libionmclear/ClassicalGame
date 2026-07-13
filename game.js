@@ -11,6 +11,7 @@
   const endTurnBtn = document.getElementById("end-turn-btn");
   const mapSizeSelectEl = document.getElementById("map-size-select");
   const playerCountSelectEl = document.getElementById("player-count-select");
+  const allianceVictoryToggleEl = document.getElementById("alliance-victory-toggle");
   const victoryModeSelectEl = document.getElementById("victory-mode-select");
   const turnsInputEl = document.getElementById("turns-input");
   const turnsPickerEl = document.getElementById("turns-picker");
@@ -1000,7 +1001,7 @@
       try { recordGameResult(HUMAN_ID, victory.winnerId === HUMAN_ID, victory.type); } catch (e) {}
     }
 
-    const humanWon = victory.winnerId === HUMAN_ID;
+    const humanWon = victory.winnerId === HUMAN_ID || (victory.allies && victory.allies.indexOf(HUMAN_ID) !== -1);
     const winner = state.playersById[victory.winnerId];
     const winnerName = winner ? winner.civ || winner.id : victory.winnerId;
     const byScore = victory.type === "score";
@@ -3166,6 +3167,8 @@
     const difficulty = (difficultySelectEl && difficultySelectEl.value) || "normal";
     config.difficulty = difficulty;
     config.humanPlayerId = HUMAN_ID;
+    // Alliance victory (§6) — on by default; a setup toggle can switch it off.
+    config.allianceVictory = !allianceVictoryToggleEl || allianceVictoryToggleEl.checked;
     if (difficulty !== "normal") {
       label += ", " + difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
     }

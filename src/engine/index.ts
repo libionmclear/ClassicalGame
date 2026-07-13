@@ -21,7 +21,7 @@ import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
 import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
-import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE } from "./diplomacy";
+import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE, fullAlliancesHeld, ALLIANCE_VICTORY_HOLD } from "./diplomacy";
 import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
 import type {
   AttackCityAction,
@@ -1787,7 +1787,8 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
     weather: { current: {}, forecast: {} },
     tradeRoutes: [],
     actionLog: [],
-    costScale: mapCostScale(map.width, map.height)
+    costScale: mapCostScale(map.width, map.height),
+    allianceVictory: config.allianceVictory ?? true
   };
 
   syncOwnershipIndexes(state);
@@ -1927,6 +1928,18 @@ export function getVictoryStatus(state: GameState): VictoryStatus {
     const owner = topOverlord(state, capitals[0].ownerId);
     if (capitals.every((city) => topOverlord(state, city.ownerId) === owner)) {
       return { winnerId: owner, type: "domination", reason: `${owner} controls all capitals (directly or through vassals)` };
+    }
+  }
+
+  // Alliance victory (§6): two Full Allies of 30+ turns whose capitals (with their
+  // vassals) cover the whole world win JOINTLY — no mandatory endgame backstab.
+  if (state.allianceVictory !== false && capitals.length > 0) {
+    for (const [a, b] of fullAlliancesHeld(state, ALLIANCE_VICTORY_HOLD)) {
+      if (capitals.every((city) => { const t = topOverlord(state, city.ownerId); return t === a || t === b; })) {
+        const scores = computeScores(state);
+        const lead = (scores[a] ?? 0) >= (scores[b] ?? 0) ? a : b;
+        return { winnerId: lead, type: "alliance", allies: [a, b], reason: `${a} & ${b} share the world through their Full Alliance` };
+      }
     }
   }
 

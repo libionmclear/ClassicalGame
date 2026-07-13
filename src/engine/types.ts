@@ -225,6 +225,8 @@ export interface GameState {
   costScale?: number;
   /** Diplomacy state, keyed by canonical civ-pair key (see diplomacy.ts). */
   diplomacy?: Record<string, DiploPair>;
+  /** Whether a joint Full-Alliance victory is allowed (§6; default true). */
+  allianceVictory?: boolean;
 }
 
 /** An agreement on a civ-pair. `expires` is the turn it lapses (0 = no expiry). */
@@ -496,8 +498,10 @@ export type GameAction =
 
 export interface VictoryStatus {
   winnerId: string | null;
-  type: "domination" | "score" | null;
+  type: "domination" | "score" | "alliance" | null;
   reason: string | null;
+  /** For an alliance victory (§6): the two co-winning civ ids. */
+  allies?: string[];
 }
 
 export interface VisibilityResult {
@@ -519,6 +523,8 @@ export interface CreateGameConfig {
   turnLimit?: number;
   difficulty?: Difficulty;
   humanPlayerId?: string | null;
+  /** Allow a joint win by two long-standing Full Allies (§6; default on). */
+  allianceVictory?: boolean;
   players?: Partial<Player>[];
   map?: {
     width?: number;

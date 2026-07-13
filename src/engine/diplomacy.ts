@@ -246,6 +246,18 @@ export function isFullAlly(state: GameState, a: string, b: string): boolean {
   return hasAgreement(state, a, b, "full-alliance");
 }
 
+export const ALLIANCE_VICTORY_HOLD = 30;    // a Full Alliance this old can win jointly (§6)
+// Every Full-Alliance pair that has stood at least `minTurns`.
+export function fullAlliancesHeld(state: GameState, minTurns: number): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  if (!state.diplomacy) return out;
+  for (const key of Object.keys(state.diplomacy)) {
+    const ag = state.diplomacy[key].agreements.find((x) => x.type === "full-alliance" && (x.expires === 0 || x.expires > state.turn));
+    if (ag && state.turn - (ag.since ?? state.turn) >= minTurns) { const [a, b] = key.split("|"); out.push([a, b]); }
+  }
+  return out;
+}
+
 // A denounced pact is renounceable once the cooldown elapses — then leaving it
 // (or declaring war) no longer brands you (§2).
 export function isPactRenounced(state: GameState, a: string, b: string): boolean {
