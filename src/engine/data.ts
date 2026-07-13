@@ -275,6 +275,9 @@ export const UNITS: Record<string, UnitRule> = {
   trireme: { domain: "naval", movement: 3, attack: 24, defense: 16, maxHp: 24, range: 1, upkeep: 2, requiresTech: "open-sea-sailing", category: "ranged" },
   merchant: { domain: "civilian", movement: 2, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1, category: "infantry" },
   settler: { domain: "civilian", movement: 2, attack: 0, defense: 6, maxHp: 12, range: 0, upkeep: 1, category: "infantry" },
+  // §10.1 — the recon/discovery specialist: fastest land unit, cannot attack,
+  // and the only unit that fully excavates a Ruin (others get half, no Codex).
+  explorer: { domain: "civilian", movement: 4, attack: 0, defense: 4, maxHp: 12, range: 0, upkeep: 1, category: "support" },
 
   // --- Civilization-unique units (each gated by that people's unique tech) ---
   // Rome — the legion: drilled heavy foot, a clear step beyond the swordsman.
@@ -680,6 +683,7 @@ export const UNIT_BUILD_COSTS: Record<string, number> = {
   trireme: 22,
   merchant: 16,
   settler: 18,
+  explorer: 14,
   // Civ-unique units — costlier than their generic cousins, worth every labourer.
   legionary: 26,
   hoplite: 22,

@@ -174,6 +174,8 @@ export interface Player {
   vassalOf?: string;
   /** Overlord's military strength when vassalage began (rebellion trigger). */
   overlordMilBaseline?: number;
+  /** Codex entries unlocked by discovery (ruin ids fully excavated, §10). */
+  codex?: string[];
 }
 
 export interface GameMap {
@@ -184,6 +186,8 @@ export interface GameMap {
   regions: string[];
   cities: Record<string, City>;
   units: Record<string, Unit>;
+  /** Ancient ruins to excavate (§10.2), keyed by tile "q,r". */
+  ruins?: Record<string, { ruinId: string; excavated?: boolean; by?: string }>;
 }
 
 export interface WeatherState {

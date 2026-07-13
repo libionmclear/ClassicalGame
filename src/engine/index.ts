@@ -22,6 +22,8 @@ import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
 import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
 import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE, fullAlliancesHeld, ALLIANCE_VICTORY_HOLD } from "./diplomacy";
+import { scatterRuins } from "./mapgen";
+import { excavateRuins } from "./discovery";
 import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
 import type {
   AttackCityAction,
@@ -1504,6 +1506,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   }
 
   applyDiplomacyIncome(state, endingPlayer); // trade-pact gold + tribute transfer
+  excavateRuins(state, endingPlayer.id);     // §10.2: units ending on a ruin dig it up
 
   // Advance to the next player. With 3+ players we ROTATE initiative each round
   // (round r starts at seat r mod n) so no seat is permanently last — the last
@@ -1793,6 +1796,7 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
 
   syncOwnershipIndexes(state);
   initDiplomacy(state); // every civ-pair starts Neutral (0)
+  if (!state.map.ruins) state.map.ruins = scatterRuins(state.map, state.seed); // §10.2 discovery sites
   state.weather.current = generateWeatherByRegion(state, state.turn);
   state.weather.forecast = generateWeatherByRegion(state, state.turn + 1);
 

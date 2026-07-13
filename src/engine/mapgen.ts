@@ -1,6 +1,7 @@
 import { seededRandom } from "./rng";
 import { keyOf, neighborsOf, parseKey, distance, edgeKey } from "./hex";
 import { RESOURCES } from "./data";
+import { RUINS } from "./discovery";
 import type { Coord, CreateGameConfig, TerrainType } from "./types";
 
 // Deterministic 0..1 hash of a string (FNV-1a), so resource placement is stable
@@ -33,6 +34,34 @@ export function sprinkleResources(
     const pick = hash01(seed + ":pick:" + key);
     tile.resource = opts[Math.min(opts.length - 1, Math.floor(pick * opts.length))];
   }
+}
+
+// Place ancient Ruins (§10.2) on suitable land tiles — seeded, terrain-hinted,
+// never on a city, one per tile. Density ~1 per 40 land hexes (3–18). Returns the
+// map.ruins record; call once at game creation so every map (generated + scenario)
+// carries discovery sites.
+export function scatterRuins(
+  map: { tiles: Record<string, { terrain: string }>; cities: Record<string, { position: { q: number; r: number } }> },
+  seed: string
+): Record<string, { ruinId: string }> {
+  const out: Record<string, { ruinId: string }> = {};
+  const land = Object.keys(map.tiles).filter((k) => { const t = map.tiles[k].terrain; return t && t !== "sea" && t !== "coast"; });
+  if (!land.length) return out;
+  const used = new Set<string>(Object.values(map.cities).map((c) => `${c.position.q},${c.position.r}`));
+  const nRuins = Math.max(3, Math.min(18, Math.round(land.length / 40)));
+  const pool = [...RUINS].sort((a, b) => hash01(seed + ":ruinord:" + a.id) - hash01(seed + ":ruinord:" + b.id));
+  let placed = 0;
+  for (const ruin of pool) {
+    if (placed >= nRuins) break;
+    const fit = land.filter((k) => !used.has(k) && (ruin.terrain === "any" || map.tiles[k].terrain === ruin.terrain));
+    const list = fit.length ? fit : land.filter((k) => !used.has(k));
+    if (!list.length) continue;
+    const key = list.sort((a, b) => hash01(seed + ":ruinpos:" + ruin.id + ":" + a) - hash01(seed + ":ruinpos:" + ruin.id + ":" + b))[0];
+    out[key] = { ruinId: ruin.id };
+    used.add(key);
+    placed += 1;
+  }
+  return out;
 }
 
 export type MapSize = "small" | "medium" | "large" | "xl" | "huge";
