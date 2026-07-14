@@ -102,6 +102,11 @@
   // looping. Everything is synthesized (no files, nothing copyrighted).
   // Frequencies in Hz. drone = a low sustained root (cornu/lyre bass).
   var THEMES = {
+    // Neutral — the original calm D-Dorian lyre bed (kept as the baseline that
+    // plays before you've met anyone, and rotates in alongside civ themes).
+    neutral: { bar: 8.2, padType: "triangle", cut: 900, pluck: "triangle", drone: 0, drum: false,
+      chords: [[146.83, 174.61, 220.00], [130.81, 164.81, 196.00], [174.61, 220.00, 261.63], [196.00, 246.94, 293.66]],
+      scale: [293.66, 329.63, 392.00, 440.00, 493.88, 587.33] },
     // Rome — grave and martial: a dark Phrygian set over a low cornu drone, a
     // reedy tibia pad, a lyre motif and a soft frame-drum tread.
     rome: { bar: 8.6, padType: "sawtooth", cut: 760, pluck: "triangle", drone: 65.41, drum: true,
@@ -128,7 +133,14 @@
       chords: [[130.81, 155.56, 196.00], [138.59, 174.61, 207.65], [116.54, 146.83, 174.61], [130.81, 164.81, 196.00]],
       scale: [130.81, 138.59, 155.56, 174.61, 196.00, 207.65, 233.08] }
   };
-  var curTheme = THEMES.rome, motif = 0;
+  // The score rotates through a POOL of themes: it starts with the neutral bed,
+  // gains your own civ's theme, and grows as you MEET other civs — so the music
+  // reflects who is in your world. Each theme holds the stage for a while, then
+  // hands off to the next.
+  var pool = ["neutral"], poolIdx = 0, curTheme = THEMES.neutral, motif = 0, barsInTheme = 0, ownCiv = null;
+  var ROTATE_BARS = 14;
+  function ensureInPool(k) { if (THEMES[k] && pool.indexOf(k) < 0) { pool.push(k); return true; } return false; }
+  function switchTo(k) { if (!THEMES[k]) return; poolIdx = pool.indexOf(k); if (poolIdx < 0) { pool.push(k); poolIdx = pool.length - 1; } curTheme = THEMES[k]; barsInTheme = 0; motif = 0; }
 
   function padChord(freqs, dur, th) {
     var lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = th.cut; lp.Q.value = 0.3;
@@ -191,6 +203,14 @@
     if (th.drum && motif % 4 !== 3) { drumHit(); setTimeout(function () { if (AC && musicOn) drumHit(); }, bar * 500); }
     step++;
     if (step % 4 === 0) motif++; // shift the feel every four bars — the "switch up"
+    // Hand off to the next theme in the pool once this one has had its turn, so
+    // the soundtrack rotates through the civs you've met.
+    barsInTheme++;
+    if (barsInTheme >= ROTATE_BARS && pool.length > 1) {
+      poolIdx = (poolIdx + 1) % pool.length;
+      curTheme = THEMES[pool[poolIdx]] || curTheme;
+      barsInTheme = 0; motif = 0;
+    }
     musicTimer = setTimeout(musicTick, bar * 1000);
   }
 
@@ -247,12 +267,25 @@
       if (musicOn && started) { if (!musicTimer) musicTick(); }
       else { clearTimeout(musicTimer); musicTimer = null; ramp(musicBus.gain, 0, 1.0); setTimeout(function () { if (musicBus) musicBus.gain.value = 0.5; }, 1100); }
     },
-    // Pick the civ's musical theme (defaults to Rome). The score keeps its own
-    // evolution; this just swaps the mode/colour for the civ you're playing.
+    // Your own civ's theme — added to the rotation and made the lead the first
+    // time it's set (so your music opens the game). Safe to call every frame.
     setCiv: function (civ) {
       var k = (civ || "").toLowerCase();
-      if (THEMES[k] && curTheme !== THEMES[k]) { curTheme = THEMES[k]; motif = 0; }
+      if (!THEMES[k] || k === ownCiv) return;
+      ownCiv = k; ensureInPool(k);
+      if (curTheme === THEMES.neutral) switchTo(k); // lead with your own theme
     },
+    // A civ whose theme should be in the rotation (e.g. one you've met before,
+    // restored on load) — no immediate switch.
+    addCiv: function (civ) { ensureInPool((civ || "").toLowerCase()); },
+    // You just MET this civ — bring their theme in and play it now as a cue.
+    meetCiv: function (civ) {
+      var k = (civ || "").toLowerCase();
+      if (THEMES[k]) switchTo(k);
+    },
+    // Introspection (debug / tests): the theme now playing and the rotation pool.
+    currentTheme: function () { return pool[poolIdx]; },
+    themePool: function () { return pool.slice(); },
     // weather: "rain" | "storm" | anything else (dry).
     setWeather: function (wx) {
       if (!AC) return;

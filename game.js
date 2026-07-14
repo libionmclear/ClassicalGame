@@ -1572,6 +1572,10 @@
   function updateSoundscape(skyWx, tiles) {
     if (!window.HGAudio || !window.HGAudio.isReady()) return;
     if (window.HGAudio.setCiv) window.HGAudio.setCiv(HUMAN_ID); // civ-themed score (Rome, Greece, …)
+    // Civs you've already met stay in the rotation (restores the pool on load).
+    if (window.HGAudio.addCiv && state.contact && state.contact[HUMAN_ID]) {
+      state.contact[HUMAN_ID].forEach(function (id) { window.HGAudio.addCiv(id); });
+    }
     if (skyWx !== lastWeatherSound) { window.HGAudio.setWeather(skyWx); lastWeatherSound = skyWx; }
     // Forest ambience when forest dominates what you can actually see.
     let forest = 0, land = 0;
@@ -1616,7 +1620,11 @@
       if (action.type === "END_TURN" && action.playerId === HUMAN_ID && state.contact && state.contact[HUMAN_ID]) {
         var metBefore = {}; prevContact.forEach(function (id) { metBefore[id] = 1; });
         state.contact[HUMAN_ID].forEach(function (id) {
-          if (!metBefore[id]) { showCombatToast("🕊️ Your envoy has made contact with " + civName(id), "gate"); logAction("🕊️ First contact with " + civName(id) + " — relations open on a warm note."); }
+          if (!metBefore[id]) {
+            showCombatToast("🕊️ Your envoy has made contact with " + civName(id), "gate");
+            logAction("🕊️ First contact with " + civName(id) + " — relations open on a warm note.");
+            if (window.HGAudio && window.HGAudio.meetCiv) window.HGAudio.meetCiv(id); // play their theme as a cue
+          }
         });
       }
       playActionSfx(action);
