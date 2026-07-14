@@ -2449,15 +2449,35 @@
       const need = 8 + selectedCity.population * 6;
       const q = selectedCity.queue || [];
       const banked = Math.floor(selectedCity.production || 0);
-      const building = q.length ? " · Building " + itemName(q[0]) + " " + Math.min(banked, itemCost(q[0])) + "/" + itemCost(q[0]) : "";
+      // Per-turn rates so it's clear what this city earns and how fast it builds.
+      const y = (function () { try { return engine.computeCityYield(state, selectedCity.id) || {}; } catch (e) { return {}; } })();
+      const labor = Math.round(y.production || 0);
+      const foodPT = Math.round(y.food || 0);
+      const goldPT = Math.round(y.gold || 0);
+      const foodNow = Math.floor(selectedCity.food || 0);
+      const growEta = turnsToAccrue(need - foodNow, foodPT);
+      const growStr = foodPT > 0 && Number.isFinite(growEta) ? " · ~" + growEta + "t" : (foodPT <= 0 ? " · stalled" : "");
       const renameBtn = selectedCity.ownerId === HUMAN_ID
         ? ' <button class="rename-btn" data-rename="1" title="Rename this city">✎</button>'
         : "";
+      // What this city is building right now, with progress + ETA at its labour rate.
+      let buildLine;
+      if (q.length) {
+        const cost = itemCost(q[0]);
+        const eta = turnsToAccrue(cost - banked, labor);
+        buildLine = "🔨 Building <b>" + itemName(q[0]) + "</b> — " + Math.min(banked, cost) + "/" + cost + " ⚒️ · " + etaLabel(eta);
+      } else {
+        buildLine = '🔨 <span class="ct-idle">Idle — pick a unit or improvement below</span>';
+      }
       selectionLineEl.innerHTML =
         (selectedCity.isCapital ? "🏛️ " : "🏘️ ") + cityDisplayName(selectedCity) + renameBtn +
-        '<span class="sel-sub"> Pop ' + selectedCity.population + " · HP " + selectedCity.hp + "/" + selectedCity.maxHp +
-        " · Growth " + Math.floor(selectedCity.food || 0) + "/" + need +
-        " · ⚒️ " + banked + building + "</span>";
+        '<span class="sel-sub">👤 ' + selectedCity.population + " · ❤️ " + selectedCity.hp + "/" + selectedCity.maxHp + "</span>" +
+        '<div class="ct-econ">' +
+          '<span class="ct-chip ct-prod" title="Labour this city makes each turn — your build speed — plus what is already banked toward the current build.">⚒️ <b>' + labor + "/turn</b>" + (banked > 0 ? ' <em>· ' + banked + " banked</em>" : "") + "</span>" +
+          '<span class="ct-chip ct-food" title="Food stored toward the next citizen, the rate per turn, and turns to grow.">🌾 <b>' + foodNow + "/" + need + "</b> <em>" + (foodPT >= 0 ? "+" : "") + foodPT + "/t" + growStr + "</em></span>" +
+          (goldPT ? '<span class="ct-chip ct-gold" title="Gold this city earns each turn (spend it to rush-buy).">🪙 <b>' + (goldPT >= 0 ? "+" : "") + goldPT + "/t</b></span>" : "") +
+        "</div>" +
+        '<div class="ct-build">' + buildLine + "</div>";
     } else if (selectedTileKey && state.map.tiles[selectedTileKey]) {
       const tile = state.map.tiles[selectedTileKey];
       const terr = (TERRAIN_LABELS && TERRAIN_LABELS[tile.terrain]) || tile.terrain;

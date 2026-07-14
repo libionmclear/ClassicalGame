@@ -490,6 +490,46 @@ button:hover:not(:disabled) {
   margin-top: 3px;
 }
 
+/* City economy chips — readable (NOT the wide-spaced uppercase), so it's clear
+   what the city earns and spends each turn. */
+.selection-title .ct-econ {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+.selection-title .ct-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--body);
+  font-size: 0.82rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--parchment);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+}
+.selection-title .ct-chip b { font-weight: 700; }
+.selection-title .ct-chip em { font-style: normal; font-size: 0.74rem; color: var(--muted, #9fb0c0); }
+.selection-title .ct-prod b { color: var(--prod, #f0a35e); }
+.selection-title .ct-food b { color: var(--food, #7ed957); }
+.selection-title .ct-gold b { color: var(--gold, #f2cc69); }
+.selection-title .ct-build {
+  font-family: var(--body);
+  font-size: 0.8rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--parchment);
+  margin-top: 6px;
+}
+.selection-title .ct-build b { color: var(--gold); font-weight: 700; }
+.selection-title .ct-idle { color: var(--faint, #7b8a99); font-style: italic; }
+
 .heal-note {
   color: var(--ok);
   font-weight: 600;
