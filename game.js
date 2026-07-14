@@ -1540,8 +1540,20 @@
         action.type === "RESOLVE_EVENT" ||
         action.type === "RENAME_CITY" ||
         action.type === "BUILD_DISTRICT" ||
-        action.type === "REPAIR_DISTRICT";
+        action.type === "REPAIR_DISTRICT" ||
+        // Minor-People overtures keep the tile selected so the Discovery panel
+        // re-renders with the new mood and you can react to the outcome.
+        action.type === "BEFRIEND_VILLAGE" ||
+        action.type === "DEMAND_TRIBUTE_VILLAGE" ||
+        action.type === "ABSORB_VILLAGE";
       state = engine.applyAction(state, action);
+      // Surface a Minor-People reaction (comply/threaten) the moment it resolves,
+      // before the AI takes its turn and overwrites the transient outcome.
+      if (state.lastReaction && state.lastReaction.playerId === HUMAN_ID) {
+        var lr = state.lastReaction;
+        showCombatToast(lr.message, lr.comply ? "win" : "loss");
+        logAction((lr.comply ? "✅ " : "🚫 ") + lr.message + " (" + Math.round(lr.chance * 100) + "% odds)");
+      }
       playActionSfx(action);
       if (!keepSelection) clearSelection();
       else if (selectedCityId && !state.map.cities[selectedCityId]) clearSelection();
@@ -2502,6 +2514,10 @@
   // Improvements for the selected land tile: build a farm/mine/… funded by the
   // Discovery panel (§10): shows the Ruin / Minor-People on the selected tile,
   // with the interactions your position allows.
+  // Mirrors the engine's reaction bonus so the odds shown match the real roll.
+  // Phase 2: no modifiers yet (0). Phase 3 feeds the general's role/rarity and the
+  // Explorer-envoy edge here (and the same values in the engine's reactionBonus).
+  function diploBonus(deed) { return 0; }
   function renderDiscovery(isTurn) {
     if (!discoveryGroupEl || !discoveryMenuEl) return;
     const key = selectedTileKey;
@@ -2534,24 +2550,27 @@
     const gold = (human() && human().gold) || 0;
     function addBtn(label, enabled, danger, fn, tip) { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.disabled = !enabled; if (tip) b.title = tip; if (enabled) b.addEventListener("click", fn); acts.appendChild(b); }
     const befriended = village.befriendedBy === HUMAN_ID;
+    // Comply-odds shown per deed so it reads as a real gamble (§10.3). bonus=0 here
+    // mirrors the engine's stub; Phase 3 will feed your general + Explorer edge.
+    function odds(deed) { return people && engine.villageReactionChance ? " · " + Math.round(engine.villageReactionChance(people, village.disposition, deed, diploBonus(deed)) * 100) + "%" : ""; }
     // All four interactions are ALWAYS visible so the options read clearly (§10.3).
     // Assimilate stays locked until you've befriended them (a peaceful union needs
     // goodwill first); Conquer is the armed alternative.
-    addBtn("🤝 Befriend (" + engine.BEFRIEND_COST + "g)", near && !befriended && village.disposition !== "hostile" && gold >= engine.BEFRIEND_COST, false,
+    addBtn("🤝 Befriend (" + engine.BEFRIEND_COST + "g" + odds("befriend") + ")", near && !befriended && village.disposition !== "hostile" && gold >= engine.BEFRIEND_COST, false,
       function () { apply({ type: "BEFRIEND_VILLAGE", playerId: HUMAN_ID, hex: key }); },
-      befriended ? "Already befriended." : village.disposition === "hostile" ? "They are hostile — warm them with an Explorer first." : gold < engine.BEFRIEND_COST ? "Not enough gold." : "Court them with gifts.");
-    addBtn("💰 Demand tribute", near && !befriended, false,
+      befriended ? "Already befriended." : village.disposition === "hostile" ? "They are hostile — warm them with an Explorer first." : gold < engine.BEFRIEND_COST ? "Not enough gold." : "Court them with gifts — but they may refuse.");
+    addBtn("💰 Demand tribute (" + odds("tribute").replace(" · ", "") + ")", near && !befriended, false,
       function () { apply({ type: "DEMAND_TRIBUTE_VILLAGE", playerId: HUMAN_ID, hex: key }); },
-      "Take gold now — but it sours them.");
-    addBtn("🏘️ Assimilate → town", near && befriended, false,
+      "Take gold now — but it sours them, and they may refuse and raid you.");
+    addBtn("🏘️ Assimilate → town (" + odds("assimilate").replace(" · ", "") + ")", near && befriended, false,
       function () { apply({ type: "ABSORB_VILLAGE", playerId: HUMAN_ID, hex: key, mode: "join" }); },
-      befriended ? "They join your realm as a new town." : "Befriend them first to assimilate.");
-    addBtn("🚶 Assimilate → migrate", near && befriended, false,
+      befriended ? "They may join your realm as a new town." : "Befriend them first to assimilate.");
+    addBtn("🚶 Assimilate → migrate (" + odds("assimilate").replace(" · ", "") + ")", near && befriended, false,
       function () { apply({ type: "ABSORB_VILLAGE", playerId: HUMAN_ID, hex: key, mode: "migrate" }); },
-      befriended ? "Their people migrate to your nearest city (+population)." : "Befriend them first to assimilate.");
+      befriended ? "Their people may migrate to your nearest city (+population)." : "Befriend them first to assimilate.");
     addBtn("⚔️ Conquer", soldierNear, true,
       function () { apply({ type: "CONQUER_VILLAGE", playerId: HUMAN_ID, hex: key }); },
-      "Take them by force — their knowledge burns, and it angers the world.");
+      "Take them by force — always succeeds, but their knowledge burns and it angers the world.");
     discoveryMenuEl.appendChild(acts);
     if (!befriended) { const h = document.createElement("div"); h.className = "disc-hint"; h.textContent = "Assimilate unlocks once you've befriended them."; discoveryMenuEl.appendChild(h); }
   }

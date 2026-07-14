@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 
 import { createInitialGameState, applyAction } from "../src/engine";
 import { getRelation } from "../src/engine/diplomacy";
-import { scatterVillages, PEOPLE_BY_ID } from "../src/engine/peoples";
+import { scatterVillages, PEOPLE_BY_ID, rollReaction, villageReactionChance } from "../src/engine/peoples";
 import type { GameState } from "../src/engine/types";
+import type { Disposition, VillageDeed } from "../src/engine/peoples";
 
 test("villages seed on land, off cities and ruin tiles, deterministically", () => {
   const map: { tiles: Record<string, { terrain: string }>; cities: Record<string, { position: { q: number; r: number } }> } = {
@@ -21,11 +22,11 @@ test("villages seed on land, off cities and ruin tiles, deterministically", () =
 });
 
 // A player unit sits ON the village at (1,1); a rival p2 exists for reputation.
-function villageState(peopleId: string, disposition: "open" | "wary" | "hostile", unitType = "warrior"): GameState {
+function villageState(peopleId: string, disposition: Disposition, unitType = "warrior", seed = "vil", befriendedBy?: string): GameState {
   const tiles: Record<string, { terrain: "plains"; region: string }> = {};
   for (let r = 0; r < 4; r += 1) for (let q = 0; q < 4; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
   const s = createInitialGameState({
-    seed: "vil",
+    seed,
     players: [{ id: "p1", civ: "Rome", gold: 100, science: 0 }, { id: "p2", civ: "Carthage" }],
     map: {
       width: 4, height: 4, regions: ["core"], tiles,
@@ -33,12 +34,34 @@ function villageState(peopleId: string, disposition: "open" | "wary" | "hostile"
       cities: { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 2, hp: 24, maxHp: 24 } }
     }
   });
-  s.map.villages = { "1,1": { peopleId, disposition } };
+  s.map.villages = { "1,1": befriendedBy ? { peopleId, disposition, befriendedBy } : { peopleId, disposition } };
   return s;
 }
 
-test("befriending pays gold and grants the full benefit", () => {
-  const s = applyAction(villageState("latins", "open"), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" });
+// The overtures are seeded rolls now (§10.3). Find a seed that deterministically
+// comples/refuses so we can exercise BOTH branches — using the real roll (no
+// formula duplication), so it self-adjusts if the constants change.
+function seedFor(peopleId: string, disp: Disposition, deed: VillageDeed, want: boolean, attempt = 1): string {
+  for (let i = 0; i < 500; i += 1) {
+    const seed = "seed" + i;
+    if (rollReaction(PEOPLE_BY_ID[peopleId], disp, deed, 0, seed, "1,1", attempt).comply === want) return seed;
+  }
+  throw new Error(`no seed makes ${deed} comply=${want}`);
+}
+
+test("reaction odds: a friendlier mood and a gentler deed comply more often", () => {
+  const latins = PEOPLE_BY_ID["latins"];
+  assert.ok(villageReactionChance(latins, "open", "befriend", 0) > villageReactionChance(latins, "wary", "befriend", 0));
+  assert.ok(villageReactionChance(latins, "wary", "befriend", 0) > villageReactionChance(latins, "hostile", "befriend", 0));
+  assert.ok(villageReactionChance(latins, "open", "befriend", 0) > villageReactionChance(latins, "open", "tribute", 0), "a demand offends more than a gift");
+  assert.ok(villageReactionChance(latins, "open", "befriend", 5) <= 0.95, "clamped — never a sure thing");
+  assert.ok(villageReactionChance(latins, "hostile", "befriend", -5) >= 0.05, "clamped — never hopeless");
+});
+
+test("befriending (comply) pays gold and grants the full benefit", () => {
+  const seed = seedFor("latins", "open", "befriend", true);
+  const s = applyAction(villageState("latins", "open", "warrior", seed), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" });
+  assert.ok(s.lastReaction!.comply, "the seed complies");
   assert.equal(s.playersById["p1"].gold, 70, "paid the 30 courtship cost");
   assert.equal(s.playersById["p1"].science, 10, "Latins: +science");
   assert.equal(s.map.cities["c1"].population, 4, "Latins: +2 pop to the nearest city");
@@ -46,8 +69,18 @@ test("befriending pays gold and grants the full benefit", () => {
   assert.equal(s.map.villages!["1,1"].disposition, "open");
 });
 
+test("befriending (threaten) spends nothing and sours them", () => {
+  const seed = seedFor("latins", "open", "befriend", false);
+  const s = applyAction(villageState("latins", "open", "warrior", seed), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" });
+  assert.ok(!s.lastReaction!.comply, "the seed refuses");
+  assert.equal(s.playersById["p1"].gold, 100, "no gold spent on a refusal");
+  assert.equal(s.map.villages!["1,1"].befriendedBy, undefined, "not befriended");
+  assert.equal(s.map.villages!["1,1"].disposition, "wary", "open → wary");
+});
+
 test("a recruit-benefit village hands you a levy when befriended", () => {
-  const s = applyAction(villageState("samnites", "open"), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" });
+  const seed = seedFor("samnites", "open", "befriend", true);
+  const s = applyAction(villageState("samnites", "open", "warrior", seed), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" });
   assert.equal(Object.values(s.map.units).filter((u) => u.ownerId === "p1" && u.type === "swordsman").length, 1);
 });
 
@@ -57,10 +90,21 @@ test("befriending needs a unit near, gold, and a non-hostile village", () => {
   assert.throws(() => applyAction(poor, { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" }), /Not enough gold/);
 });
 
-test("demanding tribute pays now but sours them", () => {
-  const s = applyAction(villageState("lydians", "open"), { type: "DEMAND_TRIBUTE_VILLAGE", playerId: "p1", hex: "1,1" });
+test("demanding tribute (comply) pays now but sours them", () => {
+  const seed = seedFor("lydians", "open", "tribute", true);
+  const s = applyAction(villageState("lydians", "open", "warrior", seed), { type: "DEMAND_TRIBUTE_VILLAGE", playerId: "p1", hex: "1,1" });
+  assert.ok(s.lastReaction!.comply, "the seed complies");
   assert.equal(s.playersById["p1"].gold, 115, "gained the tribute");
   assert.equal(s.map.villages!["1,1"].disposition, "wary", "they cool a step");
+});
+
+test("a refused overture that curdles to hostile lets them raid the offender", () => {
+  // Start Wary so a single refusal drops straight to Hostile and triggers the raid.
+  const seed = seedFor("belgae", "wary", "befriend", false);
+  const s = applyAction(villageState("belgae", "wary", "warrior", seed), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" });
+  assert.ok(!s.lastReaction!.comply);
+  assert.equal(s.map.villages!["1,1"].disposition, "hostile", "wary → hostile");
+  assert.ok(s.playersById["p1"].gold < 100, "they raided the treasury");
 });
 
 test("conquest yields a town + material gold but burns the knowledge", () => {
@@ -79,15 +123,21 @@ test("conquering a knowledge village needs a soldier and yields an empty town", 
   assert.equal(s.playersById["p1"].science, 0, "star-lore lost to the sword");
 });
 
-test("absorbing a befriended village: join founds a town, migrate swells a city", () => {
-  const befriended = applyAction(villageState("latins", "open"), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" });
-  const joined = applyAction(befriended, { type: "ABSORB_VILLAGE", playerId: "p1", hex: "1,1", mode: "join" });
+test("assimilating a befriended village: join founds a town, migrate swells a city", () => {
+  const seed = seedFor("latins", "open", "assimilate", true);
+  const joined = applyAction(villageState("latins", "open", "warrior", seed, "p1"), { type: "ABSORB_VILLAGE", playerId: "p1", hex: "1,1", mode: "join" });
+  assert.ok(joined.lastReaction!.comply, "the seed complies");
   assert.ok(Object.values(joined.map.cities).some((c) => c.position.q === 1 && c.position.r === 1), "join → town");
   assert.equal(joined.map.villages!["1,1"], undefined);
 
-  const popBefore = befriended.map.cities["c1"].population;
-  const migrated = applyAction(befriended, { type: "ABSORB_VILLAGE", playerId: "p1", hex: "1,1", mode: "migrate" });
+  const base = villageState("latins", "open", "warrior", seed, "p1");
+  const popBefore = base.map.cities["c1"].population;
+  const migrated = applyAction(base, { type: "ABSORB_VILLAGE", playerId: "p1", hex: "1,1", mode: "migrate" });
   assert.equal(migrated.map.cities["c1"].population, popBefore + 2, "migrate → +2 pop");
+});
+
+test("assimilating requires having befriended them first", () => {
+  assert.throws(() => applyAction(villageState("latins", "open"), { type: "ABSORB_VILLAGE", playerId: "p1", hex: "1,1", mode: "join" }), /Befriend them/);
 });
 
 test("an Explorer ending beside a wary village warms it a step (§10.3)", () => {

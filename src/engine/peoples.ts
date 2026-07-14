@@ -54,6 +54,50 @@ for (const p of MINOR_PEOPLES) PEOPLE_BY_ID[p.id] = p;
 export const BEFRIEND_COST = 30;
 export const TRIBUTE_GAIN = 15;
 export const CONQUEST_REPUTATION_HIT = -8;
+export const THREATEN_RAID_GOLD = 12; // pillage when a soured village turns hostile
+
+export type VillageDeed = "befriend" | "tribute" | "assimilate";
+
+// Reaction rolls (§10.3): a peaceful overture is NEVER a sure thing. The comply
+// chance starts from the village's mood, is shifted by how pushy the deed is,
+// and by a `bonus` (your general + an Explorer-envoy edge, wired in Phase 3),
+// then clamped so nothing is ever guaranteed or hopeless.
+export const REACTION_BASE: Record<Disposition, number> = { open: 0.85, wary: 0.6, hostile: 0.3 };
+export const DEED_PUSH: Record<VillageDeed, number> = {
+  befriend: 0.0,     // a friendly overture
+  tribute: -0.18,    // a demand — likelier to offend
+  assimilate: 0.05,  // they already trust you (you befriended them first)
+};
+
+export interface Reaction { comply: boolean; chance: number; roll: number; }
+
+export function villageReactionChance(people: MinorPeople, disposition: Disposition, deed: VillageDeed, bonus: number): number {
+  let chance = (REACTION_BASE[disposition] ?? 0.5) + (DEED_PUSH[deed] ?? 0) + bonus;
+  if (people.hostile) chance -= 0.05; // warlike peoples are touchier
+  return Math.max(0.05, Math.min(0.95, chance));
+}
+
+export function rollReaction(people: MinorPeople, disposition: Disposition, deed: VillageDeed, bonus: number, seed: string, key: string, attempt: number): Reaction {
+  const chance = villageReactionChance(people, disposition, deed, bonus);
+  const roll = hash01(seed + ":react:" + deed + ":" + key + ":" + attempt);
+  return { comply: roll < chance, chance, roll };
+}
+
+// One notch colder on the disposition ladder (open → wary → hostile).
+export function souredDisposition(d: Disposition): Disposition {
+  return DISPOSITIONS[Math.max(0, DISPOSITIONS.indexOf(d) - 1)];
+}
+
+// A botched overture that curdles a village to Hostile lets them raid: they
+// pillage the offender's treasury (there is no barbarian faction to spawn a
+// unit for). Returns the gold actually lost.
+export function pillageOnThreaten(state: GameState, playerId: string, amount: number): number {
+  const player = state.playersById[playerId];
+  if (!player) return 0;
+  const loss = Math.min(amount, Math.max(0, Math.floor(player.gold)));
+  if (loss > 0) player.gold -= loss;
+  return loss;
+}
 
 // Seeded initial disposition; hostile-leaning peoples skew colder.
 export function villageDisposition(people: MinorPeople, seed: string, key: string): Disposition {

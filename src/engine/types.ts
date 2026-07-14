@@ -191,7 +191,7 @@ export interface GameMap {
   /** Ancient ruins to excavate (§10.2), keyed by tile "q,r". */
   ruins?: Record<string, { ruinId: string; excavated?: boolean; by?: string }>;
   /** Minor-People villages (§10.3), keyed by tile "q,r". */
-  villages?: Record<string, { peopleId: string; disposition: "open" | "wary" | "hostile"; befriendedBy?: string; contacted?: boolean }>;
+  villages?: Record<string, { peopleId: string; disposition: "open" | "wary" | "hostile"; befriendedBy?: string; contacted?: boolean; attempts?: number }>;
 }
 
 export interface WeatherState {
@@ -235,6 +235,18 @@ export interface GameState {
   diplomacy?: Record<string, DiploPair>;
   /** Whether a joint Full-Alliance victory is allowed (§6; default true). */
   allianceVictory?: boolean;
+  /** Per-player chosen general/Legend (card id), feeding diplomacy & other rolls (§10.3 / cards). */
+  leaders?: Record<string, string>;
+  /** Transient: outcome of the most recent Minor-People reaction roll, for the client to surface. Reset each applyAction. */
+  lastReaction?: {
+    hex: string;
+    peopleId: string;
+    action: "befriend" | "tribute" | "assimilate";
+    comply: boolean;
+    chance: number;
+    playerId: string;
+    message: string;
+  };
 }
 
 /** An agreement on a civ-pair. `expires` is the turn it lapses (0 = no expiry). */

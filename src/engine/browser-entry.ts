@@ -59,7 +59,7 @@ import { BRANCHES } from "./branch-data";
 import { cityTier, districtSlots, districtType, districtName, DISTRICT_TYPES, GREAT_WORKS, greatWork } from "./districts";
 import { relationBand, getRelation, getPair, pairKey, RELATION_BAND_LABELS, isAtWar, isOathbreaker, hasAgreement, playerWarWeariness, canProposeAgreement, napBlocksDeclaration, agreementBand, bandAtLeast, alliesOf, isFullAlly, agreementHeldTurns, isVassal, vassalsOf, topOverlord, canDemandVassalage, personalityOf } from "./diplomacy";
 import { RUINS, RUIN_BY_ID } from "./discovery";
-import { MINOR_PEOPLES, PEOPLE_BY_ID, BEFRIEND_COST, TRIBUTE_GAIN } from "./peoples";
+import { MINOR_PEOPLES, PEOPLE_BY_ID, BEFRIEND_COST, TRIBUTE_GAIN, villageReactionChance } from "./peoples";
 import { TITLE_LADDERS, titleForLaurels, nextTitleInfo, laurelsForGame, LAUREL_THRESHOLDS } from "./titles";
 
 // Every symbol the browser demo (game.js) reads off window.HegemonEngine must be
@@ -163,6 +163,7 @@ export {
   PEOPLE_BY_ID,
   BEFRIEND_COST,
   TRIBUTE_GAIN,
+  villageReactionChance,
   TITLE_LADDERS,
   titleForLaurels,
   nextTitleInfo,

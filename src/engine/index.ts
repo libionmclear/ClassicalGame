@@ -24,7 +24,8 @@ import { cityTier, districtSlots, districtType, districtName, districtForbidden,
 import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE, fullAlliancesHeld, ALLIANCE_VICTORY_HOLD } from "./diplomacy";
 import { scatterRuins } from "./mapgen";
 import { excavateRuins } from "./discovery";
-import { scatterVillages, PEOPLE_BY_ID, unitNear, applyVillageBenefit, BEFRIEND_COST, TRIBUTE_GAIN, CONQUEST_REPUTATION_HIT, DISPOSITIONS } from "./peoples";
+import { scatterVillages, PEOPLE_BY_ID, unitNear, applyVillageBenefit, BEFRIEND_COST, TRIBUTE_GAIN, CONQUEST_REPUTATION_HIT, DISPOSITIONS, rollReaction, souredDisposition, pillageOnThreaten, THREATEN_RAID_GOLD } from "./peoples";
+import type { VillageDeed } from "./peoples";
 import type { BefriendVillageAction, DemandTributeVillageAction, ConquerVillageAction, AbsorbVillageAction } from "./types";
 import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
 import type {
@@ -2141,6 +2142,15 @@ function makeTown(state: GameState, playerId: string, hex: string, pop: number):
   const id = `${playerId}_town_${at.q}_${at.r}`;
   state.map.cities[id] = { id, ownerId: playerId, position: { q: at.q, r: at.r }, population: pop, hp: 24, maxHp: 24 };
 }
+// The general (Phase 3) + an Explorer-envoy edge shift the reaction odds. Stub
+// for now (returns 0) so Phase 2 rolls on disposition alone; Phase 3 fills it in.
+function reactionBonus(_state: GameState, _playerId: string, _hex: string, _deed: VillageDeed): number {
+  return 0;
+}
+// Record the outcome for the client to surface (transient; reset each applyAction).
+function setReaction(state: GameState, playerId: string, hex: string, peopleId: string, deed: VillageDeed, comply: boolean, chance: number, message: string): void {
+  state.lastReaction = { hex, peopleId, action: deed, comply, chance, playerId, message };
+}
 function applyBefriendVillage(state: GameState, action: BefriendVillageAction): void {
   assertPlayerTurn(state, action.playerId);
   const v = villageAt(state, action.hex);
@@ -2148,19 +2158,43 @@ function applyBefriendVillage(state: GameState, action: BefriendVillageAction): 
   if (!unitNear(state, action.playerId, action.hex)) throw new Error("Move a unit beside the village first");
   const player = state.playersById[action.playerId];
   if (player.gold < BEFRIEND_COST) throw new Error("Not enough gold to court them");
-  player.gold -= BEFRIEND_COST;
-  applyVillageBenefit(state, action.playerId, PEOPLE_BY_ID[v.peopleId].benefit, parseKey(action.hex), false);
-  v.befriendedBy = action.playerId;
-  v.disposition = "open";
-  syncOwnershipIndexes(state); // a recruited levy needs indexing
+  const people = PEOPLE_BY_ID[v.peopleId];
+  v.attempts = (v.attempts ?? 0) + 1;
+  const react = rollReaction(people, v.disposition, "befriend", reactionBonus(state, action.playerId, action.hex, "befriend"), state.seed, action.hex, v.attempts);
+  if (react.comply) {
+    player.gold -= BEFRIEND_COST; // the gift only changes hands once they accept
+    applyVillageBenefit(state, action.playerId, people.benefit, parseKey(action.hex), false);
+    v.befriendedBy = action.playerId;
+    v.disposition = "open";
+    setReaction(state, action.playerId, action.hex, v.peopleId, "befriend", true, react.chance, `🤝 ${people.name} accept your friendship.`);
+    syncOwnershipIndexes(state); // a recruited levy needs indexing
+  } else {
+    // They refuse — the gift is withheld, their mood sours a notch; if it curdles
+    // to Hostile they raid the offender. Repeated pushy overtures get harder.
+    v.disposition = souredDisposition(v.disposition);
+    let msg = `🚫 ${people.name} rebuff your overture`;
+    if (v.disposition === "hostile") { const loss = pillageOnThreaten(state, action.playerId, THREATEN_RAID_GOLD); msg += loss > 0 ? ` and raid you for ${loss}g` : " and turn hostile"; }
+    setReaction(state, action.playerId, action.hex, v.peopleId, "befriend", false, react.chance, msg + ".");
+  }
 }
 function applyDemandTributeVillage(state: GameState, action: DemandTributeVillageAction): void {
   assertPlayerTurn(state, action.playerId);
   const v = villageAt(state, action.hex);
   if (!unitNear(state, action.playerId, action.hex)) throw new Error("Move a unit beside the village first");
-  state.playersById[action.playerId].gold += TRIBUTE_GAIN;
-  v.disposition = DISPOSITIONS[Math.max(0, DISPOSITIONS.indexOf(v.disposition) - 1)]; // they sour
-  v.befriendedBy = undefined;
+  const people = PEOPLE_BY_ID[v.peopleId];
+  v.attempts = (v.attempts ?? 0) + 1;
+  v.befriendedBy = undefined; // a shakedown ends any friendship regardless
+  const react = rollReaction(people, v.disposition, "tribute", reactionBonus(state, action.playerId, action.hex, "tribute"), state.seed, action.hex, v.attempts);
+  if (react.comply) {
+    state.playersById[action.playerId].gold += TRIBUTE_GAIN;
+    v.disposition = souredDisposition(v.disposition); // they pay, but resent it
+    setReaction(state, action.playerId, action.hex, v.peopleId, "tribute", true, react.chance, `💰 ${people.name} hand over ${TRIBUTE_GAIN}g, grumbling.`);
+  } else {
+    v.disposition = souredDisposition(v.disposition);
+    let msg = `🚫 ${people.name} refuse to be shaken down`;
+    if (v.disposition === "hostile") { const loss = pillageOnThreaten(state, action.playerId, THREATEN_RAID_GOLD); msg += loss > 0 ? ` and raid you for ${loss}g` : " and turn hostile"; }
+    setReaction(state, action.playerId, action.hex, v.peopleId, "tribute", false, react.chance, msg + ".");
+  }
 }
 function applyConquerVillage(state: GameState, action: ConquerVillageAction): void {
   assertPlayerTurn(state, action.playerId);
@@ -2176,10 +2210,23 @@ function applyAbsorbVillage(state: GameState, action: AbsorbVillageAction): void
   assertPlayerTurn(state, action.playerId);
   const v = villageAt(state, action.hex);
   if (v.befriendedBy !== action.playerId) throw new Error("Befriend them before you absorb them");
-  if (action.mode === "join") makeTown(state, action.playerId, action.hex, 2);
-  else applyVillageBenefit(state, action.playerId, { pop: 2 }, parseKey(action.hex), false); // migrate
-  delete state.map.villages![action.hex];
-  syncOwnershipIndexes(state);
+  if (!unitNear(state, action.playerId, action.hex)) throw new Error("Move a unit beside the village first");
+  const people = PEOPLE_BY_ID[v.peopleId];
+  v.attempts = (v.attempts ?? 0) + 1;
+  const react = rollReaction(people, v.disposition, "assimilate", reactionBonus(state, action.playerId, action.hex, "assimilate"), state.seed, action.hex, v.attempts);
+  if (react.comply) {
+    if (action.mode === "join") makeTown(state, action.playerId, action.hex, 2);
+    else applyVillageBenefit(state, action.playerId, { pop: 2 }, parseKey(action.hex), false); // migrate
+    delete state.map.villages![action.hex];
+    setReaction(state, action.playerId, action.hex, v.peopleId, "assimilate", true, react.chance, `🏘️ ${people.name} join your realm.`);
+    syncOwnershipIndexes(state);
+  } else {
+    // They balk at union; friendship cools a notch. If it curdles to Hostile the
+    // bond breaks and you must win them over again.
+    v.disposition = souredDisposition(v.disposition);
+    if (v.disposition === "hostile") v.befriendedBy = undefined;
+    setReaction(state, action.playerId, action.hex, v.peopleId, "assimilate", false, react.chance, `🚫 ${people.name} are not ready to surrender their independence.`);
+  }
 }
 // An Explorer that ends adjacent to an un-contacted village warms it a step (§10.3).
 function contactVillages(state: GameState, playerId: string): void {
@@ -2244,6 +2291,7 @@ function applyRepairDistrict(state: GameState, action: RepairDistrictAction): vo
 export function applyAction(inputState: GameState, action: GameAction): GameState {
   const state = deepClone(inputState);
   state.playersById = makePlayersById(state.players);
+  state.lastReaction = undefined; // transient — set only by a Minor-People reaction below
 
   switch (action.type) {
     case "MOVE_UNIT":
