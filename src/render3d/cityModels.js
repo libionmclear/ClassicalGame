@@ -21,15 +21,29 @@ export function buildCity(THREE, opts = {}) {
   const g = new THREE.Group();
   g.name = `city-${style}-t${tier}`;
 
+  // Building material advances with the city's age: wattle & WOOD → sun-dried
+  // MUDBRICK → CUT STONE → polished MARBLE. Higher stages are lighter, smoother
+  // and take a faint sheen (metalness) so a great city gleams in stone, while a
+  // tier-1 hamlet stays rustic timber. (HEGEMON-VISUALS-v2 material pass.)
+  const STAGE = tier <= 2 ? { wall: 0x8a6a45, rough: 0.96, metal: 0.0 }   // wood / wattle
+              : tier <= 4 ? { wall: 0xbda876, rough: 0.90, metal: 0.0 }   // mudbrick
+              : tier <= 7 ? { wall: 0xc7c2b2, rough: 0.68, metal: 0.05 }  // cut stone
+              :             { wall: 0xece7d8, rough: 0.36, metal: 0.16 }; // marble
+
   const mat = (hex, jitter = 0) =>
     new THREE.MeshStandardMaterial({
       color: jitterColor(THREE, hex, rng, jitter),
-      flatShading: true, roughness: 0.9, metalness: 0.0,
+      flatShading: true, roughness: STAGE.rough, metalness: STAGE.metal,
     });
+  // House walls take the age's material, tinted a little toward the civ's own
+  // stone so cities keep their identity as they climb the tiers.
+  const wallMat = (jitter = 0) => mat(blendHex(THREE, STAGE.wall, S.wall, 0.35), jitter);
 
-  // ---- ground plaza (slightly raised disc, avoids z-fighting with terrain)
+  // ---- ground plaza (slightly raised disc, avoids z-fighting with terrain).
+  // From the stone tiers up it becomes a paved forum in the age's material.
   const plazaR = 0.28 + tier * 0.02;
-  const plaza = new THREE.Mesh(new THREE.CylinderGeometry(plazaR, plazaR, 0.02, 12), mat(S.plaza));
+  const plazaCol = tier >= 5 ? blendHex(THREE, STAGE.wall, S.plaza, 0.4) : S.plaza;
+  const plaza = new THREE.Mesh(new THREE.CylinderGeometry(plazaR, plazaR, 0.02, 12), mat(plazaCol));
   plaza.position.y = 0.01;
   g.add(plaza);
 
@@ -56,7 +70,7 @@ export function buildCity(THREE, opts = {}) {
     const r = ringMin + rng() * (ringMax - ringMin);
     const w = 0.07 + rng() * 0.06, d = 0.07 + rng() * 0.06;
     const h = hBase * (0.7 + rng() * 0.7);
-    const house = makeHouse(THREE, S, rng, w, h, d, mat);
+    const house = makeHouse(THREE, S, rng, w, h, d, mat, wallMat);
     house.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
     house.rotation.y = a + Math.PI / 2 + (rng() - 0.5) * 0.4;
     g.add(house);
@@ -124,6 +138,12 @@ export function mulberry32(a) {
   };
 }
 
+// Blend hex `a` toward hex `b` by tB (0..1) — used to tint the age's building
+// material with a little of the civ's own stone colour.
+export function blendHex(THREE, a, b, tB) {
+  return new THREE.Color(a).lerp(new THREE.Color(b), tB).getHex();
+}
+
 export function jitterColor(THREE, hex, rng, amt) {
   const c = new THREE.Color(hex);
   if (amt > 0) {
@@ -137,9 +157,9 @@ export function jitterColor(THREE, hex, rng, amt) {
 
 // A house = walls + a style-appropriate roof. The roof/wall material split is
 // what makes tiny buildings readable at board distance.
-function makeHouse(THREE, S, rng, w, h, d, mat) {
+function makeHouse(THREE, S, rng, w, h, d, mat, wallMat) {
   const grp = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(S.wall, 1));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), (wallMat || ((j) => mat(S.wall, j)))(1));
   body.position.y = h / 2;
   grp.add(body);
   // Doorway + a window or two so the little houses read at board distance.
