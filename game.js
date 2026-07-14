@@ -325,8 +325,54 @@
     });
     if (prev && unlocked.indexOf(prev) !== -1) sel.value = prev;
     else if (firstEnabled) sel.value = firstEnabled;
+    refreshGeneralPicker();
+  }
+  // The Generals (Legends) available to a civ — the leader you pick shifts how
+  // Minor Peoples react to you (§10.3). Reads the cards-v2 data exposed on window.
+  function legendsForCiv(civId) {
+    const all = (window.HEGEMON_CARDS_V2 && window.HEGEMON_CARDS_V2.LEGENDS) || [];
+    return all.filter(function (l) { return String(l.civ || "").toLowerCase() === String(civId || "").toLowerCase(); });
+  }
+  function refreshGeneralPicker() {
+    const gsel = document.getElementById("general-select");
+    const csel = document.getElementById("civ-select");
+    if (!gsel || !csel) return;
+    const prev = gsel.value;
+    const legs = legendsForCiv(csel.value);
+    gsel.innerHTML = "";
+    const rnd = document.createElement("option");
+    rnd.value = ""; rnd.textContent = "🎲 Random general";
+    gsel.appendChild(rnd);
+    const ROLE_ICON = { commander: "⚔️", statesman: "🏛️", sage: "📜", builder: "🏗️", navigator: "⚓" };
+    legs.forEach(function (l) {
+      const opt = document.createElement("option");
+      opt.value = l.id;
+      opt.textContent = (ROLE_ICON[l.role] || "★") + " " + l.name + " — " + l.role;
+      gsel.appendChild(opt);
+    });
+    if (prev && legs.some(function (l) { return l.id === prev; })) gsel.value = prev;
   }
   refreshCivPicker();
+  (function wireGeneralToCiv() {
+    const csel = document.getElementById("civ-select");
+    if (csel) csel.addEventListener("change", refreshGeneralPicker);
+  })();
+  function leaderRef(l) { return l ? { id: l.id, name: l.name, role: l.role, rarity: l.rarity } : null; }
+  function hashStr(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  // Seat a general for every player: the human's pick (or random), and a
+  // deterministic random Legend of each AI's civ so their diplomacy differs.
+  function assignLeaders(st, config, humanCiv) {
+    st.leaders = st.leaders || {};
+    const gsel = document.getElementById("general-select");
+    (config.players || []).forEach(function (p) {
+      const legs = legendsForCiv(p.civ || p.id);
+      if (!legs.length) return;
+      let ref = null;
+      if (p.id === HUMAN_ID && gsel && gsel.value) ref = leaderRef(legs.find(function (l) { return l.id === gsel.value; }));
+      if (!ref) ref = leaderRef(legs[hashStr((st.seed || "") + ":general:" + p.id) % legs.length]);
+      if (ref) st.leaders[p.id] = ref;
+    });
+  }
 
   // Authored scenarios (real-geography maps), keyed by id, populated into the
   // map picker's "Scenarios" group. isScenario(id) tells scenarios from sizes.
@@ -1529,6 +1575,7 @@
   function apply(action) {
     try {
       const beforeSummary = action.type === "END_TURN" && action.playerId === HUMAN_ID ? snapshotHumanState() : null;
+      const prevContact = action.type === "END_TURN" && action.playerId === HUMAN_ID && state.contact ? (state.contact[HUMAN_ID] || []).slice() : [];
       // City-panel actions keep the city selected so you can queue several in a row.
       const keepSelection =
         action.type === "BUILD_UNIT" ||
@@ -1553,6 +1600,13 @@
         var lr = state.lastReaction;
         showCombatToast(lr.message, lr.comply ? "win" : "loss");
         logAction((lr.comply ? "✅ " : "🚫 ") + lr.message + " (" + Math.round(lr.chance * 100) + "% odds)");
+      }
+      // First contact via an Explorer envoy — greet any newly-met civ (§10.3).
+      if (action.type === "END_TURN" && action.playerId === HUMAN_ID && state.contact && state.contact[HUMAN_ID]) {
+        var metBefore = {}; prevContact.forEach(function (id) { metBefore[id] = 1; });
+        state.contact[HUMAN_ID].forEach(function (id) {
+          if (!metBefore[id]) { showCombatToast("🕊️ Your envoy has made contact with " + civName(id), "gate"); logAction("🕊️ First contact with " + civName(id) + " — relations open on a warm note."); }
+        });
       }
       playActionSfx(action);
       if (!keepSelection) clearSelection();
@@ -2514,10 +2568,11 @@
   // Improvements for the selected land tile: build a farm/mine/… funded by the
   // Discovery panel (§10): shows the Ruin / Minor-People on the selected tile,
   // with the interactions your position allows.
-  // Mirrors the engine's reaction bonus so the odds shown match the real roll.
-  // Phase 2: no modifiers yet (0). Phase 3 feeds the general's role/rarity and the
-  // Explorer-envoy edge here (and the same values in the engine's reactionBonus).
-  function diploBonus(deed) { return 0; }
+  // Uses the engine's own bonus (general role/rarity + Explorer-envoy edge) so the
+  // odds shown always match the roll the engine will make.
+  function diploBonus(deed) {
+    return (engine.villageReactionBonus && selectedTileKey) ? engine.villageReactionBonus(state, HUMAN_ID, selectedTileKey, deed) : 0;
+  }
   function renderDiscovery(isTurn) {
     if (!discoveryGroupEl || !discoveryMenuEl) return;
     const key = selectedTileKey;
@@ -2550,15 +2605,20 @@
     const gold = (human() && human().gold) || 0;
     function addBtn(label, enabled, danger, fn, tip) { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.disabled = !enabled; if (tip) b.title = tip; if (enabled) b.addEventListener("click", fn); acts.appendChild(b); }
     const befriended = village.befriendedBy === HUMAN_ID;
-    // Comply-odds shown per deed so it reads as a real gamble (§10.3). bonus=0 here
-    // mirrors the engine's stub; Phase 3 will feed your general + Explorer edge.
+    // Comply-odds shown per deed so it reads as a real gamble (§10.3). diploBonus
+    // mirrors the engine (your general's role/rarity + an Explorer-envoy edge).
     function odds(deed) { return people && engine.villageReactionChance ? " · " + Math.round(engine.villageReactionChance(people, village.disposition, deed, diploBonus(deed)) * 100) + "%" : ""; }
+    // The Explorer envoy: courts them for far less gold, and can even court the
+    // openly Hostile (no other unit may).
+    const envoyHere = engine.explorerNear ? engine.explorerNear(state, HUMAN_ID, key) : false;
+    const bCost = engine.befriendCostFor ? engine.befriendCostFor(state, HUMAN_ID, key) : engine.BEFRIEND_COST;
+    const canCourt = village.disposition !== "hostile" || envoyHere;
     // All four interactions are ALWAYS visible so the options read clearly (§10.3).
     // Assimilate stays locked until you've befriended them (a peaceful union needs
     // goodwill first); Conquer is the armed alternative.
-    addBtn("🤝 Befriend (" + engine.BEFRIEND_COST + "g" + odds("befriend") + ")", near && !befriended && village.disposition !== "hostile" && gold >= engine.BEFRIEND_COST, false,
+    addBtn("🤝 Befriend (" + bCost + "g" + odds("befriend") + ")", near && !befriended && canCourt && gold >= bCost, false,
       function () { apply({ type: "BEFRIEND_VILLAGE", playerId: HUMAN_ID, hex: key }); },
-      befriended ? "Already befriended." : village.disposition === "hostile" ? "They are hostile — warm them with an Explorer first." : gold < engine.BEFRIEND_COST ? "Not enough gold." : "Court them with gifts — but they may refuse.");
+      befriended ? "Already befriended." : !canCourt ? "They are hostile — bring an Explorer to court them." : gold < bCost ? "Not enough gold." : envoyHere ? "Your Explorer courts them cheaply — but they may still refuse." : "Court them with gifts — but they may refuse.");
     addBtn("💰 Demand tribute (" + odds("tribute").replace(" · ", "") + ")", near && !befriended, false,
       function () { apply({ type: "DEMAND_TRIBUTE_VILLAGE", playerId: HUMAN_ID, hex: key }); },
       "Take gold now — but it sours them, and they may refuse and raid you.");
@@ -3400,6 +3460,7 @@
     }
 
     state = engine.createInitialGameState(config);
+    assignLeaders(state, config, chosenCiv); // §10.3 — your chosen general + AI generals
     state.playedEvents = {}; // one-use event cards refresh each campaign
     resultRecorded = false; // a fresh game's result hasn't been counted yet
     discoveredRuinKeys = new Set(); // reset discovery toasts for the new map

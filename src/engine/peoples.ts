@@ -71,6 +71,37 @@ export const DEED_PUSH: Record<VillageDeed, number> = {
 
 export interface Reaction { comply: boolean; chance: number; roll: number; }
 
+// Your general shifts the odds by role + rarity (§10.3 / cards). A statesman
+// shines at peaceful overtures; a commander at coercion; the rest are respected
+// all round. Rarity sets the magnitude. Both engine and client call this so the
+// odds shown always match the roll.
+export interface LeaderRef { id?: string; name?: string; role: string; rarity: string; }
+const RARITY_MAG: Record<string, number> = { common: 0.03, rare: 0.06, epic: 0.09, legendary: 0.12 };
+export function leaderReactionBonus(leader: LeaderRef | undefined | null, deed: VillageDeed): number {
+  if (!leader) return 0;
+  const mag = RARITY_MAG[leader.rarity] ?? 0.05;
+  if (leader.role === "statesman") return deed === "tribute" ? mag * 0.3 : mag;  // diplomat: great at peace
+  if (leader.role === "commander") return deed === "tribute" ? mag : mag * 0.3;  // warlord: great at coercion
+  return mag * 0.6; // sage / builder / navigator — well regarded all round
+}
+
+// The Explorer is the designated envoy: adjacent, it sways a village harder,
+// lets you court even Hostile peoples, and courts them for a fraction of the gold.
+export const EXPLORER_ENVOY_BONUS = 0.15;
+export const BEFRIEND_COST_ENVOY = 10;
+export function explorerNear(state: GameState, playerId: string, key: string): boolean {
+  const at = parseKey(key);
+  const ring = new Set([key, ...neighborsOf(at).map((n) => `${n.q},${n.r}`)]);
+  for (const uid of state.playersById[playerId]?.unitIds ?? []) {
+    const u = state.map.units[uid];
+    if (u && u.type === "explorer" && ring.has(`${u.position.q},${u.position.r}`)) return true;
+  }
+  return false;
+}
+export function befriendCostFor(state: GameState, playerId: string, key: string): number {
+  return explorerNear(state, playerId, key) ? BEFRIEND_COST_ENVOY : BEFRIEND_COST;
+}
+
 export function villageReactionChance(people: MinorPeople, disposition: Disposition, deed: VillageDeed, bonus: number): number {
   let chance = (REACTION_BASE[disposition] ?? 0.5) + (DEED_PUSH[deed] ?? 0) + bonus;
   if (people.hostile) chance -= 0.05; // warlike peoples are touchier

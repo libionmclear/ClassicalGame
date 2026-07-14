@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { createInitialGameState, applyAction } from "../src/engine";
 import { getRelation } from "../src/engine/diplomacy";
-import { scatterVillages, PEOPLE_BY_ID, rollReaction, villageReactionChance } from "../src/engine/peoples";
+import { scatterVillages, PEOPLE_BY_ID, rollReaction, villageReactionChance, leaderReactionBonus, befriendCostFor, EXPLORER_ENVOY_BONUS, BEFRIEND_COST_ENVOY } from "../src/engine/peoples";
 import type { GameState } from "../src/engine/types";
 import type { Disposition, VillageDeed } from "../src/engine/peoples";
 
@@ -41,10 +41,10 @@ function villageState(peopleId: string, disposition: Disposition, unitType = "wa
 // The overtures are seeded rolls now (§10.3). Find a seed that deterministically
 // comples/refuses so we can exercise BOTH branches — using the real roll (no
 // formula duplication), so it self-adjusts if the constants change.
-function seedFor(peopleId: string, disp: Disposition, deed: VillageDeed, want: boolean, attempt = 1): string {
+function seedFor(peopleId: string, disp: Disposition, deed: VillageDeed, want: boolean, attempt = 1, bonus = 0): string {
   for (let i = 0; i < 500; i += 1) {
     const seed = "seed" + i;
-    if (rollReaction(PEOPLE_BY_ID[peopleId], disp, deed, 0, seed, "1,1", attempt).comply === want) return seed;
+    if (rollReaction(PEOPLE_BY_ID[peopleId], disp, deed, bonus, seed, "1,1", attempt).comply === want) return seed;
   }
   throw new Error(`no seed makes ${deed} comply=${want}`);
 }
@@ -138,6 +138,37 @@ test("assimilating a befriended village: join founds a town, migrate swells a ci
 
 test("assimilating requires having befriended them first", () => {
   assert.throws(() => applyAction(villageState("latins", "open"), { type: "ABSORB_VILLAGE", playerId: "p1", hex: "1,1", mode: "join" }), /Befriend them/);
+});
+
+test("a general's role and rarity shift the reaction odds", () => {
+  const statesman = { role: "statesman", rarity: "legendary" };
+  const commander = { role: "commander", rarity: "legendary" };
+  assert.ok(leaderReactionBonus(statesman, "befriend") > leaderReactionBonus(commander, "befriend"), "a diplomat is better at befriending");
+  assert.ok(leaderReactionBonus(commander, "tribute") > leaderReactionBonus(statesman, "tribute"), "a warlord is better at coercion");
+  assert.ok(leaderReactionBonus({ role: "statesman", rarity: "legendary" }, "befriend") > leaderReactionBonus({ role: "statesman", rarity: "rare" }, "befriend"), "rarer general = stronger sway");
+  assert.equal(leaderReactionBonus(undefined, "befriend"), 0, "no general → no bonus");
+});
+
+test("an Explorer envoy courts for less gold and can court the openly hostile", () => {
+  assert.equal(befriendCostFor(villageState("latins", "open", "explorer"), "p1", "1,1"), BEFRIEND_COST_ENVOY, "envoy discount");
+  assert.equal(befriendCostFor(villageState("latins", "open", "warrior"), "p1", "1,1"), 30, "no discount without an envoy");
+  // A non-Explorer is refused at a hostile village...
+  assert.throws(() => applyAction(villageState("latins", "hostile", "warrior"), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" }), /hostile/);
+  // ...but an Explorer may court them (it still rolls — use a comply seed with the envoy bonus).
+  const seed = seedFor("latins", "hostile", "befriend", true, 1, EXPLORER_ENVOY_BONUS);
+  const s = applyAction(villageState("latins", "hostile", "explorer", seed), { type: "BEFRIEND_VILLAGE", playerId: "p1", hex: "1,1" });
+  assert.ok(s.lastReaction!.comply, "the envoy wins them over");
+  assert.equal(s.map.villages!["1,1"].befriendedBy, "p1");
+  assert.equal(s.playersById["p1"].gold, 90, "spent only the 10g envoy cost");
+});
+
+test("an Explorer envoy makes first contact with a nearby civ (goodwill)", () => {
+  const s0 = villageState("latins", "open", "explorer");
+  s0.map.units["e2"] = { id: "e2", type: "warrior", ownerId: "p2", position: { q: 2, r: 2 }, hp: 20, maxHp: 20, movementRemaining: 1, veterancy: "recruit" };
+  const rel0 = getRelation(s0, "p1", "p2");
+  const s = applyAction(s0, { type: "END_TURN", playerId: "p1" });
+  assert.ok((s.contact?.["p1"] ?? []).includes("p2"), "the envoy met p2 within 2 tiles");
+  assert.ok(getRelation(s, "p1", "p2") > rel0, "first contact opens on a warm note");
 });
 
 test("an Explorer ending beside a wary village warms it a step (§10.3)", () => {

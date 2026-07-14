@@ -45,7 +45,8 @@ export function computeVisibility(state: GameState, playerId: string): Visibilit
   for (const unit of Object.values(state.map.units)) {
     if (unit.ownerId !== playerId) continue;
     const unitDef = UNITS[unit.type];
-    const baseRange = unitDef.range > 1 ? 3 : 2;
+    // Ranged units and the Explorer-scout see one hex further than the rest.
+    const baseRange = unitDef.range > 1 || unit.type === "explorer" ? 3 : 2;
     addVisibilityFromSource(state, unit.position, baseRange, visible);
   }
 

@@ -235,8 +235,10 @@ export interface GameState {
   diplomacy?: Record<string, DiploPair>;
   /** Whether a joint Full-Alliance victory is allowed (§6; default true). */
   allianceVictory?: boolean;
-  /** Per-player chosen general/Legend (card id), feeding diplomacy & other rolls (§10.3 / cards). */
-  leaders?: Record<string, string>;
+  /** Per-player chosen general/Legend, feeding diplomacy rolls (§10.3 / cards). Keyed by player id. */
+  leaders?: Record<string, { id: string; name?: string; role: string; rarity: string }>;
+  /** Civs each player has made first contact with (via an Explorer envoy or borders). Keyed by player id → met player ids. */
+  contact?: Record<string, string[]>;
   /** Transient: outcome of the most recent Minor-People reaction roll, for the client to surface. Reset each applyAction. */
   lastReaction?: {
     hex: string;

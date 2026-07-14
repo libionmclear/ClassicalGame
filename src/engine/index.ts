@@ -24,7 +24,7 @@ import { cityTier, districtSlots, districtType, districtName, districtForbidden,
 import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE, fullAlliancesHeld, ALLIANCE_VICTORY_HOLD } from "./diplomacy";
 import { scatterRuins } from "./mapgen";
 import { excavateRuins } from "./discovery";
-import { scatterVillages, PEOPLE_BY_ID, unitNear, applyVillageBenefit, BEFRIEND_COST, TRIBUTE_GAIN, CONQUEST_REPUTATION_HIT, DISPOSITIONS, rollReaction, souredDisposition, pillageOnThreaten, THREATEN_RAID_GOLD } from "./peoples";
+import { scatterVillages, PEOPLE_BY_ID, unitNear, applyVillageBenefit, BEFRIEND_COST, TRIBUTE_GAIN, CONQUEST_REPUTATION_HIT, DISPOSITIONS, rollReaction, souredDisposition, pillageOnThreaten, THREATEN_RAID_GOLD, leaderReactionBonus, explorerNear, EXPLORER_ENVOY_BONUS, befriendCostFor } from "./peoples";
 import type { VillageDeed } from "./peoples";
 import type { BefriendVillageAction, DemandTributeVillageAction, ConquerVillageAction, AbsorbVillageAction } from "./types";
 import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
@@ -1519,6 +1519,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   applyDiplomacyIncome(state, endingPlayer); // trade-pact gold + tribute transfer
   excavateRuins(state, endingPlayer.id);     // §10.2: units ending on a ruin dig it up
   contactVillages(state, endingPlayer.id);   // §10.3: an Explorer warms a wary village
+  contactCivs(state, endingPlayer.id);       // §10.3: an Explorer envoy makes first contact with civs
 
   // Advance to the next player. With 3+ players we ROTATE initiative each round
   // (round r starts at seat r mod n) so no seat is permanently last — the last
@@ -2142,10 +2143,12 @@ function makeTown(state: GameState, playerId: string, hex: string, pop: number):
   const id = `${playerId}_town_${at.q}_${at.r}`;
   state.map.cities[id] = { id, ownerId: playerId, position: { q: at.q, r: at.r }, population: pop, hp: 24, maxHp: 24 };
 }
-// The general (Phase 3) + an Explorer-envoy edge shift the reaction odds. Stub
-// for now (returns 0) so Phase 2 rolls on disposition alone; Phase 3 fills it in.
-function reactionBonus(_state: GameState, _playerId: string, _hex: string, _deed: VillageDeed): number {
-  return 0;
+// Your general (role + rarity) plus an Explorer-envoy edge shift the reaction
+// odds. Exported so the client shows the SAME number the roll uses.
+export function villageReactionBonus(state: GameState, playerId: string, hex: string, deed: VillageDeed): number {
+  let bonus = leaderReactionBonus(state.leaders?.[playerId], deed);
+  if (explorerNear(state, playerId, hex)) bonus += EXPLORER_ENVOY_BONUS;
+  return bonus;
 }
 // Record the outcome for the client to surface (transient; reset each applyAction).
 function setReaction(state: GameState, playerId: string, hex: string, peopleId: string, deed: VillageDeed, comply: boolean, chance: number, message: string): void {
@@ -2154,15 +2157,18 @@ function setReaction(state: GameState, playerId: string, hex: string, peopleId: 
 function applyBefriendVillage(state: GameState, action: BefriendVillageAction): void {
   assertPlayerTurn(state, action.playerId);
   const v = villageAt(state, action.hex);
-  if (v.disposition === "hostile") throw new Error("They are hostile — win them over with an Explorer, or take them by force");
+  const hasEnvoy = explorerNear(state, action.playerId, action.hex);
+  // Only an Explorer envoy can court the openly hostile — anyone else is refused.
+  if (v.disposition === "hostile" && !hasEnvoy) throw new Error("They are hostile — bring an Explorer to court them, or take them by force");
   if (!unitNear(state, action.playerId, action.hex)) throw new Error("Move a unit beside the village first");
   const player = state.playersById[action.playerId];
-  if (player.gold < BEFRIEND_COST) throw new Error("Not enough gold to court them");
+  const cost = befriendCostFor(state, action.playerId, action.hex); // an Explorer courts them for far less
+  if (player.gold < cost) throw new Error("Not enough gold to court them");
   const people = PEOPLE_BY_ID[v.peopleId];
   v.attempts = (v.attempts ?? 0) + 1;
-  const react = rollReaction(people, v.disposition, "befriend", reactionBonus(state, action.playerId, action.hex, "befriend"), state.seed, action.hex, v.attempts);
+  const react = rollReaction(people, v.disposition, "befriend", villageReactionBonus(state, action.playerId, action.hex, "befriend"), state.seed, action.hex, v.attempts);
   if (react.comply) {
-    player.gold -= BEFRIEND_COST; // the gift only changes hands once they accept
+    player.gold -= cost; // the gift only changes hands once they accept
     applyVillageBenefit(state, action.playerId, people.benefit, parseKey(action.hex), false);
     v.befriendedBy = action.playerId;
     v.disposition = "open";
@@ -2184,7 +2190,7 @@ function applyDemandTributeVillage(state: GameState, action: DemandTributeVillag
   const people = PEOPLE_BY_ID[v.peopleId];
   v.attempts = (v.attempts ?? 0) + 1;
   v.befriendedBy = undefined; // a shakedown ends any friendship regardless
-  const react = rollReaction(people, v.disposition, "tribute", reactionBonus(state, action.playerId, action.hex, "tribute"), state.seed, action.hex, v.attempts);
+  const react = rollReaction(people, v.disposition, "tribute", villageReactionBonus(state, action.playerId, action.hex, "tribute"), state.seed, action.hex, v.attempts);
   if (react.comply) {
     state.playersById[action.playerId].gold += TRIBUTE_GAIN;
     v.disposition = souredDisposition(v.disposition); // they pay, but resent it
@@ -2213,7 +2219,7 @@ function applyAbsorbVillage(state: GameState, action: AbsorbVillageAction): void
   if (!unitNear(state, action.playerId, action.hex)) throw new Error("Move a unit beside the village first");
   const people = PEOPLE_BY_ID[v.peopleId];
   v.attempts = (v.attempts ?? 0) + 1;
-  const react = rollReaction(people, v.disposition, "assimilate", reactionBonus(state, action.playerId, action.hex, "assimilate"), state.seed, action.hex, v.attempts);
+  const react = rollReaction(people, v.disposition, "assimilate", villageReactionBonus(state, action.playerId, action.hex, "assimilate"), state.seed, action.hex, v.attempts);
   if (react.comply) {
     if (action.mode === "join") makeTown(state, action.playerId, action.hex, 2);
     else applyVillageBenefit(state, action.playerId, { pop: 2 }, parseKey(action.hex), false); // migrate
@@ -2242,6 +2248,44 @@ function contactVillages(state: GameState, playerId: string): void {
       v.contacted = true;
       v.disposition = DISPOSITIONS[Math.min(DISPOSITIONS.length - 1, DISPOSITIONS.indexOf(v.disposition) + 1)];
     }
+  }
+}
+
+export const ENVOY_GOODWILL = 4; // first contact via an Explorer opens on a warm note
+// The Explorer as roaming envoy (§10.3): ending its turn within 2 tiles of
+// another civ's units, or on/beside their territory, makes first contact — a met
+// flag (relations become actionable in the fiction) plus a one-time goodwill
+// nudge from whichever side's envoy reached out first.
+function contactCivs(state: GameState, playerId: string): void {
+  const player = state.playersById[playerId];
+  if (!player) return;
+  const explorers = (player.unitIds ?? []).map((id) => state.map.units[id]).filter((u) => u && u.type === "explorer");
+  if (!explorers.length) return;
+  state.contact = state.contact ?? {};
+  const met = new Set(state.contact[playerId] ?? []);
+  const territory = computeTerritory(state);
+  const newly: string[] = [];
+  const meet = (other: string): void => {
+    if (!other || other === playerId || met.has(other) || !state.playersById[other]) return;
+    met.add(other);
+    newly.push(other);
+  };
+  for (const ex of explorers) {
+    // Border contact: the explorer stands on or beside another civ's land.
+    for (const k of [`${ex.position.q},${ex.position.r}`, ...neighborsOf(ex.position).map((n) => `${n.q},${n.r}`)]) {
+      const owner = territory[k];
+      if (owner && owner !== playerId) meet(owner);
+    }
+    // Sight contact: another civ's unit within 2 hexes.
+    for (const u of Object.values(state.map.units)) {
+      if (u.ownerId !== playerId && distance(ex.position, u.position) <= 2) meet(u.ownerId);
+    }
+  }
+  if (!newly.length) return;
+  state.contact[playerId] = [...met];
+  for (const other of newly) {
+    // Only the first side to make contact extends the goodwill (avoid double-counting).
+    if (!(state.contact[other] ?? []).includes(playerId)) adjustRelation(state, playerId, other, ENVOY_GOODWILL);
   }
 }
 
