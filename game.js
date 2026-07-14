@@ -3834,6 +3834,16 @@
 
   // ===== Campaign hand (cards in play + events) =====
   if (handBtn) handBtn.addEventListener("click", openHand);
+  // Center the view back on your capital (works on both the 2D and 3D boards).
+  var centerCapitalBtn = document.getElementById("center-capital-btn");
+  if (centerCapitalBtn) centerCapitalBtn.addEventListener("click", function () {
+    if (!state) return;
+    var home = Object.values(state.map.cities).find(function (c) { return c.ownerId === HUMAN_ID && c.isCapital; }) ||
+      Object.values(state.map.cities).find(function (c) { return c.ownerId === HUMAN_ID; });
+    if (!home) return;
+    pendingRecenter = true;
+    render();
+  });
   if (handCloseBtn) handCloseBtn.addEventListener("click", function () { handModalEl.classList.add("hidden"); });
   if (handModalEl) handModalEl.addEventListener("click", function (e) { if (e.target === handModalEl) handModalEl.classList.add("hidden"); });
 
