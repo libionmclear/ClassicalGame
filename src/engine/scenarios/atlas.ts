@@ -99,7 +99,9 @@ export function fromAscii(opts: AtlasOptions): CreateGameConfig {
     };
     occupied.add(keyOf(cap));
 
-    // Seat the starting warrior and settler on adjacent dry land where possible.
+    // Seat the starting warrior and Explorer on adjacent dry land where possible.
+    // (Explorer, not Settler — the fast scout/diplomat; found later cities by
+    // training a Settler.)
     const spots: Coord[] = [];
     for (const n of neighborsOf(cap)) {
       const k = keyOf(n);
@@ -108,10 +110,10 @@ export function fromAscii(opts: AtlasOptions): CreateGameConfig {
     }
     const warriorPos = spots[0] ?? cap;
     occupied.add(keyOf(warriorPos));
-    const settlerPos = spots[1] ?? cap;
-    occupied.add(keyOf(settlerPos));
+    const explorerPos = spots[1] ?? cap;
+    occupied.add(keyOf(explorerPos));
     units[`${p.id}_warrior`] = { id: `${p.id}_warrior`, type: "warrior", ownerId: p.id, position: warriorPos };
-    units[`${p.id}_settler`] = { id: `${p.id}_settler`, type: "settler", ownerId: p.id, position: settlerPos };
+    units[`${p.id}_explorer`] = { id: `${p.id}_explorer`, type: "explorer", ownerId: p.id, position: explorerPos };
   });
 
   const players = opts.players.map((p) => ({

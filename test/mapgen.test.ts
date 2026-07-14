@@ -110,13 +110,14 @@ for (const size of SIZES) {
     assert.ok(path && path.length >= 2, `no land path between capitals on ${size}`);
   });
 
-  test(`generateMap(${size}) starts each player with a warrior and a settler`, () => {
+  test(`generateMap(${size}) starts each player with a warrior and an explorer`, () => {
     const config = generateMap({ size, seed: `units-${size}` });
     const units = Object.values(config.map?.units ?? {});
     for (const owner of ["rome", "carthage"]) {
       const owned = units.filter((u) => u.ownerId === owner);
       assert.ok(owned.some((u) => u.type === "warrior"), `${owner} missing warrior`);
-      assert.ok(owned.some((u) => u.type === "settler"), `${owner} missing settler`);
+      assert.ok(owned.some((u) => u.type === "explorer"), `${owner} missing explorer`);
+      assert.ok(!owned.some((u) => u.type === "settler"), `${owner} should not start with a settler`);
     }
   });
 }

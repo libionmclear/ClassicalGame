@@ -2532,16 +2532,28 @@
     const acts = document.createElement("div");
     acts.className = "diplo-actions";
     const gold = (human() && human().gold) || 0;
-    function addBtn(label, enabled, danger, fn) { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.disabled = !enabled; if (enabled) b.addEventListener("click", fn); acts.appendChild(b); }
-    if (village.befriendedBy === HUMAN_ID) {
-      addBtn("🏘️ Absorb (join)", near, false, function () { apply({ type: "ABSORB_VILLAGE", playerId: HUMAN_ID, hex: key, mode: "join" }); });
-      addBtn("🚶 Absorb (migrate)", near, false, function () { apply({ type: "ABSORB_VILLAGE", playerId: HUMAN_ID, hex: key, mode: "migrate" }); });
-    } else {
-      addBtn("🤝 Befriend (" + engine.BEFRIEND_COST + "g)", near && village.disposition !== "hostile" && gold >= engine.BEFRIEND_COST, false, function () { apply({ type: "BEFRIEND_VILLAGE", playerId: HUMAN_ID, hex: key }); });
-      addBtn("💰 Demand tribute", near, false, function () { apply({ type: "DEMAND_TRIBUTE_VILLAGE", playerId: HUMAN_ID, hex: key }); });
-    }
-    addBtn("⚔️ Conquer", soldierNear, true, function () { apply({ type: "CONQUER_VILLAGE", playerId: HUMAN_ID, hex: key }); });
+    function addBtn(label, enabled, danger, fn, tip) { const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger"; b.disabled = !enabled; if (tip) b.title = tip; if (enabled) b.addEventListener("click", fn); acts.appendChild(b); }
+    const befriended = village.befriendedBy === HUMAN_ID;
+    // All four interactions are ALWAYS visible so the options read clearly (§10.3).
+    // Assimilate stays locked until you've befriended them (a peaceful union needs
+    // goodwill first); Conquer is the armed alternative.
+    addBtn("🤝 Befriend (" + engine.BEFRIEND_COST + "g)", near && !befriended && village.disposition !== "hostile" && gold >= engine.BEFRIEND_COST, false,
+      function () { apply({ type: "BEFRIEND_VILLAGE", playerId: HUMAN_ID, hex: key }); },
+      befriended ? "Already befriended." : village.disposition === "hostile" ? "They are hostile — warm them with an Explorer first." : gold < engine.BEFRIEND_COST ? "Not enough gold." : "Court them with gifts.");
+    addBtn("💰 Demand tribute", near && !befriended, false,
+      function () { apply({ type: "DEMAND_TRIBUTE_VILLAGE", playerId: HUMAN_ID, hex: key }); },
+      "Take gold now — but it sours them.");
+    addBtn("🏘️ Assimilate → town", near && befriended, false,
+      function () { apply({ type: "ABSORB_VILLAGE", playerId: HUMAN_ID, hex: key, mode: "join" }); },
+      befriended ? "They join your realm as a new town." : "Befriend them first to assimilate.");
+    addBtn("🚶 Assimilate → migrate", near && befriended, false,
+      function () { apply({ type: "ABSORB_VILLAGE", playerId: HUMAN_ID, hex: key, mode: "migrate" }); },
+      befriended ? "Their people migrate to your nearest city (+population)." : "Befriend them first to assimilate.");
+    addBtn("⚔️ Conquer", soldierNear, true,
+      function () { apply({ type: "CONQUER_VILLAGE", playerId: HUMAN_ID, hex: key }); },
+      "Take them by force — their knowledge burns, and it angers the world.");
     discoveryMenuEl.appendChild(acts);
+    if (!befriended) { const h = document.createElement("div"); h.className = "disc-hint"; h.textContent = "Assimilate unlocks once you've befriended them."; discoveryMenuEl.appendChild(h); }
   }
 
   // Any of the human's units on or adjacent to a tile key (militaryOnly → attack > 0).

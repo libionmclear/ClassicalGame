@@ -281,10 +281,17 @@ function carveRivers(
   for (const source of chosen) {
     let currentKey = source;
     const visited = new Set<string>([currentKey]);
-    for (let step = 0; step < spec.width + spec.height; step += 1) {
+    const maxSteps = spec.width + spec.height;
+    const segments: string[] = []; // this river's edges, committed only if it reaches the sea
+    let reachedSea = false;
+    for (let step = 0; step < maxSteps; step += 1) {
       const current = parseKey(currentKey);
+      // Flow to the LOWEST unvisited neighbour — even if it sits a little higher
+      // than the current tile. That lets the channel carve through saddles and
+      // fill-and-spill out of local pits instead of dying at the first minimum,
+      // so a river runs a long, connected course all the way to the sea.
       let bestKey: string | null = null;
-      let bestElev = elevation[currentKey];
+      let bestElev = Infinity;
       for (const n of neighborsOf(current)) {
         if (!inBounds(n)) continue;
         const nk = keyOf(n);
@@ -295,12 +302,15 @@ function carveRivers(
         }
       }
       if (!bestKey) break;
-      rivers[edgeKey(current, parseKey(bestKey))] = true;
+      segments.push(edgeKey(current, parseKey(bestKey)));
       visited.add(bestKey);
       currentKey = bestKey;
       const t = tiles[bestKey].terrain;
-      if (t === "sea" || t === "coast") break; // reached the coast
+      if (t === "sea" || t === "coast") { reachedSea = true; break; } // reached the coast
     }
+    // Commit only a river that actually found the sea — better no river than a
+    // chain of disjoint puddles stranded in the interior.
+    if (reachedSea) for (const e of segments) rivers[e] = true;
   }
 
   return rivers;
@@ -384,7 +394,7 @@ function placeStarters(
   tiles: Record<string, { terrain: TerrainType; region: string }>,
   spec: SizeSpec,
   taken: Set<string>
-): { warrior: Coord; settler: Coord } {
+): { warrior: Coord; explorer: Coord } {
   const cap = parseKey(capitalKey);
   const inBounds = (c: Coord) => tiles[keyOf(c)] !== undefined;
   const free = neighborsOf(cap).filter(
@@ -392,9 +402,9 @@ function placeStarters(
   );
   const warrior = free[0] ?? cap;
   taken.add(keyOf(warrior));
-  const settler = free.find((c) => keyOf(c) !== keyOf(warrior)) ?? cap;
-  taken.add(keyOf(settler));
-  return { warrior, settler };
+  const explorer = free.find((c) => keyOf(c) !== keyOf(warrior)) ?? cap;
+  taken.add(keyOf(explorer));
+  return { warrior, explorer };
 }
 
 function tryGenerate(
@@ -446,7 +456,10 @@ function tryGenerate(
     };
     const start = placeStarters(capitalKey, tiles, spec, taken);
     units[`${id}_warrior`] = { id: `${id}_warrior`, type: "warrior", ownerId: id, position: start.warrior };
-    units[`${id}_settler`] = { id: `${id}_settler`, type: "settler", ownerId: id, position: start.settler };
+    // Start with an Explorer (not a Settler): a fast scout + roaming diplomat, so
+    // distant Minor Peoples are reachable even on huge maps (§10). Found later cities
+    // by training a Settler. (See peoples.ts / diplomacy — the Explorer is the envoy.)
+    units[`${id}_explorer`] = { id: `${id}_explorer`, type: "explorer", ownerId: id, position: start.explorer };
   }
 
   const rivers = carveRivers(tiles, elevation, spec, spec.rivers);
@@ -524,8 +537,8 @@ function buildFlatFallback(spec: SizeSpec, seed: string): CreateGameConfig {
   const midRow = Math.floor(spec.height / 2);
   const romePos = offsetToAxial(1, midRow);
   const carthagePos = offsetToAxial(spec.width - 2, midRow);
-  const romeSettler = offsetToAxial(1, midRow - 1 >= 0 ? midRow - 1 : midRow + 1);
-  const carthageSettler = offsetToAxial(spec.width - 2, midRow - 1 >= 0 ? midRow - 1 : midRow + 1);
+  const romeExplorer = offsetToAxial(1, midRow - 1 >= 0 ? midRow - 1 : midRow + 1);
+  const carthageExplorer = offsetToAxial(spec.width - 2, midRow - 1 >= 0 ? midRow - 1 : midRow + 1);
   return {
     seed,
     players: [
@@ -544,9 +557,9 @@ function buildFlatFallback(spec: SizeSpec, seed: string): CreateGameConfig {
       },
       units: {
         r_warrior: { id: "r_warrior", type: "warrior", ownerId: "rome", position: offsetToAxial(2, midRow) },
-        r_settler: { id: "r_settler", type: "settler", ownerId: "rome", position: romeSettler },
+        r_explorer: { id: "r_explorer", type: "explorer", ownerId: "rome", position: romeExplorer },
         c_warrior: { id: "c_warrior", type: "warrior", ownerId: "carthage", position: offsetToAxial(spec.width - 3, midRow) },
-        c_settler: { id: "c_settler", type: "settler", ownerId: "carthage", position: carthageSettler }
+        c_explorer: { id: "c_explorer", type: "explorer", ownerId: "carthage", position: carthageExplorer }
       }
     }
   };
