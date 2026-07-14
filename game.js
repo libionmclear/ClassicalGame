@@ -1689,7 +1689,9 @@
     const clickedCity = getCityAt(q, r);
 
     if (!selectedUnitId) {
-      const ownHere = clickedUnits.filter((u) => u.ownerId === HUMAN_ID);
+      // Garrisons hold their post (immovable) — skip them so clicking your own city
+      // opens the CITY panel instead of selecting the free defender standing on it.
+      const ownHere = clickedUnits.filter((u) => u.ownerId === HUMAN_ID && !u.garrison);
       if (ownHere.length) {
         // A stack (army): pick the first; clicking the tile again cycles to the next.
         playSfx("select");
@@ -1734,7 +1736,7 @@
     // Clicking the selected unit's tile: if more of your units share it (an army),
     // cycle to the next one; otherwise deselect.
     if (selected.position.q === q && selected.position.r === r) {
-      const ownHere = clickedUnits.filter((u) => u.ownerId === HUMAN_ID);
+      const ownHere = clickedUnits.filter((u) => u.ownerId === HUMAN_ID && !u.garrison);
       if (ownHere.length > 1) {
         const idx = ownHere.findIndex((u) => u.id === selectedUnitId);
         selectedUnitId = ownHere[(idx + 1) % ownHere.length].id;

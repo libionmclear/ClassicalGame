@@ -102,6 +102,8 @@ export interface Unit {
   homeCityId?: string;
   /** Hired for gold, not drawn from population — no pop cost, no disband return. */
   mercenary?: boolean;
+  /** A free city defender (§ garrison): holds its post, costs no upkeep, respawns. */
+  garrison?: boolean;
 }
 
 export interface City {
@@ -126,6 +128,8 @@ export interface City {
   lastAttackedTurn?: number;
   /** Turn this city last changed hands — a fresh conquest is briefly unstable. */
   capturedTurn?: number;
+  /** Earliest turn this city may muster a fresh garrison (set when one falls). */
+  garrisonReadyTurn?: number;
   /** Cities v3 §2 — districts built on the 6 hexes around the centre. */
   districts?: District[];
 }

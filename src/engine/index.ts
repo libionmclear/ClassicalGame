@@ -234,6 +234,7 @@ function applyMovement(state: GameState, action: MoveUnitAction): void {
   const unit = unitAt(state, action.unitId);
   assertPlayerTurn(state, action.playerId);
   if (unit.ownerId !== action.playerId) throw new Error("Cannot move enemy unit");
+  if (unit.garrison) throw new Error("A city garrison holds its post"); // free defenders don't march
 
   const start = unit.position;
   const destination = action.destination;
@@ -598,6 +599,8 @@ function applyCombat(state: GameState, action: Extract<GameAction, { type: "ATTA
   const defenderPos: Coord = { q: defender.position.q, r: defender.position.r };
 
   if (defender.hp <= 0) {
+    // A fallen garrison leaves the city to muster a fresh one in a few turns.
+    if (defender.garrison) { const c = cityAtPos(state, defenderPos); if (c) c.garrisonReadyTurn = state.turn + GARRISON_RESPAWN; }
     delete state.map.units[defender.id];
     const defenderOwner = state.playersById[defender.ownerId];
     defenderOwner.unitIds = defenderOwner.unitIds.filter((id) => id !== defender.id);
@@ -634,9 +637,67 @@ function computeCityAttackDamage(state: GameState, attacker: Unit, city: City): 
   const siegeMult = 1 + (attackerDef.siegeBonus ?? 0);
   const attackPower =
     attackerDef.attack * (attacker.hp / attacker.maxHp) * veterancyMultiplier(attacker.veterancy) * weatherMult * siegeMult;
-  const cityDefense = 22 + city.population * 3;
+  // Cities grow tougher as their age advances — walls, ditches, drilled militia.
+  const owner = state.playersById[city.ownerId];
+  const cityDefense = 22 + city.population * 3 + (playerAge(owner) - 1) * 10;
 
   return Math.max(1, Math.round((18 * attackPower) / (attackPower + cityDefense)));
+}
+
+// The player's age = the highest-age tech they hold (1 = Villages … 3 = Empires).
+export function playerAge(player: Player | undefined): number {
+  let age = 1;
+  if (!player) return age;
+  for (const id of player.techs) { const t = TECHS[id]; if (t && t.age > age) age = t.age; }
+  return age;
+}
+
+// ---- Free city garrisons (§ defence): every city keeps an age-scaled defender
+// on its tile, so an attacker must beat it before assaulting the city. Costs no
+// upkeep, holds its post (cannot move), and musters afresh a few turns after it
+// falls. AI and human cities alike are defended by default.
+export const GARRISON_RESPAWN = 4;
+function isLandMilitary(u: Unit | undefined): boolean {
+  const d = u && UNITS[u.type];
+  return !!d && d.domain === "land" && (d.attack ?? 0) > 0;
+}
+// The owner's best available (uncapped, tech-satisfied, civ-legal) land defender.
+function bestGarrisonType(player: Player): string {
+  let best = "warrior", bestDef = -1;
+  for (const [type, def] of Object.entries(UNITS)) {
+    if (def.domain !== "land" || (def.attack ?? 0) <= 0) continue;
+    if (def.buildCap) continue; // don't hand out capped elites for free
+    if (def.civ && !playerControlsCiv(player, def.civ)) continue;
+    if (def.requiresTech && !player.techs.includes(def.requiresTech)) continue;
+    const d = def.defense ?? 0;
+    if (d > bestDef) { bestDef = d; best = type; }
+  }
+  return best;
+}
+function cityAtPos(state: GameState, at: Coord): City | undefined {
+  return Object.values(state.map.cities).find((c) => c.position.q === at.q && c.position.r === at.r);
+}
+function refreshGarrisons(state: GameState, player: Player): void {
+  for (const cityId of player.cityIds) {
+    const city = state.map.cities[cityId];
+    if (!city) continue;
+    const at = city.position;
+    // Already defended if any friendly land-military unit stands on the centre.
+    const defended = player.unitIds.some((id) => { const u = state.map.units[id]; return isLandMilitary(u) && u!.position.q === at.q && u!.position.r === at.r; });
+    if (defended) continue;
+    if (state.turn < (city.garrisonReadyTurn ?? 0)) continue; // still mustering
+    const type = bestGarrisonType(player);
+    const def = UNITS[type];
+    const id = `${player.id}_gar_${at.q}_${at.r}_${state.turn}`;
+    if (state.map.units[id]) continue;
+    state.map.units[id] = {
+      id, type, ownerId: player.id, position: { q: at.q, r: at.r },
+      hp: def.maxHp, maxHp: def.maxHp, movementRemaining: 0,
+      veterancy: playerAge(player) >= 3 ? "veteran" : "recruit", garrison: true
+    };
+    player.unitIds = player.unitIds.includes(id) ? player.unitIds : [...player.unitIds, id];
+    city.garrisonReadyTurn = state.turn;
+  }
 }
 
 function applyAttackCity(state: GameState, action: AttackCityAction): void {
@@ -1497,7 +1558,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
 
   const upkeep = endingPlayer.unitIds.reduce((sum, unitId) => {
     const unit = state.map.units[unitId];
-    if (!unit) return sum;
+    if (!unit || unit.garrison) return sum; // free city garrisons cost nothing
     return sum + (UNITS[unit.type].upkeep || 0);
   }, 0);
   endingPlayer.gold -= upkeep;
@@ -1520,6 +1581,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   excavateRuins(state, endingPlayer.id);     // §10.2: units ending on a ruin dig it up
   contactVillages(state, endingPlayer.id);   // §10.3: an Explorer warms a wary village
   contactCivs(state, endingPlayer.id);       // §10.3: an Explorer envoy makes first contact with civs
+  refreshGarrisons(state, endingPlayer);     // muster an age-scaled defender in any undefended city
 
   // Advance to the next player. With 3+ players we ROTATE initiative each round
   // (round r starts at seat r mod n) so no seat is permanently last — the last
@@ -1736,6 +1798,7 @@ function applyDisbandUnit(state: GameState, action: DisbandUnitAction): void {
   const unit = state.map.units[action.unitId];
   if (!unit) throw new Error(`Unknown unit ${action.unitId}`);
   if (unit.ownerId !== action.playerId) throw new Error("Cannot disband another player's unit");
+  if (unit.garrison) throw new Error("A city garrison cannot be disbanded");
 
   // Cities v3 §1: a disbanded citizen-military unit returns to its HOME city's
   // population, prorated by health — a full pop point at 100%, otherwise the
@@ -1901,7 +1964,7 @@ export function computePlayerIncome(
     income.gold += Math.round(y.gold * mult);
     income.science += Math.round(y.science * mult);
   }
-  const upkeep = player.unitIds.reduce((sum, id) => sum + (state.map.units[id] ? UNITS[state.map.units[id].type].upkeep || 0 : 0), 0);
+  const upkeep = player.unitIds.reduce((sum, id) => { const u = state.map.units[id]; return sum + (u && !u.garrison ? UNITS[u.type].upkeep || 0 : 0); }, 0);
   income.gold -= upkeep;
   income.gold += tradeRouteIncome(state, playerId);
   // Net food after the army's food-tax (can go negative — a deficit stalls growth).

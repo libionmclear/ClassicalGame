@@ -43,7 +43,7 @@ test("§1 a city cannot recruit below pop 2 — it waits, production stays banke
   s.map.cities.c1.production = 80;
   s = applyAction(s, { type: "END_TURN", playerId: "p1" });
   assert.equal(s.map.cities.c1.population, 1, "pop unchanged");
-  assert.ok(!Object.values(s.map.units).some((u) => u.type === "warrior" && u.ownerId === "p1"), "no soldier trained");
+  assert.ok(!Object.values(s.map.units).some((u) => u.type === "warrior" && u.ownerId === "p1" && !u.garrison), "no soldier trained (the free garrison doesn't count)");
   assert.ok((s.map.cities.c1.queue ?? []).includes("warrior"), "still queued, waiting to grow");
   assert.ok((s.map.cities.c1.production ?? 0) >= 80, "production not spent");
 });

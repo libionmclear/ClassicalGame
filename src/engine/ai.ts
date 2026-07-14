@@ -78,7 +78,8 @@ function moveCtx(unit: Unit) {
 }
 
 function unitsOf(state: GameState, player: Player): Unit[] {
-  return player.unitIds.map((id) => state.map.units[id]).filter(Boolean) as Unit[];
+  // Garrisons hold their post automatically — the AI never commands them.
+  return player.unitIds.map((id) => state.map.units[id]).filter((u) => u && !u.garrison) as Unit[];
 }
 
 function unitAt(state: GameState, c: Coord): Unit | undefined {
