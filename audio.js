@@ -96,53 +96,102 @@
     coin: function () { tone("square", 988, 0.08, 0.14, sfxBus); setTimeout(function () { if (AC) tone("square", 1319, 0.1, 0.12, sfxBus); }, 70); }
   };
 
-  // ---- Music bed: slow modal pad + occasional lyre pluck --------------------
-  // D Dorian-ish set (a calm, ancient colour). Frequencies in Hz.
-  var CHORDS = [
-    [146.83, 174.61, 220.00], // Dm
-    [130.81, 164.81, 196.00], // C
-    [174.61, 220.00, 261.63], // F
-    [196.00, 246.94, 293.66]  // G
-  ];
-  var PLUCKS = [293.66, 329.63, 392.00, 440.00, 493.88, 587.33];
+  // ---- Music bed: themed, EVOLVING ancient score ----------------------------
+  // Each civ gets its own modal colour; within a theme the score rotates its
+  // motif density, chord and drum so it "switches up" over time instead of
+  // looping. Everything is synthesized (no files, nothing copyrighted).
+  // Frequencies in Hz. drone = a low sustained root (cornu/lyre bass).
+  var THEMES = {
+    // Rome — grave and martial: a dark Phrygian set over a low cornu drone, a
+    // reedy tibia pad, a lyre motif and a soft frame-drum tread.
+    rome: { bar: 8.6, padType: "sawtooth", cut: 760, pluck: "triangle", drone: 65.41, drum: true,
+      chords: [[130.81, 155.56, 196.00], [146.83, 174.61, 220.00], [116.54, 146.83, 174.61], [130.81, 164.81, 196.00]],
+      scale: [146.83, 155.56, 174.61, 196.00, 220.00, 233.08, 293.66] },
+    // Greece — brighter Dorian, lyre-forward, no drum.
+    greece: { bar: 7.8, padType: "triangle", cut: 960, pluck: "triangle", drone: 73.42, drum: false,
+      chords: [[146.83, 174.61, 220.00], [164.81, 196.00, 246.94], [130.81, 164.81, 196.00], [196.00, 246.94, 293.66]],
+      scale: [146.83, 164.81, 196.00, 220.00, 246.94, 293.66, 329.63] },
+    // Egypt — exotic Phrygian-dominant (double harmonic), oud-like plucks.
+    egypt: { bar: 8.0, padType: "sawtooth", cut: 820, pluck: "sawtooth", drone: 69.30, drum: true,
+      chords: [[138.59, 174.61, 207.65], [146.83, 185.00, 220.00], [123.47, 155.56, 185.00], [138.59, 164.81, 207.65]],
+      scale: [138.59, 146.83, 185.00, 196.00, 207.65, 246.94, 277.18] },
+    // Carthage — Punic, minor and mysterious.
+    carthage: { bar: 8.2, padType: "sawtooth", cut: 800, pluck: "triangle", drone: 61.74, drum: true,
+      chords: [[123.47, 146.83, 185.00], [110.00, 138.59, 164.81], [130.81, 155.56, 196.00], [123.47, 155.56, 185.00]],
+      scale: [123.47, 138.59, 146.83, 164.81, 185.00, 207.65, 246.94] },
+    // Gaul — open fifths, bardic and airy.
+    gaul: { bar: 7.4, padType: "triangle", cut: 1020, pluck: "triangle", drone: 73.42, drum: false,
+      chords: [[146.83, 220.00, 293.66], [164.81, 246.94, 329.63], [130.81, 196.00, 261.63], [196.00, 293.66, 392.00]],
+      scale: [146.83, 164.81, 196.00, 220.00, 246.94, 293.66, 329.63] },
+    // Parthia — modal East, drone-heavy.
+    parthia: { bar: 8.4, padType: "sawtooth", cut: 760, pluck: "sawtooth", drone: 65.41, drum: true,
+      chords: [[130.81, 155.56, 196.00], [138.59, 174.61, 207.65], [116.54, 146.83, 174.61], [130.81, 164.81, 196.00]],
+      scale: [130.81, 138.59, 155.56, 174.61, 196.00, 207.65, 233.08] }
+  };
+  var curTheme = THEMES.rome, motif = 0;
 
-  function padChord(freqs, dur) {
-    var lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900; lp.Q.value = 0.3;
+  function padChord(freqs, dur, th) {
+    var lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = th.cut; lp.Q.value = 0.3;
     var g = AC.createGain(); var n = t();
     g.gain.setValueAtTime(0.0001, n);
-    g.gain.linearRampToValueAtTime(0.5, n + 1.4);
-    g.gain.setValueAtTime(0.5, n + dur - 1.6);
+    g.gain.linearRampToValueAtTime(0.42, n + 1.4);
+    g.gain.setValueAtTime(0.42, n + dur - 1.6);
     g.gain.linearRampToValueAtTime(0.0001, n + dur);
     lp.connect(g); g.connect(musicBus);
     for (var i = 0; i < freqs.length; i++) {
-      var o = AC.createOscillator(); o.type = i === 0 ? "sine" : "triangle";
+      var o = AC.createOscillator(); o.type = i === 0 ? "sine" : th.padType;
       o.frequency.value = freqs[i]; o.detune.value = (i - 1) * 4;
       o.connect(lp); o.start(n); o.stop(n + dur + 0.05);
     }
   }
-  function lyrePluck(freq) {
-    var o = AC.createOscillator(); o.type = "triangle"; o.frequency.value = freq;
+  // A low sustained drone — the cornu/lyre bass that anchors the mode.
+  function droneVoice(freq, dur) {
+    var lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 320;
     var g = AC.createGain(); var n = t();
     g.gain.setValueAtTime(0.0001, n);
-    g.gain.exponentialRampToValueAtTime(0.16, n + 0.01);
+    g.gain.linearRampToValueAtTime(0.3, n + 2.0);
+    g.gain.setValueAtTime(0.3, n + dur - 2.0);
+    g.gain.linearRampToValueAtTime(0.0001, n + dur);
+    var o = AC.createOscillator(); o.type = "sine"; o.frequency.value = freq;
+    var o2 = AC.createOscillator(); o2.type = "triangle"; o2.frequency.value = freq * 2; o2.detune.value = 3;
+    var g2 = AC.createGain(); g2.gain.value = 0.35; o2.connect(g2); g2.connect(lp);
+    o.connect(lp); lp.connect(g); g.connect(musicBus);
+    o.start(n); o.stop(n + dur + 0.05); o2.start(n); o2.stop(n + dur + 0.05);
+  }
+  function pluck(freq, th) {
+    var o = AC.createOscillator(); o.type = th.pluck; o.frequency.value = freq;
+    var lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200;
+    var g = AC.createGain(); var n = t();
+    g.gain.setValueAtTime(0.0001, n);
+    g.gain.exponentialRampToValueAtTime(0.15, n + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, n + 1.1);
-    o.connect(g); g.connect(musicBus); o.start(n); o.stop(n + 1.2);
+    o.connect(lp); lp.connect(g); g.connect(musicBus); o.start(n); o.stop(n + 1.2);
+  }
+  // A soft frame-drum tread for the martial themes.
+  function drumHit() {
+    tone("sine", 82, 0.22, 0.32, musicBus, 0.004);
+    noiseBurst(0.12, 0.09, "lowpass", 200, musicBus);
   }
   function musicTick() {
     if (!AC || !musicOn) return;
-    var chord = CHORDS[step % CHORDS.length];
-    padChord(chord, 8.2);
-    // A sparse lyre motif over the pad.
-    if (Math.random() < 0.8) {
-      var count = 2 + Math.floor(Math.random() * 3);
-      for (var i = 0; i < count; i++) {
+    var th = curTheme, bar = th.bar;
+    var chord = th.chords[step % th.chords.length];
+    padChord(chord, bar + 0.2, th);
+    if (th.drone) droneVoice(th.drone, bar + 0.2);
+    // Motif density rotates every cycle so the phrase keeps evolving.
+    var density = 2 + (motif % 3);
+    if (Math.random() < 0.85) {
+      for (var i = 0; i < density; i++) {
         (function (delay) {
-          setTimeout(function () { if (AC && musicOn) lyrePluck(PLUCKS[Math.floor(Math.random() * PLUCKS.length)]); }, delay);
-        })(600 + i * (900 + Math.random() * 800));
+          setTimeout(function () { if (AC && musicOn) pluck(th.scale[Math.floor(Math.random() * th.scale.length)], th); }, delay);
+        })(500 + i * ((bar * 900) / (density + 1)) * (0.8 + Math.random() * 0.5));
       }
     }
+    // Frame-drum on the two strong beats (occasionally dropped for a lift).
+    if (th.drum && motif % 4 !== 3) { drumHit(); setTimeout(function () { if (AC && musicOn) drumHit(); }, bar * 500); }
     step++;
-    musicTimer = setTimeout(musicTick, 8000);
+    if (step % 4 === 0) motif++; // shift the feel every four bars — the "switch up"
+    musicTimer = setTimeout(musicTick, bar * 1000);
   }
 
   // ---- Ambience control -----------------------------------------------------
@@ -197,6 +246,12 @@
       if (!AC) return;
       if (musicOn && started) { if (!musicTimer) musicTick(); }
       else { clearTimeout(musicTimer); musicTimer = null; ramp(musicBus.gain, 0, 1.0); setTimeout(function () { if (musicBus) musicBus.gain.value = 0.5; }, 1100); }
+    },
+    // Pick the civ's musical theme (defaults to Rome). The score keeps its own
+    // evolution; this just swaps the mode/colour for the civ you're playing.
+    setCiv: function (civ) {
+      var k = (civ || "").toLowerCase();
+      if (THEMES[k] && curTheme !== THEMES[k]) { curTheme = THEMES[k]; motif = 0; }
     },
     // weather: "rain" | "storm" | anything else (dry).
     setWeather: function (wx) {

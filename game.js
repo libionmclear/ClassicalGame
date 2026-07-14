@@ -1570,6 +1570,7 @@
   let lastAmbience = null, lastWeatherSound = null;
   function updateSoundscape(skyWx, tiles) {
     if (!window.HGAudio || !window.HGAudio.isReady()) return;
+    if (window.HGAudio.setCiv) window.HGAudio.setCiv(HUMAN_ID); // civ-themed score (Rome, Greece, …)
     if (skyWx !== lastWeatherSound) { window.HGAudio.setWeather(skyWx); lastWeatherSound = skyWx; }
     // Forest ambience when forest dominates what you can actually see.
     let forest = 0, land = 0;
