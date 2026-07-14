@@ -11,12 +11,20 @@ import {
 } from "../src/engine/diplomacy";
 import type { GameState } from "../src/engine/types";
 
+// Diplomacy now requires first contact (§10.3). These tests exercise pacts/war
+// directly, so mark every pair as having met.
+function meetAll(s: GameState): GameState {
+  s.contact = {};
+  for (const a of s.players) s.contact[a.id] = s.players.filter((p) => p.id !== a.id).map((p) => p.id);
+  return s;
+}
+
 function makeState(playerCount = 3): GameState {
   const tiles: Record<string, { terrain: "plains"; region: string }> = {};
   for (let r = 0; r < 4; r += 1) for (let q = 0; q < 4; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
   const players = [];
   for (let i = 1; i <= playerCount; i += 1) players.push({ id: `p${i}`, civ: `Civ${i}`, gold: 200 });
-  return createInitialGameState({ seed: "diplo", players, map: { width: 4, height: 4, regions: ["core"], tiles } });
+  return meetAll(createInitialGameState({ seed: "diplo", players, map: { width: 4, height: 4, regions: ["core"], tiles } }));
 }
 
 test("pairKey is order-independent", () => {
@@ -104,7 +112,7 @@ test("gifting is deterministic", () => {
 function combatState(): GameState {
   const tiles: Record<string, { terrain: "plains"; region: string }> = {};
   for (let r = 0; r < 4; r += 1) for (let q = 0; q < 4; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
-  return createInitialGameState({
+  return meetAll(createInitialGameState({
     seed: "war",
     players: [{ id: "p1", civ: "Rome", gold: 100 }, { id: "p2", civ: "Carthage", gold: 100 }, { id: "p3", civ: "Egypt", gold: 100 }],
     map: {
@@ -115,7 +123,7 @@ function combatState(): GameState {
       },
       cities: { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 2, hp: 24, maxHp: 24 } }
     }
-  });
+  }));
 }
 
 test("DECLARE_WAR opens a war and cools the pair (no brand without a pact)", () => {
@@ -306,7 +314,7 @@ function powerState(): GameState {
   const units: Record<string, { id: string; type: "warrior"; ownerId: string; position: { q: number; r: number } }> = {};
   for (let i = 0; i < 4; i += 1) units["u" + i] = { id: "u" + i, type: "warrior", ownerId: "p1", position: { q: i, r: 0 } };
   units["w"] = { id: "w", type: "warrior", ownerId: "p2", position: { q: 0, r: 2 } };
-  return createInitialGameState({
+  return meetAll(createInitialGameState({
     seed: "vass",
     players: [{ id: "p1", civ: "Rome", gold: 50 }, { id: "p2", civ: "Carthage", gold: 50 }, { id: "p3", civ: "Egypt", gold: 50 }],
     map: {
@@ -316,7 +324,7 @@ function powerState(): GameState {
         c2: { id: "c2", ownerId: "p2", position: { q: 0, r: 4 }, population: 8, isCapital: true, hp: 24, maxHp: 24 }
       }
     }
-  });
+  }));
 }
 
 test("DEMAND vassalage needs a 2:1 military edge", () => {
@@ -382,7 +390,7 @@ test("an overlord can release its vassal", () => {
 function twoCapitalState(): GameState {
   const tiles: Record<string, { terrain: "plains"; region: string }> = {};
   for (let r = 0; r < 3; r += 1) for (let q = 0; q < 3; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
-  return createInitialGameState({
+  return meetAll(createInitialGameState({
     seed: "ally-win",
     players: [{ id: "p1", civ: "Rome" }, { id: "p2", civ: "Athens" }],
     map: {
@@ -392,7 +400,7 @@ function twoCapitalState(): GameState {
         c2: { id: "c2", ownerId: "p2", position: { q: 2, r: 2 }, population: 2, isCapital: true, hp: 24, maxHp: 24 }
       }
     }
-  });
+  }));
 }
 
 test("two long-standing Full Allies win jointly (alliance victory)", () => {

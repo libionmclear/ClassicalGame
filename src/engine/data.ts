@@ -414,21 +414,24 @@ export interface BuildingRule {
 export const BUILDINGS: Record<string, BuildingRule> = {
   granary: {
     name: "Granary",
-    cost: 16,
+    cost: 12,
+    requiresTech: "pottery",
     yields: { food: 2 },
-    note: "Storehouses of grain smoothed the lean years — the horrea that fed Rome and the silos of Egypt. Effect: +2 food (faster growth)."
+    note: "Storehouses of grain smoothed the lean years — the horrea that fed Rome and the silos of Egypt. Needs Pottery (storage jars & silos). Effect: +2 food (faster growth)."
   },
   workshop: {
     name: "Workshop",
     cost: 18,
+    requiresTech: "bronze-working",
     yields: { production: 2 },
-    note: "Fabricae and artisan quarters turned raw metal and timber into arms and tools. Effect: +2 production."
+    note: "Fabricae and artisan quarters turned raw metal and timber into arms and tools. Needs Bronze Working (the smith's craft). Effect: +2 production."
   },
   market: {
     name: "Market",
-    cost: 16,
+    cost: 14,
+    requiresTech: "writing",
     yields: { gold: 2 },
-    note: "The macellum and agora — the beating commercial heart of every ancient city. Effect: +2 gold."
+    note: "The macellum and agora — the beating commercial heart of every ancient city. Needs Writing (accounts & contracts). Effect: +2 gold."
   },
   library: {
     name: "Library",

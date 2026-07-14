@@ -1230,6 +1230,15 @@
       chips.innerHTML = chipHtml;
       row.appendChild(chips);
 
+      // Diplomacy needs first contact — no envoy to a civ you have never met (§10.3).
+      if (engine.haveMet && !engine.haveMet(state, me, id)) {
+        const note = document.createElement("div");
+        note.className = "diplo-actions";
+        note.innerHTML = '<span class="diplo-chip">🕵️ Not yet met — scout their lands to open relations</span>';
+        row.appendChild(note);
+        diplomacyListEl.appendChild(row);
+        return;
+      }
       const acts = document.createElement("div");
       acts.className = "diplo-actions";
       const gold = (human() && human().gold) || 0;

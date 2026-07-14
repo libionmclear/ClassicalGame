@@ -25,7 +25,7 @@ function cityState(techs: string[] = []) {
 }
 
 test("a queued building banks production and completes on the next turn", () => {
-  let state = cityState();
+  let state = cityState(["pottery"]); // Granary now needs Pottery (storage jars)
   state = applyAction(state, { type: "BUILD_BUILDING", playerId: "p1", cityId: "c1", buildingId: "granary" });
   assert.ok(state.map.cities.c1.queue?.includes("granary"), "granary is queued, not built instantly");
   assert.ok(!(state.map.cities.c1.buildings ?? []).includes("granary"), "not built yet");

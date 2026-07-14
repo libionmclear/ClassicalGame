@@ -143,7 +143,7 @@ export const DEFAULT_PLAYERS: Record<MapSize, number> = {
 
 // Land tiles a basic (unteched) land unit can traverse — used for connectivity so
 // the two capitals are always joined by a walkable route (domination stays possible).
-const WALKABLE: ReadonlySet<TerrainType> = new Set<TerrainType>([
+export const WALKABLE: ReadonlySet<TerrainType> = new Set<TerrainType>([
   "plains",
   "valley",
   "forest",

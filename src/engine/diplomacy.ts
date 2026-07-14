@@ -270,9 +270,20 @@ export function napBlocksDeclaration(state: GameState, a: string, b: string): bo
 }
 
 // Can `from` put this pact proposal in front of `to` right now?
+// Two civs have made contact once either side's Explorer or army has sighted the
+// other (state.contact, filled at end of turn). Diplomacy is impossible before
+// then — you cannot send an envoy to a people you have never met (§10.3).
+export function haveMet(state: GameState, a: string, b: string): boolean {
+  if (a === b) return true;
+  const c = state.contact;
+  if (!c) return false;
+  return (c[a] ?? []).includes(b) || (c[b] ?? []).includes(a);
+}
+
 export function canProposeAgreement(state: GameState, from: string, to: string, type: ProposableAgreement): true | string {
   if (from === to) return "You cannot make a pact with yourself";
   if (!state.playersById[to]) return "Unknown civ";
+  if (!haveMet(state, from, to)) return "You have not made contact with them yet — send a scout to their lands";
   if (isAtWar(state, from, to)) return "Make peace before proposing a pact";
   if (state.playersById[to].pendingProposal) return "They are still weighing another offer";
   if (hasAgreement(state, from, to, type)) return "That pact already stands";

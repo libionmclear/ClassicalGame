@@ -4,7 +4,7 @@
 // them), Conquer (fast, but archives burn — knowledge benefits lost), or Ignore.
 // Data + placement + a benefit applier; index.ts owns the action handlers.
 import type { GameState } from "./types";
-import { hash01 } from "./mapgen";
+import { hash01, WALKABLE } from "./mapgen";
 import { neighborsOf, parseKey } from "./hex";
 import { UNITS } from "./data";
 
@@ -144,7 +144,9 @@ export function scatterVillages(
   avoid: Set<string>
 ): Record<string, { peopleId: string; disposition: Disposition }> {
   const out: Record<string, { peopleId: string; disposition: Disposition }> = {};
-  const land = Object.keys(map.tiles).filter((k) => { const t = map.tiles[k].terrain; return t && t !== "sea" && t !== "coast"; });
+  // Only WALKABLE land — a village on an impassable mountain can never be reached
+  // or interacted with, which was leaving Minor Peoples stranded (§10.3).
+  const land = Object.keys(map.tiles).filter((k) => (WALKABLE as ReadonlySet<string>).has(map.tiles[k].terrain));
   if (!land.length) return out;
   const used = new Set<string>([...avoid, ...Object.values(map.cities).map((c) => `${c.position.q},${c.position.r}`)]);
   // A seeded RANDOM SUBSET of the peoples — not the whole roster every match (§10.4).

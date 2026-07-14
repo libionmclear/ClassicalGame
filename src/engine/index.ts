@@ -21,7 +21,7 @@ import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
 import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
-import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE, fullAlliancesHeld, ALLIANCE_VICTORY_HOLD } from "./diplomacy";
+import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, haveMet, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE, fullAlliancesHeld, ALLIANCE_VICTORY_HOLD } from "./diplomacy";
 import { scatterRuins } from "./mapgen";
 import { excavateRuins } from "./discovery";
 import { scatterVillages, PEOPLE_BY_ID, unitNear, applyVillageBenefit, BEFRIEND_COST, TRIBUTE_GAIN, CONQUEST_REPUTATION_HIT, DISPOSITIONS, rollReaction, souredDisposition, pillageOnThreaten, THREATEN_RAID_GOLD, leaderReactionBonus, explorerNear, EXPLORER_ENVOY_BONUS, befriendCostFor } from "./peoples";
@@ -2067,6 +2067,7 @@ function applyOfferTribute(state: GameState, action: OfferTributeAction): void {
   if (action.targetId === action.playerId) throw new Error("You cannot pay tribute to yourself");
   const target = state.playersById[action.targetId];
   if (!target) throw new Error("Unknown civ");
+  if (!haveMet(state, action.playerId, action.targetId)) throw new Error("You have not made contact with them yet");
   if (target.pendingProposal) throw new Error("They are still weighing another offer");
   const amount = Math.floor(action.amount);
   if (!(amount > 0)) throw new Error("Tribute must be a positive amount");
@@ -2103,6 +2104,7 @@ function applyDenounce(state: GameState, action: DenounceAction): void {
   assertPlayerTurn(state, action.playerId);
   if (action.targetId === action.playerId) throw new Error("You cannot denounce yourself");
   if (!state.playersById[action.targetId]) throw new Error("Unknown civ");
+  if (!haveMet(state, action.playerId, action.targetId)) throw new Error("You have not made contact with them yet");
   denounce(state, action.playerId, action.targetId);
 }
 
@@ -2112,6 +2114,7 @@ function applyProposeVassalage(state: GameState, action: ProposeVassalageAction)
   const target = state.playersById[action.targetId];
   if (!target) throw new Error("Unknown civ");
   if (action.targetId === action.playerId) throw new Error("You cannot vassalise yourself");
+  if (!haveMet(state, action.playerId, action.targetId)) throw new Error("You have not made contact with them yet");
   if (target.pendingProposal) throw new Error("They are still weighing another offer");
   if (action.vassalId !== action.playerId && action.vassalId !== action.targetId) throw new Error("The vassal must be one of the two parties");
   if (isVassal(state, action.vassalId)) throw new Error("That civ already serves an overlord");
@@ -2252,40 +2255,40 @@ function contactVillages(state: GameState, playerId: string): void {
 }
 
 export const ENVOY_GOODWILL = 4; // first contact via an Explorer opens on a warm note
-// The Explorer as roaming envoy (§10.3): ending its turn within 2 tiles of
-// another civ's units, or on/beside their territory, makes first contact — a met
-// flag (relations become actionable in the fiction) plus a one-time goodwill
-// nudge from whichever side's envoy reached out first.
+// First contact (§10.3): whatever the ending player can SEE this turn — any other
+// civ's unit, city, or territory in their vision — establishes contact with that
+// civ. Diplomacy is impossible until this is set (no envoy to a people you have
+// never met). An Explorer that reaches them adds a one-time goodwill nudge.
 function contactCivs(state: GameState, playerId: string): void {
   const player = state.playersById[playerId];
   if (!player) return;
-  const explorers = (player.unitIds ?? []).map((id) => state.map.units[id]).filter((u) => u && u.type === "explorer");
-  if (!explorers.length) return;
   state.contact = state.contact ?? {};
   const met = new Set(state.contact[playerId] ?? []);
+  const before = new Set(met);
+  const vis = new Set(computeVisibility(state, playerId).visibleTiles);
   const territory = computeTerritory(state);
-  const newly: string[] = [];
-  const meet = (other: string): void => {
-    if (!other || other === playerId || met.has(other) || !state.playersById[other]) return;
-    met.add(other);
-    newly.push(other);
-  };
-  for (const ex of explorers) {
-    // Border contact: the explorer stands on or beside another civ's land.
-    for (const k of [`${ex.position.q},${ex.position.r}`, ...neighborsOf(ex.position).map((n) => `${n.q},${n.r}`)]) {
-      const owner = territory[k];
-      if (owner && owner !== playerId) meet(owner);
-    }
-    // Sight contact: another civ's unit within 2 hexes.
-    for (const u of Object.values(state.map.units)) {
-      if (u.ownerId !== playerId && distance(ex.position, u.position) <= 2) meet(u.ownerId);
-    }
+  for (const u of Object.values(state.map.units)) {
+    if (u.ownerId !== playerId && vis.has(`${u.position.q},${u.position.r}`)) met.add(u.ownerId);
   }
-  if (!newly.length) return;
+  for (const c of Object.values(state.map.cities)) {
+    if (c.ownerId !== playerId && vis.has(`${c.position.q},${c.position.r}`)) met.add(c.ownerId);
+  }
+  for (const [k, owner] of Object.entries(territory)) {
+    if (owner !== playerId && vis.has(k)) met.add(owner);
+  }
+  for (const id of [...met]) if (!state.playersById[id]) met.delete(id);
+  if (met.size === before.size) return;
   state.contact[playerId] = [...met];
-  for (const other of newly) {
-    // Only the first side to make contact extends the goodwill (avoid double-counting).
-    if (!(state.contact[other] ?? []).includes(playerId)) adjustRelation(state, playerId, other, ENVOY_GOODWILL);
+  // An Explorer envoy that physically reached a newly-met civ opens warmly.
+  const explorers = (player.unitIds ?? []).map((id) => state.map.units[id]).filter((u) => u && u.type === "explorer");
+  for (const other of met) {
+    if (before.has(other)) continue; // already known
+    if ((state.contact[other] ?? []).includes(playerId)) continue; // they reached us first
+    const envoyReached = explorers.some((ex) =>
+      Object.values(state.map.units).some((u) => u.ownerId === other && distance(ex.position, u.position) <= 2) ||
+      [`${ex.position.q},${ex.position.r}`, ...neighborsOf(ex.position).map((n) => `${n.q},${n.r}`)].some((k) => territory[k] === other)
+    );
+    if (envoyReached) adjustRelation(state, playerId, other, ENVOY_GOODWILL);
   }
 }
 
