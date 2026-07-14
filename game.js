@@ -229,6 +229,7 @@
     trireme: "⛵",
     merchant: "🪙",
     settler: "🛠️",
+    explorer: "🧭",
     legionary: "🦅",
     hoplite: "🛡️",
     "war-elephant": "🐘",
@@ -2504,6 +2505,7 @@
   // Show/hide the floating command panel, position it near where the player
   // clicked on the board, and reveal only the groups that fit the selection.
   function unitGlyph(type) {
+    if (UNIT_GLYPHS[type]) return UNIT_GLYPHS[type]; // the unit's own icon (e.g. 🧭 Explorer, 🦅 Legionary)
     const f = typeof unitForm === "function" ? unitForm(type) : "infantry";
     return { naval: "⛵", civilian: "⚒", elephant: "🐘", siege: "🎯", mounted: "🐎", ranged: "🏹", spear: "🔱", infantry: "⚔" }[f] || "⚔";
   }
@@ -2585,7 +2587,18 @@
   }
   function renderDiscovery(isTurn) {
     if (!discoveryGroupEl || !discoveryMenuEl) return;
-    const key = selectedTileKey;
+    let key = selectedTileKey;
+    // Also fire the panel when a UNIT you've selected is standing ON or NEXT TO a
+    // discovery site — e.g. you moved your Explorer into a Minor-People village
+    // (selecting the unit would otherwise hide the village options).
+    if (!key && selectedUnitId && state.map.units[selectedUnitId]) {
+      const su = state.map.units[selectedUnitId];
+      const cand = [su.position.q + "," + su.position.r];
+      for (const d of AXIAL_DIRS) cand.push((su.position.q + d[0]) + "," + (su.position.r + d[1]));
+      key = cand.find(function (k) {
+        return (state.map.villages && state.map.villages[k]) || (state.map.ruins && state.map.ruins[k] && !state.map.ruins[k].excavated);
+      }) || null;
+    }
     const ruin = key && state.map.ruins ? state.map.ruins[key] : null;
     const village = key && state.map.villages ? state.map.villages[key] : null;
     if ((!ruin || ruin.excavated) && !village) { discoveryGroupEl.style.display = "none"; return; }
