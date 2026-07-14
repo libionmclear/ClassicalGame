@@ -752,12 +752,14 @@
       return;
     }
     const player = human();
+    const civId = String(player.civ || HUMAN_ID || "").toLowerCase();
     const buildings = engine.BUILDINGS || {};
     const built = new Set(selectedCity.buildings || []);
     const queued = new Set(selectedCity.queue || []);
     const coastal = engine.isCoastalCity ? engine.isCoastalCity(state, selectedCity.id) : true;
     for (const id of Object.keys(buildings)) {
       const b = buildings[id];
+      if (b.civ && b.civ !== civId) continue; // another civ's unique building — never buildable here
       const has = built.has(id);
       const isQueued = queued.has(id);
       const reqTech = b.requiresTech;

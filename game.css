@@ -1058,11 +1058,12 @@ button:hover:not(:disabled) {
   gap: 8px;
   position: sticky;
   top: 0;
-  background: rgba(13, 20, 32, 0.97);
-  padding-top: 2px;
-  margin: 0 -4px 2px;
-  padding-left: 4px;
-  padding-right: 4px;
+  z-index: 5;
+  background: #0d1420; /* fully opaque so scrolled rows never bleed through */
+  padding: 4px 4px 6px;
+  margin: 0 -4px 4px;
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 5px 8px -5px rgba(0, 0, 0, 0.7);
 }
 
 .cp-close {

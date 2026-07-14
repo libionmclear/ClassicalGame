@@ -993,19 +993,19 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         const cw = axialToWorld(d.cq, d.cr);
         const dx = cw.x - w.x, dz = cw.z - w.z, len = Math.hypot(dx, dz) || 1;
         ux = dx / len; uz = dz / len;
-        px = w.x + ux * SIZE * 0.42;
-        pz = w.z + uz * SIZE * 0.42;
+        px = w.x + ux * SIZE * 0.18; // a slight lean toward the city — the district still fills its hex
+        pz = w.z + uz * SIZE * 0.18;
       }
       const seed = (((d.q * 73856093) ^ (d.r * 19349663)) >>> 0) % 100000;
       const model = buildDistrict(THREE, {
         type: d.type, style: cityStyleFor(d.style), seed, accent: d.accent, pillaged: d.pillaged, work: d.work
       }) as THREE.Group;
-      model.scale.setScalar(0.85);
+      model.scale.setScalar(1.5);       // fill the hex
       model.position.set(px, top + 0.01, pz);
       if (model.rotation) model.rotation.y = Math.atan2(-uz, ux); // face the approach
       districtGroup.add(model);
       if (ux || uz) {
-        const plen = SIZE * 0.7;
+        const plen = SIZE * 0.5;
         const path = new THREE.Mesh(new THREE.BoxGeometry(plen, 0.02, SIZE * 0.13), new THREE.MeshStandardMaterial({ color: 0xbdae8c, roughness: 0.96, metalness: 0, flatShading: true }));
         path.rotation.y = Math.atan2(-uz, ux);
         path.position.set(px + ux * plen * 0.5, top + 0.02, pz + uz * plen * 0.5);
@@ -1357,7 +1357,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
           const tier = sv.tier != null ? sv.tier : cityTierForPop(sv.pop || 1);
           const seed = (((sv.q * 73856093) ^ (sv.r * 19349663)) >>> 0) % 100000;
           model = buildCityV2(THREE, { tier, style: cityStyleFor(sv.civ), seed, accent: sv.color }) as THREE.Group;
-          scale = 0.82;
+          scale = 1.15; // fill the hex
         }
       } else {
         const form = sv.form || "infantry";
