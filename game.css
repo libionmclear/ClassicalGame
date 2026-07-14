@@ -3247,6 +3247,8 @@ body.fullscreen .status-panel {
 .disc-site { font-size: 0.85rem; }
 .disc-site > b { color: var(--gold); }
 .disc-text { color: var(--muted, #9fb0c0); font-style: italic; margin: 4px 0 6px; line-height: 1.35; }
+.disc-reward { font-size: 0.82rem; color: #cfe8bf; background: rgba(126, 217, 87, 0.08); border: 1px solid rgba(126, 217, 87, 0.22); border-radius: 6px; padding: 4px 8px; margin: 4px 0; line-height: 1.35; }
+.disc-reward > b { color: #9fdd77; }
 .disc-hint { font-size: 0.76rem; color: var(--faint, #7b8a99); margin-top: 4px; }
 .disc-disp { font-size: 0.76rem; float: right; }
 #discovery-group .diplo-actions { margin-top: 8px; }

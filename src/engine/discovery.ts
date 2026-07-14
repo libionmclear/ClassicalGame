@@ -73,6 +73,7 @@ export function excavateRuins(state: GameState, playerId: string): void {
     applyRuinReward(state, playerId, ruin.reward, explorer ? 1 : 0.5, parseKey(key));
     site.excavated = true;
     site.by = playerId;
+    site.full = explorer; // an Explorer earns the whole reward; anyone else, half
     if (explorer) {                       // the archaeologist earns the Codex entry
       player.codex = player.codex ?? [];
       if (!player.codex.includes(ruin.id)) player.codex.push(ruin.id);

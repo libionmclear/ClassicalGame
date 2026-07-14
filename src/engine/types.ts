@@ -188,8 +188,8 @@ export interface GameMap {
   regions: string[];
   cities: Record<string, City>;
   units: Record<string, Unit>;
-  /** Ancient ruins to excavate (§10.2), keyed by tile "q,r". */
-  ruins?: Record<string, { ruinId: string; excavated?: boolean; by?: string }>;
+  /** Ancient ruins to excavate (§10.2), keyed by tile "q,r". `full` = dug by an Explorer (whole reward). */
+  ruins?: Record<string, { ruinId: string; excavated?: boolean; by?: string; full?: boolean }>;
   /** Minor-People villages (§10.3), keyed by tile "q,r". */
   villages?: Record<string, { peopleId: string; disposition: "open" | "wary" | "hostile"; befriendedBy?: string; contacted?: boolean; attempts?: number }>;
 }

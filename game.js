@@ -2040,6 +2040,22 @@
   const AXIAL_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
   // Toast a Ruin the human just excavated (§10) — the educational discovery beat.
   let discoveredRuinKeys = new Set();
+  // Human-readable summary of what a ruin gives. full=true → the Explorer's whole
+  // reward; otherwise every numeric part is halved (as the engine applies it).
+  function ruinRewardStr(rw, full) {
+    if (!rw) return "";
+    const s = function (n) { return Math.round(n * (full ? 1 : 0.5)); };
+    const parts = [];
+    if (rw.science) parts.push("+" + s(rw.science) + " 🧪 science");
+    if (rw.gold) parts.push("+" + s(rw.gold) + " 🪙 gold");
+    if (rw.goldPerTurn) parts.push("+" + s(rw.goldPerTurn) + " 🪙/turn");
+    if (rw.cityProduction) parts.push("+" + s(rw.cityProduction) + " ⚒️ production");
+    if (rw.cityFood) parts.push("+" + s(rw.cityFood) + " 🌾 food");
+    if (rw.walls) parts.push("🧱 free Walls");
+    if (rw.xp) parts.push("⭐ all units gain veterancy");
+    if (rw.reveal) parts.push("🗺️ reveals nearby land");
+    return parts.join(" · ");
+  }
   function checkDiscoveries() {
     if (!state || !state.map.ruins) return;
     for (const key in state.map.ruins) {
@@ -2047,7 +2063,11 @@
       if (r.excavated && r.by === HUMAN_ID && !discoveredRuinKeys.has(key)) {
         discoveredRuinKeys.add(key);
         const def = engine.RUIN_BY_ID && engine.RUIN_BY_ID[r.ruinId];
-        if (def) { showCombatToast("🏛️ Excavated: " + def.name, "gate"); logAction("🏛️ Discovery — " + def.name + ": " + def.text); }
+        if (def) {
+          const rw = ruinRewardStr(def.reward, r.full);
+          showCombatToast("🏛️ Excavated: " + def.name + (rw ? " — " + rw : ""), "gate");
+          logAction("🏛️ Discovery — " + def.name + ": " + def.text + (rw ? "  →  " + rw : "") + (r.full ? "" : "  (half reward — only an Explorer excavates in full)"));
+        }
       }
     }
   }
@@ -2617,6 +2637,7 @@
       const def = engine.RUIN_BY_ID ? engine.RUIN_BY_ID[ruin.ruinId] : null;
       discoveryMenuEl.innerHTML = '<div class="disc-site"><b>🏛️ ' + (def ? def.name : "Ancient Ruin") + "</b>" +
         (def ? '<div class="disc-text">' + def.text + "</div>" : "") +
+        (def ? '<div class="disc-reward"><b>🎁 Reward:</b> ' + ruinRewardStr(def.reward, true) + "</div>" : "") +
         '<div class="disc-hint">End an <b>Explorer\'s</b> turn here to excavate it fully (any other unit gets half, no Codex).</div></div>';
       return;
     }
