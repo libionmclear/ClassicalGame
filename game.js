@@ -5417,8 +5417,11 @@
   function mpApplyRemote(entries) {
     let advanced = false;
     for (let i = 0; i < entries.length; i++) {
+      if (!mp) return; // session ended mid-batch (e.g. I was the one dropped)
       const e = entries[i];
       mp.appliedSeq = Math.max(mp.appliedSeq, e.seq);
+      // A control entry — the server handed a gone-quiet seat to the AI.
+      if (e.control === "drop") { mpHandleDrop(e.civ); advanced = true; continue; }
       if (e.civ === mp.myCiv) continue; // my own echoed move — already applied locally
       try {
         state = engine.applyAction(state, e.action);
@@ -5434,12 +5437,32 @@
         runAiUntilHuman();                 // advance AI seats up to the next human / me
       }
     }
-    if (advanced) {
+    if (advanced && mp) {
       render();
       checkEliminations();
       saveGame();
     }
     mpUpdateTurnBanner();
+  }
+
+  // A human seat went quiet and the server handed it to the AI. Every client gets
+  // this at the same log seq, so dropping the civ from humanCivs here converts the
+  // seat to AI deterministically on all clients (they now run it locally).
+  function mpHandleDrop(civ) {
+    if (!mp) return;
+    const idx = mp.humanCivs.indexOf(civ);
+    if (idx !== -1) mp.humanCivs.splice(idx, 1);
+    const who = CIV_LABEL[civ] || civ;
+    if (civ === mp.myCiv) {
+      // I was dropped for inactivity — the others carry on without me.
+      logAction("🔌 You were dropped for inactivity — the game continues without you.");
+      showCombatToast("🔌 You were dropped for inactivity.", "loss");
+      mpStop();
+      return;
+    }
+    logAction("🔌 " + who + " dropped — the AI takes command of their people.");
+    showCombatToast("🔌 " + who + " dropped — AI takes over", "loss");
+    runAiUntilHuman(); // if that seat is up now, run its AI and advance to the next human
   }
 
   // A cheap, order-independent fingerprint of the shared game state. Compared right

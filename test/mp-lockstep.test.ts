@@ -103,3 +103,58 @@ test("two clients relaying END_TURN + running AI locally stay in lockstep", () =
   // Sanity: the clients really do hold different local identities (yet play identically).
   assert.notEqual(A.state.humanPlayerId, B.state.humanPlayerId);
 });
+
+test("a mid-game drop (seat → AI) applied at the same log seq keeps clients in lockstep", () => {
+  const civOrder = ["rome", "greece", "egypt"];
+  const shared = generateMap({ ...BASE, seed: "mp-DROP", civOrder });
+  const seated = (shared.players ?? []).map((p) => p.id);
+  const humans = new Set([seated[0]!, seated[1]!]); // both clients converge on this membership
+  const isHuman = (id: string) => humans.has(id);
+  const cfg = (myCiv: string) => ({ ...shared, difficulty: "normal" as const, humanPlayerId: myCiv, allianceVictory: true });
+  const key = (s: GameState) => JSON.stringify({ ...s, humanPlayerId: null });
+
+  function advance(s: GameState): GameState {
+    let cur = s;
+    while (!isHuman(cur.players[cur.currentPlayerIndex].id)) {
+      if (getVictoryStatus(cur).winnerId) break;
+      cur = runAiTurn(cur, cur.players[cur.currentPlayerIndex].id, 12).state;
+    }
+    return cur;
+  }
+
+  const A = { state: advance(createInitialGameState(cfg(seated[0]!))), civ: seated[0]!, applied: 0 };
+  const B = { state: advance(createInitialGameState(cfg(seated[1]!))), civ: seated[1]!, applied: 0 };
+  const log: Array<{ civ: string; action?: GameAction; control?: string }> = [];
+
+  function pump(c: { state: GameState; civ: string; applied: number }) {
+    for (; c.applied < log.length; c.applied++) {
+      const e = log[c.applied]!;
+      if (e.control === "drop") { humans.delete(e.civ); c.state = advance(c.state); continue; }
+      if (e.civ === c.civ) continue;
+      c.state = applyAction(c.state, e.action!);
+      if (e.action!.type === "END_TURN") c.state = advance(c.state);
+    }
+  }
+
+  let dropped = false;
+  for (let step = 0; step < 24 && !getVictoryStatus(A.state).winnerId; step++) {
+    // Partway in, the server hands the SECOND human's seat to the AI (a control entry).
+    if (step === 6 && !dropped) {
+      dropped = true;
+      log.push({ civ: seated[1]!, control: "drop" });
+      pump(A); pump(B);
+      assert.equal(key(A.state), key(B.state), "identical right after the drop");
+    }
+    const active = A.state.players[A.state.currentPlayerIndex].id;
+    if (!isHuman(active)) break;
+    const action = { type: "END_TURN", playerId: active } as GameAction;
+    log.push({ civ: active, action });
+    const owner = A.civ === active ? A : B;
+    owner.state = advance(applyAction(owner.state, action));
+    pump(A); pump(B);
+    assert.equal(key(A.state), key(B.state), "clients diverged after the drop at step " + step);
+  }
+
+  assert.ok(dropped, "the drop path was exercised");
+  assert.ok(!humans.has(seated[1]!), "the dropped seat is no longer a human on either client");
+});

@@ -294,6 +294,9 @@ route("POST /api/admin/ban", async ({ res, user, body }) => {
 // SAME map from the shared seed. (Live turn-by-turn sync is Phase 2b.)
 const CIVS = ["rome", "greece", "egypt", "carthage", "gaul", "parthia", "britons", "kush"];
 const QUICK_WAIT_MS = 60 * 1000;
+// A human seat idle (no poll/relay) for this long is handed to the AI so the game
+// doesn't stall for everyone else. Configurable so tests can force a fast drop.
+const MP_DROP_MS = parseInt(process.env.HEGEMON_MP_DROP_MS || String(45 * 1000), 10);
 const lobbies = new Map();
 let lobbySeq = 1;
 
@@ -331,8 +334,26 @@ function startLobby(lobby) {
   // Phase 2b live turn relay: an ordered, append-only log of the HUMAN seats'
   // engine actions. AI seats run locally & deterministically on every client, so
   // only human moves cross the wire. Clients poll /api/mp/actions?since=N.
-  lobby.log = [];      // [{ seq, civ, action, fp }]
+  lobby.log = [];      // [{ seq, civ, action, fp } | { seq, civ, control:"drop" }]
   lobby.logSeq = 0;
+  lobby.lastSeen = {}; // userId -> last time they hit this game's API (heartbeat)
+  lobby.dropped = {};  // civ -> true once handed to the AI
+  for (const s of lobby.seats) if (s.userId) lobby.lastSeen[s.userId] = lobby.startedAt;
+}
+// Hand any human seat that's gone quiet (closed tab / lost connection) to the AI.
+// Runs whenever an active client polls, so the remaining players never stall. The
+// drop is a control entry in the shared log → every client applies it at the same
+// seq and converts that seat to AI deterministically (staying in lockstep).
+function sweepDrops(lobby) {
+  if (!lobby.lastSeen) return;
+  for (const s of lobby.seats) {
+    if (s.isAI || s.userId === null || lobby.dropped[s.civ]) continue;
+    const seen = lobby.lastSeen[s.userId] || lobby.startedAt || 0;
+    if (now() - seen > MP_DROP_MS) {
+      lobby.dropped[s.civ] = true;
+      lobby.log.push({ seq: ++lobby.logSeq, civ: s.civ, control: "drop" });
+    }
+  }
 }
 function maybeAutoStart(lobby) {
   if (!lobby || lobby.status !== "waiting") return;
@@ -431,6 +452,7 @@ function activeGameFor(lobbyId, user) {
   if (lobby.status !== "active") return { code: 409, error: "That game isn't active." };
   const seat = lobby.seats.find((s) => s.userId === user.id);
   if (!seat) return { code: 403, error: "You're not in this game." };
+  if (lobby.lastSeen) lobby.lastSeen[user.id] = now(); // heartbeat: this seat is live
   return { lobby, seat };
 }
 
@@ -451,6 +473,7 @@ route("GET /api/mp/actions", async ({ res, user, query }) => {
   if (!user) return send(res, 401, { error: "Not signed in." });
   const g = activeGameFor(query.id, user);
   if (g.error) return send(res, g.code, { error: g.error });
+  sweepDrops(g.lobby); // hand any gone-quiet seat to the AI before answering
   const since = Number(query.since) || 0;
   send(res, 200, { actions: g.lobby.log.filter((e) => e.seq > since), status: g.lobby.status });
 });
