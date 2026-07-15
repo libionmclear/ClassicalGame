@@ -38,9 +38,21 @@ Three layers, cleanly separated:
 3. **DOM app / UI** — `game.html` + `game.css` + `game.js` (a large IIFE) plus
    `audio.js`. This is the actual game client: menus, HUD, city/unit panels,
    research tree, cards, accounts, and it drives the engine + board.
+4. **Optional self‑contained backend** — `server/hegemon-server.mjs` + the client
+   networking shim `net.js`. **One Node process, zero external services** (built‑in
+   `http` + `node:sqlite` + `node:crypto`) that serves the client **and** a small
+   JSON `/api` from the same origin (no CORS). It adds server‑side **accounts,
+   friends, admin, and multiplayer matchmaking lobbies**. It is **optional by
+   design**: `net.js` probes `/api/health` on boot; if there's no backend (e.g. the
+   static Vercel deploy), the client stays offline and falls back to its localStorage
+   accounts, so **solo play always works with no server**. See §5 "Accounts" and
+   "Multiplayer".
 
 **No framework** (no React/Vue). No native game engine (no Unity/Godot). Just
-TypeScript compiled with **esbuild**, and Three.js.
+TypeScript compiled with **esbuild**, Three.js, and — for the optional backend —
+**plain Node built‑ins only** (no npm server deps). The gameplay engine and board
+still run entirely **in the browser**; the backend only handles accounts and
+matchmaking, never the game rules.
 
 ### Data flow
 `game.js` holds a `state` (from the engine), builds a **view** object, and calls
@@ -55,9 +67,10 @@ re‑renders, runs AI turns, and saves.
 | Task | Command |
 |---|---|
 | Type‑check | `npm run typecheck` (`tsc --noEmit`) |
-| Engine + game tests | `npm test` (node's test runner via `tsx`) — **109 tests** |
+| Engine + game tests | `npm test` (node's test runner via `tsx`) — **244 tests, 23 suites** |
 | Build the web bundle | `npm run build:web` → wipes/rebuilds **`public/`** (gitignored) |
-| Deploy | Vercel runs `vercel-build` → `build:web`; serves `public/` |
+| Run with the backend | `npm run server` (builds `public/`, then serves it **and** the `/api` on `http://localhost:8787`) — enables accounts, friends, admin, and multiplayer lobbies. `serve:only` skips the rebuild. |
+| Deploy | Vercel runs `vercel-build` → `build:web`; serves `public/` **statically** (no backend — the client auto‑falls back to localStorage accounts; see §5). |
 
 - **`scripts/build-web.mjs`** copies `game.html`, `game.css`, `game.js`, `audio.js`,
   `gallery.html`, `board3d.html`, PWA files, and **esbuild‑bundles** the engine
@@ -98,10 +111,17 @@ src/engine/
 src/render3d/board3d.ts   # the Three.js board (all procedural models + weather)
 game.html / game.css / game.js   # the DOM client (game.js is the big IIFE)
 audio.js          # procedural Web Audio engine (window.HGAudio)
+net.js            # client networking shim (window.HGNet): probes /api/health,
+                  #   wraps accounts/friends/admin + multiplayer lobby calls
+server/hegemon-server.mjs  # OPTIONAL self-contained backend (http + node:sqlite +
+                  #   crypto): serves the client + /api; SQLite at server/hegemon.db
+                  #   (gitignored). Seeds an admin account (pw 1234567 / HEGEMON_ADMIN_PW)
 gallery.html      # standalone 3D showcase of all civ units + city tiers
-scripts/build-web.mjs      # the web build
-test/*.test.ts    # 9 suites (engine, combat, economy, ai, buildings, events,
-                  #   mapgen, scenario, visibility)
+scripts/build-web.mjs      # the web build (also copies net.js into public/)
+test/*.test.ts    # 23 suites (engine, combat, economy, ai, buildings, events,
+                  #   mapgen, scenario, visibility, diplomacy, discovery, peoples,
+                  #   districts, districtmodels, stability, effects, titles, civs,
+                  #   branches, units, techtree-v2, recruitment, garrison)
 ```
 
 Docs already in repo: `ROADMAP.md`, `KNOWN-ISSUES.md`, `HEGEMON_Game_Design_Brief_v1.md`,
@@ -123,11 +143,14 @@ Docs already in repo: `ROADMAP.md`, `KNOWN-ISSUES.md`, `HEGEMON_Game_Design_Brie
   Mediterranean world, fill‑then‑carve so Britannia is an island, Italy joins
   Europe over the Alps, Iberia joins Gaul over the Pyrenees), `oldworld`.
 
-### Civilizations (6)
+### Civilizations (8)
 `rome` (Rome, #c0392b), `carthage` (Carthage, #8e44ad), `greece` (**Athenians**,
 #2e86de), `egypt` (Egypt, #d4ac0d), `gaul` (Gaul, #27ae60), `parthia` (Parthia,
-#e67e22). Each has a **signature unit tech** and a **signature doctrine tech**
-(see §6). A civ's unique techs are hidden from other civs in the tech tree.
+#e67e22), `britons` (Camulodunon, #16a085), `kush` (Meroë, #935116). Each has a
+**signature unit tech** and a **signature doctrine tech** (see §6), plus a full
+tech **branch** and a **title ladder** (§8). A civ's unique techs are hidden from
+other civs in the tech tree. (`MAX_PLAYERS`=8; the multiplayer lobby seats civs in
+this order — §5 "Multiplayer".)
 
 ### Units (45 — v2 roster)
 Common: `warrior, archer, spearman, swordsman, horseman, siege, trireme, merchant,
@@ -143,7 +166,11 @@ player may field/queue (praetorian ≤2, spartiate ≤4), enforced in `BUILD_UNI
 Categories drive rock‑paper‑scissors counters (infantry/spear/heavy/mounted/ranged/
 siege/support). Units carry **upkeep**. Each new unit renders on its **category
 rig** today; distinct per‑unit 3D silhouettes (`UNIT_SILHOUETTES`) are a visual
-follow‑up.
+follow‑up. **Starting units:** a player now begins with a **Warrior + an Explorer**
+— the Explorer (move 4, 3‑tile sight, attack 0) **replaced the Settler** as the
+starting civilian and doubles as a **diplomat/envoy** (first‑contact + minor‑peoples
+overtures — see the Explorer overhaul in §8; the Discovery / Minor‑Peoples /
+Diplomacy systems themselves live in `git log` + the design briefs).
 
 ### Combat
 `computeCombatPreview` (deterministic) → damage both ways, with modifiers:
@@ -235,6 +262,12 @@ architectural identities), `seed` from hex coords (stable look), `accent` = the
 player colour (tier‑5+ banner). Walls appear from tier 4 (Sparta only from t8,
 Scythia rings wagons instead); monuments from t6, civ landmark from t8, gilding at
 t10. `gallery.html` has a **12‑style city row + a tier slider (1–10)** to art‑direct.
+**Material pass:** the building **fabric upgrades with tier** — thatch/straw huts
+(≤2) → mudbrick → cut stone → marble (tuned roughness/metalness) — so a growing city
+visibly changes materials, not just size. **Garrisons (engine):** an undefended city
+auto‑spawns a **free, age‑appropriate** defender each end‑turn (respawn cooldown 4);
+city HP defence scales with pop **and** the owner's age (`22 + pop*3 + (age−1)*10`),
+so late‑game cities aren't trivial to take (see §8).
 
 ### Fog of war
 `state.discovered` (per player) persists what's been seen. Undiscovered tiles are
@@ -242,11 +275,17 @@ flat/blank; seen‑but‑not‑visible keep their discovered colour, dimmed (wat
 toward deep blue so it doesn't read purple). Your own territory is always in view.
 Admin can toggle **Reveal map** for testing.
 
-### Accounts & meta‑progression (client‑side)
-- **localStorage** accounts (`hegemon_accounts`, salted + SHA‑256 via SubtleCrypto),
-  session (`hegemon_session`), per‑account profile (`hegemon_profile__<user>`).
-  Seeded **admin**: name `admin`, email `mclear@gmail.com`, password `1234567`
-  (intended to be changed). Tracks wins/losses.
+### Accounts & meta‑progression (server‑or‑localStorage)
+- **Two account backends, chosen automatically at boot.** `initAuth` (game.js) has
+  `net.js` probe `/api/health`; if the backend is up → **server accounts** (scrypt
+  hashes in SQLite, a 30‑day session token in `hegemon_net_token`), which unlock the
+  Friends, Admin, and Play‑Online UI. If no backend (static deploy, file://) →
+  **localStorage** accounts (`hegemon_accounts`, salted + SHA‑256 via SubtleCrypto),
+  session (`hegemon_session`). Either way, per‑account profile/cards/loadout stay in
+  `hegemon_profile__<user>` on the client. **Solo play never needs a server.**
+- Seeded **admin** account (name `admin`, password `1234567` — change via
+  `HEGEMON_ADMIN_PW`, or client‑side email `mclear@gmail.com`). Tracks wins/losses;
+  the admin card grant (all cards/civs) still applies in‑memory in `loadProfile`.
 - **Cards v2** (design of record: `docs/HEGEMON-CIVS-CARDS-v2.md`; data of record:
   `src/cards-data-v2.js`, an ES module the build turns into the browser global
   `window.HEGEMON_CARDS_V2` — see `scripts/build-web.mjs`, loaded before `game.js`).
@@ -270,6 +309,31 @@ Admin can toggle **Reveal map** for testing.
     (+food to capital, +science) work; the rest are flagged and not consumed.
   - The **five civ‑signature DOCTRINE techs** (Testudo etc.) are a separate engine
     system (see §6), unrelated to these person/policy cards.
+
+### Multiplayer & networking (`server/hegemon-server.mjs` + `net.js`)
+Self‑contained backend, built in two phases; **still a foundation, not full live
+play** (see the caveat).
+- **Backend (Phase 1):** Node `http` + `node:sqlite` (`DatabaseSync`) + `node:crypto`
+  (scrypt). Tables `users` / `sessions` / `friendships`. Same‑origin JSON `/api`:
+  `health`, `register`/`login`/`logout`/`me`, `users/search`, `friends/{request,
+  respond,remove}`, `stats/report`, `admin/{users,kick,ban}`. Bearer‑token auth.
+  `net.js` exposes all of it as `window.HGNet`; game.js wires **Friends** and
+  **Admin** modals (admin: list/kick/ban users, see stats) that appear only when
+  online.
+- **Matchmaking lobbies (Phase 2a):** in‑memory `lobbies` Map, polled over HTTP
+  (`/api/mp/{quick,private,invite,join,leave,start,lobby,mine}`). **Quick Match** =
+  join/open a public lobby; a **60 s deadline** (`QUICK_WAIT_MS`) waits for humans,
+  then **fills empty seats with AI** and starts (or starts early when full).
+  **Private Game** = friends‑only invites, host presses Start. Seat *i* is pinned to
+  `CIVS[i]` (`["rome","greece","egypt","carthage","gaul","parthia","britons","kush"]`)
+  and every client launches from the **shared `seed`** → identical maps. Client UI:
+  the menu's **Play Online** section + a **lobby modal** (live seats, countdown,
+  invite friends, Start/Leave, polled ~1.5 s); `newGame(withBriefing, override)`
+  launches the seeded game as your seat's civ with AI in the empty seats.
+- **CAVEAT — this is matchmaking + a shared map, NOT live turn sync.** Each client
+  currently runs its **own local copy** of the seeded game (AI in the other seats);
+  players' moves do **not** yet affect each other. Live turn‑by‑turn action relay in
+  lockstep (feasible because the engine is deterministic) is **Phase 2b — not built**.
 
 ### Audio (procedural, `audio.js` → `window.HGAudio`)
 Everything **synthesized** with the Web Audio API (no files, no copyright — do NOT
@@ -389,6 +453,88 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Multiplayer Phase 2a — matchmaking lobby.** In‑memory lobby backend on the
+  Phase‑1 server (`/api/mp/*`): **Quick Match** (public; a 60 s `QUICK_WAIT_MS`
+  waits for humans then fills seats with AI, or starts early when full) and
+  **Private Game** (friends‑only invites, host Start). Seat *i* → `CIVS[i]`, everyone
+  launches from a shared `seed` → identical maps. `net.js` mp methods; a **Play
+  Online** menu section + a **lobby modal** (live seats, countdown, invite friends,
+  Start/Leave, polled ~1.5 s); `newGame(withBriefing, override)` launches the seeded
+  game as your civ with AI in empty seats. Verified end‑to‑end via API and browser.
+  **CAVEAT: matchmaking + shared map only — NOT live turn sync.** Each client still
+  runs its own local copy; players don't yet affect each other. Live lockstep action
+  relay is **Phase 2b (not built)**. See §5 "Multiplayer". 244 tests.
+- **3D fixes: seated roofs, tier‑1 wooden huts, real ruin/village models on the hex.**
+  Floating gable roof fixed (prism now seats at wall height, not `h+roofH/2`);
+  thatch for tier ≤2 so a young city reads as wooden huts; `board3d.placeMarkers`
+  rewritten to place **3D models on the discovery hex** (village = `buildHut`
+  clusters, ruin = new `buildRuinModel` broken columns) instead of floating glyph
+  sprites. Also the **`net.js` probe bug fix**: it had probed `/api/me` and treated a
+  static host's 404 as "online" (would strand the static deploy at a serverless
+  login) — now a dedicated `/api/health` that must return `{ok:true}`.
+- **Multiplayer Phase 1 — self‑contained backend (accounts · friends · admin).** New
+  `server/hegemon-server.mjs`: one Node process, no external deps (`http` +
+  `node:sqlite` + scrypt), serves the client **and** a same‑origin `/api` (no CORS);
+  SQLite `users`/`sessions`/`friendships`; bearer‑token sessions; routes for
+  register/login/me, user search, friend request/respond/remove, stats report, and
+  admin users/kick/ban. New `net.js` (`window.HGNet`) + game.js Friends & Admin
+  modals, shown only when the server is reachable (else localStorage as before).
+  `npm run server` / `serve:only`; `server/*.db*` gitignored. See §5 "Accounts"/
+  "Multiplayer".
+- **City material pass — wood → mudbrick → cut stone → marble as a city grows.**
+  `cityModels.js` STAGE materials keyed by tier (thatch/straw ≤2, mudbrick, cut
+  stone, marble with tuned roughness/metalness) + `wallMat`/`blendHex`, so the same
+  city visibly upgrades its fabric as population climbs — the first stage is no
+  longer "wooden huts forever".
+- **Cities defend themselves — age‑scaled free garrisons + age‑scaled toughness.**
+  City HP defence is now `22 + pop*3 + (age(owner)−1)*10`. A **garrison** system
+  (`refreshGarrisons` in `applyEndTurn`): an undefended city spawns a **free** era‑
+  appropriate defender (`bestGarrisonType`) once `turn ≥ garrisonReadyTurn`; a killed
+  garrison sets a `GARRISON_RESPAWN=4`‑turn cooldown. Garrison units can't move/
+  disband and don't draw upkeep. `playerAge(player)` exported. New
+  `test/garrison.test.ts` (5). Conquest is no longer trivially easy.
+- **Clearer city panel header — show what the city earns and spends per turn.** The
+  city panel gained an econ strip (`.ct-econ`/`.ct-chip`/`.ct-build`): ⚒️/turn,
+  growth ETA, gold/turn, so it's legible what a build costs and what the city
+  produces (user: "IT'S HARD TO UNDERSTAND WHAT I HAVE TO SPEND FOR THIS CITY").
+- **Show ruin excavation rewards (they were applied silently).** `ruinRewardStr` +
+  a reward toast/preview so excavating a ruin states the bonus instead of a bare
+  "excavated ziggurat" line.
+- **Music: richer evolving civ‑themed procedural score (Rome first); civ theme on
+  first meeting.** Kept the former ambient bed and layered a richer, evolving
+  procedural score that plays a **civ's theme when you meet them**. (User linked a
+  YouTube track — **declined by policy**: CSP blocks external audio + copyright; the
+  score is fully synthesized, per §5 Audio's "do NOT rip YouTube".)
+- **HUD rework — vertical labelled button column + Center‑on‑capital + resource
+  labels.** Top‑right HUD icons became a **vertical labelled column** (`.hud-tr-icons`
+  /`.hud-icon`) ordered by importance (Research, then Diplomacy…), a **Center‑on‑
+  capital** button, and visible resource labels so the top bar is readable.
+- **Fixes: Explorer had no icon; village panel didn't open when standing on the
+  village.** `UNIT_GLYPHS.explorer = 🧭` (unitGlyph prefers the map); `renderDiscovery`
+  now opens for a unit standing **on** the site as well as adjacent.
+- **Diplomacy needs first contact; villages on reachable land; starter buildings
+  gated.** (a) **First‑contact gate** (`state.contact`, `haveMet`): you can't open
+  major‑civ diplomacy (tribute/denounce/vassalage/proposals) before contact via a
+  visible unit/city/territory — fixes the "envoy on turn 1 on a huge map" bug;
+  `contactCivs` uses `computeVisibility`, Explorer sighting grants goodwill. (b)
+  `scatterVillages`/civ placement filtered to **`WALKABLE`** land so nothing spawns
+  on impassable mountains. (c) Starter **buildings gated behind tech + cheaper**:
+  granary `cost 12 / pottery`, workshop `18 / bronze‑working`, market `14 / writing`;
+  early improvements repriced. Diplomacy tests wrapped with a `meetAll` helper.
+- **Explorer‑as‑diplomat overhaul (Phases 1–3).** *P1:* the **Explorer replaces the
+  Settler** as the starting civilian (`mapgen.placeStarters` → `{warrior, explorer}`),
+  **Assimilate** always shown, and `carveRivers` rewritten to flow to the lowest
+  neighbour and commit only if it **reaches the sea** (12–16‑tile rivers, 12/12 reach
+  sea). *P2:* Minor‑People overtures are **reaction rolls** — `REACTION_BASE` by
+  disposition, `rollReaction` → **Comply / Threaten** (threaten can raid gold), a
+  `souredDisposition` on refusal. *P3:* a **general (Legend) card** biases the roll
+  (`leaderReactionBonus`: statesman→peace, commander→tribute, magnitude by rarity),
+  and the **Explorer acts as an envoy** (`explorerNear` → `EXPLORER_ENVOY_BONUS`,
+  cheaper `befriendCostFor`, 3‑tile sight). New/updated peoples & mapgen tests.
+- **Board polish + roaming.** `c7c1062`/`51336ee`: **WASD camera roaming**, richer
+  city models, districts attached to their city, **click‑to‑build**, hide other
+  civs' unique buildings, fixed a city‑panel header overlap, enlarged cities/
+  districts.
 - **Britons + Kush tech branches (Design Brief §4.1 branch) — the LAST brief item;
   the design brief is now fully realized.** Two civ-unique branches authored in
   `src/techs-v2.js` (data of record) → regenerated `branch-data.ts` (141 techs, 14
