@@ -5361,6 +5361,11 @@
       posting: Promise.resolve(),
       pollTimer: null,
       warnedDesync: false,
+      // false until I make my first live move. While false (initial catch-up /
+      // rejoin) the poll replays EVERY logged action including my OWN past moves,
+      // since a freshly rebuilt client never applied them locally. Once I go live,
+      // my own actions are applied optimistically so their echoes must be skipped.
+      caughtUp: false,
     };
     newGame(false, {
       mapSize: lobby.mapSize, seed: lobby.seed, humanCiv: lobby.yourCiv,
@@ -5380,6 +5385,7 @@
   // them (HTTP posts could otherwise arrive out of order and scramble the log).
   function mpRelay(action, fp) {
     if (!mp || !window.HGNet) return;
+    mp.caughtUp = true; // I'm now producing live moves — future echoes get skipped
     const session = mp;
     session.posting = session.posting.then(function () {
       if (mp !== session) return;
@@ -5422,7 +5428,9 @@
       mp.appliedSeq = Math.max(mp.appliedSeq, e.seq);
       // A control entry — the server handed a gone-quiet seat to the AI.
       if (e.control === "drop") { mpHandleDrop(e.civ); advanced = true; continue; }
-      if (e.civ === mp.myCiv) continue; // my own echoed move — already applied locally
+      // Skip my own echoes ONLY once live — during catch-up/rejoin I must replay my
+      // own past moves too (a rebuilt client hasn't applied them).
+      if (mp.caughtUp && e.civ === mp.myCiv) continue;
       try {
         state = engine.applyAction(state, e.action);
       } catch (err) {
@@ -5461,7 +5469,7 @@
       return;
     }
     logAction("🔌 " + who + " dropped — the AI takes command of their people.");
-    showCombatToast("🔌 " + who + " dropped — AI takes over", "loss");
+    if (mp.caughtUp) showCombatToast("🔌 " + who + " dropped — AI takes over", "loss"); // not while replaying old drops on rejoin
     runAiUntilHuman(); // if that seat is up now, run its AI and advance to the next human
   }
 
@@ -5517,6 +5525,18 @@
         const d = document.createElement("div"); d.className = "mp-invite-row";
         d.innerHTML = "<span>You're in a lobby</span>";
         const b = document.createElement("button"); b.textContent = "Reopen"; b.addEventListener("click", function () { openLobby(mine.lobby); }); d.appendChild(b);
+        el.appendChild(d);
+      } else if (!mp && mine.lobby && mine.lobby.status === "active" && mine.lobby.yourCiv) {
+        // An online game you're seated in is already underway — rejoin rebuilds the
+        // game from the seed and replays the action log to the present. (If you were
+        // dropped for inactivity the AI has your seat, so no rejoin.)
+        const d = document.createElement("div"); d.className = "mp-invite-row";
+        if (mine.lobby.yourDropped) {
+          d.innerHTML = "<span>🔌 Your seat was handed to the AI (inactive)</span>";
+        } else {
+          d.innerHTML = "<span>🌐 Your online game is in progress</span>";
+          const b = document.createElement("button"); b.textContent = "▶ Rejoin"; b.addEventListener("click", function () { try { launchMpGame(mine.lobby); } catch (e) { showCombatToast("⚠ " + e.message, "loss"); } }); d.appendChild(b);
+        }
         el.appendChild(d);
       }
       (mine.invites || []).forEach(function (inv) {

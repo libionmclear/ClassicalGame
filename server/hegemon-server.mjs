@@ -363,15 +363,19 @@ function maybeAutoStart(lobby) {
 }
 function sanitizeLobby(lobby, userId) {
   maybeAutoStart(lobby);
+  const dropped = lobby.dropped || {};
+  const yourCiv = (lobby.seats.find((s) => s.userId === userId) || {}).civ || null;
   return {
     id: lobby.id, mode: lobby.mode, status: lobby.status, mapSize: lobby.mapSize, maxSeats: lobby.maxSeats,
     hostId: lobby.hostId, youAreHost: lobby.hostId === userId, seed: lobby.seed,
     timeLeft: lobby.mode === "quick" && lobby.status === "waiting" ? Math.max(0, Math.round((lobby.deadline - now()) / 1000)) : 0,
-    seats: lobby.seats.map((s) => ({ name: s.name, civ: s.civ, isAI: s.isAI, filled: s.userId !== null || s.isAI, you: s.userId === userId })),
-    yourCiv: (lobby.seats.find((s) => s.userId === userId) || {}).civ || null,
-    // Which seat-civs are human (Phase 2b): clients run AI for every OTHER seat
-    // locally and only wait on these for relayed moves. Meaningful once active.
+    seats: lobby.seats.map((s) => ({ name: s.name, civ: s.civ, isAI: s.isAI, dropped: !!dropped[s.civ], filled: s.userId !== null || s.isAI, you: s.userId === userId })),
+    yourCiv,
+    // The ORIGINAL human seats (Phase 2b). A (re)joining client starts with these and
+    // replays the log's `drop` control entries to convert dropped seats to AI at the
+    // exact seq the live clients did — so excluding dropped here would desync replay.
     humanCivs: lobby.seats.filter((s) => !s.isAI && s.userId !== null).map((s) => s.civ),
+    yourDropped: !!(yourCiv && dropped[yourCiv]), // you were handed to the AI — can't reclaim in v1
   };
 }
 

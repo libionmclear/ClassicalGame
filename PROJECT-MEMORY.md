@@ -67,7 +67,7 @@ re‑renders, runs AI turns, and saves.
 | Task | Command |
 |---|---|
 | Type‑check | `npm run typecheck` (`tsc --noEmit`) |
-| Engine + game tests | `npm test` (node's test runner via `tsx`) — **248 tests, 24 suites** |
+| Engine + game tests | `npm test` (node's test runner via `tsx`) — **249 tests, 24 suites** |
 | Build the web bundle | `npm run build:web` → wipes/rebuilds **`public/`** (gitignored) |
 | Run with the backend | `npm run server` (builds `public/`, then serves it **and** the `/api` on `http://localhost:8787`) — enables accounts, friends, admin, and multiplayer lobbies. `serve:only` skips the rebuild. |
 | Deploy | Vercel runs `vercel-build` → `build:web`; serves `public/` **statically** (no backend — the client auto‑falls back to localStorage accounts; see §5). |
@@ -351,9 +351,17 @@ Self‑contained backend, built in three phases; **live turn sync now works
   (default 45 s, env‑tunable via `HEGEMON_MP_DROP_MS`) is handed to the AI via a
   **`drop` control entry** in the shared log — every client applies it at the same
   seq and converts the seat to AI deterministically (a dropped player's own client
-  bows out). **v1 gaps:** no mid‑game rejoin/resync, MP loadouts disabled, desync
-  detection is warn‑only. Verified via an 18/18 server relay smoke (incl. the
-  takeover) + an 8/8 online browser smoke.
+  bows out). **Rejoin/resync:** the log IS the whole game, so a client that reloads
+  or reconnects **rebuilds from the seed and replays the entire log** to the present
+  (`/api/mp/mine` surfaces the active game + `yourDropped`; the menu shows a **▶
+  Rejoin** row via `refreshInvites`). Replay applies **all** logged moves — including
+  the rejoiner's OWN past moves (a `mp.caughtUp` flag: skip my echoes only once live,
+  else a rebuilt client would lose its own moves) — and replays `drop` entries to
+  convert seats at the right seq; `humanCivs` is the ORIGINAL human set so those
+  conversions land correctly. A player already handed to the AI can't reclaim their
+  seat in v1. **v1 gaps:** MP loadouts disabled, desync detection is warn‑only, no
+  state snapshots (a very long game replays its whole log on rejoin). Verified via a
+  20/20 server relay smoke (takeover + rejoin surface) + an 8/8 online browser smoke.
 
 ### Audio (procedural, `audio.js` → `window.HGAudio`)
 Everything **synthesized** with the Web Audio API (no files, no copyright — do NOT
@@ -488,14 +496,17 @@ The last push of work (see `git log` for exact diffs) delivered, roughly:
   generals** and forced **normal difficulty / fixed victory / no loadout perks**.
   A **disconnect takeover** followed: the server heartbeats each seat and hands a
   seat idle past `MP_DROP_MS` to the AI via a **`drop` control entry** in the log, so
-  every client converts it deterministically (dropped player's client bows out).
-  Verified: **248/248 tests** (`test/mp-lockstep.test.ts` proves two clients with
-  different `humanPlayerId` stay byte‑identical 10+ rounds, incl. a mid‑game drop), an
-  **18/18** server relay smoke (register→friend→lobby→start→relay both ways→`since`
-  filter→anti‑spoof/auth 403/401→idle‑seat takeover), and an **8/8** online browser
-  client smoke (loads online, methods wired, 0 console errors). **v1 gaps:** no
-  mid‑game rejoin/resync, MP loadouts disabled, desync detection is warn‑only. See §5
-  "Multiplayer".
+  every client converts it deterministically (dropped player's client bows out). Then
+  **mid‑game rejoin/resync**: a client that reloads/reconnects rebuilds from the seed
+  and **replays the whole action log** to the present (`/api/mp/mine` + a **▶ Rejoin**
+  menu row); the replay applies all moves incl. the rejoiner's OWN past moves (a
+  `caughtUp` flag) and the `drop` entries — a dropped player can't reclaim their seat
+  in v1. Verified: **249/249 tests** (`test/mp-lockstep.test.ts`: two clients stay
+  byte‑identical 10+ rounds, a mid‑game drop stays in lockstep, and a fresh rejoin
+  replays the log to the exact live state), a **20/20** server relay smoke
+  (register→friend→lobby→start→relay→`since`→anti‑spoof/auth→takeover→rejoin surface),
+  and an **8/8** online browser smoke (0 console errors). **v1 gaps:** MP loadouts
+  disabled, desync detection warn‑only, no state snapshots. See §5 "Multiplayer".
 - **Multiplayer Phase 2a — matchmaking lobby.** In‑memory lobby backend on the
   Phase‑1 server (`/api/mp/*`): **Quick Match** (public; a 60 s `QUICK_WAIT_MS`
   waits for humans then fills seats with AI, or starts early when full) and

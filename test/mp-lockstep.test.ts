@@ -158,3 +158,51 @@ test("a mid-game drop (seat → AI) applied at the same log seq keeps clients in
   assert.ok(dropped, "the drop path was exercised");
   assert.ok(!humans.has(seated[1]!), "the dropped seat is no longer a human on either client");
 });
+
+test("a client that rejoins mid-game rebuilds the exact state by replaying the log", () => {
+  const civOrder = ["rome", "greece", "egypt"];
+  const shared = generateMap({ ...BASE, seed: "mp-REJOIN", civOrder });
+  const seated = (shared.players ?? []).map((p) => p.id);
+  const origHumans = [seated[0]!, seated[1]!];
+  const cfg = (myCiv: string) => ({ ...shared, difficulty: "normal" as const, humanPlayerId: myCiv, allianceVictory: true });
+  const key = (s: GameState) => JSON.stringify({ ...s, humanPlayerId: null });
+  const log: Array<{ civ: string; action?: GameAction; control?: string }> = [];
+
+  // A reusable "run AI up to the next human" bound to a given human membership set.
+  const advancer = (humans: Set<string>) => (s: GameState): GameState => {
+    let cur = s;
+    while (!humans.has(cur.players[cur.currentPlayerIndex].id)) {
+      if (getVictoryStatus(cur).winnerId) break;
+      cur = runAiTurn(cur, cur.players[cur.currentPlayerIndex].id, 12).state;
+    }
+    return cur;
+  };
+
+  // --- Play a live game (seat 0's perspective), dropping the 2nd human partway. ---
+  const humansLive = new Set(origHumans);
+  const advLive = advancer(humansLive);
+  let live = advLive(createInitialGameState(cfg(seated[0]!)));
+  for (let step = 0; step < 16 && !getVictoryStatus(live).winnerId; step++) {
+    if (step === 5) { log.push({ civ: seated[1]!, control: "drop" }); humansLive.delete(seated[1]!); live = advLive(live); }
+    const active = live.players[live.currentPlayerIndex].id;
+    if (!humansLive.has(active)) break;
+    const action = { type: "END_TURN", playerId: active } as GameAction;
+    log.push({ civ: active, action });
+    live = advLive(applyAction(live, action));
+  }
+  assert.ok(log.some((e) => e.control === "drop"), "the game included a drop");
+
+  // --- A fresh client (seat 0) rejoins: rebuild from seed, then replay the WHOLE log,
+  //     applying EVERY human action — including seat 0's OWN past moves (caughtUp=false)
+  //     — and converting dropped seats to AI at the seq their drop entry appears. ---
+  const humansRe = new Set(origHumans); // starts from the ORIGINAL humans
+  const advRe = advancer(humansRe);
+  let rejoin = advRe(createInitialGameState(cfg(seated[0]!)));
+  for (const e of log) {
+    if (e.control === "drop") { humansRe.delete(e.civ); rejoin = advRe(rejoin); continue; }
+    rejoin = applyAction(rejoin, e.action!); // ALL civs, incl. my own — the rejoin fix
+    if (e.action!.type === "END_TURN") rejoin = advRe(rejoin);
+  }
+
+  assert.equal(key(rejoin), key(live), "the rejoined client matches the live client exactly");
+});
