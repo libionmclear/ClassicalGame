@@ -67,7 +67,7 @@ re‑renders, runs AI turns, and saves.
 | Task | Command |
 |---|---|
 | Type‑check | `npm run typecheck` (`tsc --noEmit`) |
-| Engine + game tests | `npm test` (node's test runner via `tsx`) — **244 tests, 23 suites** |
+| Engine + game tests | `npm test` (node's test runner via `tsx`) — **247 tests, 24 suites** |
 | Build the web bundle | `npm run build:web` → wipes/rebuilds **`public/`** (gitignored) |
 | Run with the backend | `npm run server` (builds `public/`, then serves it **and** the `/api` on `http://localhost:8787`) — enables accounts, friends, admin, and multiplayer lobbies. `serve:only` skips the rebuild. |
 | Deploy | Vercel runs `vercel-build` → `build:web`; serves `public/` **statically** (no backend — the client auto‑falls back to localStorage accounts; see §5). |
@@ -118,10 +118,10 @@ server/hegemon-server.mjs  # OPTIONAL self-contained backend (http + node:sqlite
                   #   (gitignored). Seeds an admin account (pw 1234567 / HEGEMON_ADMIN_PW)
 gallery.html      # standalone 3D showcase of all civ units + city tiers
 scripts/build-web.mjs      # the web build (also copies net.js into public/)
-test/*.test.ts    # 23 suites (engine, combat, economy, ai, buildings, events,
+test/*.test.ts    # 24 suites (engine, combat, economy, ai, buildings, events,
                   #   mapgen, scenario, visibility, diplomacy, discovery, peoples,
                   #   districts, districtmodels, stability, effects, titles, civs,
-                  #   branches, units, techtree-v2, recruitment, garrison)
+                  #   branches, units, techtree-v2, recruitment, garrison, mp-lockstep)
 ```
 
 Docs already in repo: `ROADMAP.md`, `KNOWN-ISSUES.md`, `HEGEMON_Game_Design_Brief_v1.md`,
@@ -311,8 +311,8 @@ Admin can toggle **Reveal map** for testing.
     system (see §6), unrelated to these person/policy cards.
 
 ### Multiplayer & networking (`server/hegemon-server.mjs` + `net.js`)
-Self‑contained backend, built in two phases; **still a foundation, not full live
-play** (see the caveat).
+Self‑contained backend, built in three phases; **live turn sync now works
+(Phase 2b)** — real head‑to‑head multiplayer, not just a shared map.
 - **Backend (Phase 1):** Node `http` + `node:sqlite` (`DatabaseSync`) + `node:crypto`
   (scrypt). Tables `users` / `sessions` / `friendships`. Same‑origin JSON `/api`:
   `health`, `register`/`login`/`logout`/`me`, `users/search`, `friends/{request,
@@ -330,10 +330,25 @@ play** (see the caveat).
   the menu's **Play Online** section + a **lobby modal** (live seats, countdown,
   invite friends, Start/Leave, polled ~1.5 s); `newGame(withBriefing, override)`
   launches the seeded game as your seat's civ with AI in the empty seats.
-- **CAVEAT — this is matchmaking + a shared map, NOT live turn sync.** Each client
-  currently runs its **own local copy** of the seeded game (AI in the other seats);
-  players' moves do **not** yet affect each other. Live turn‑by‑turn action relay in
-  lockstep (feasible because the engine is deterministic) is **Phase 2b — not built**.
+- **Live turn relay (Phase 2b) — BUILT.** Because the engine is deterministic, only
+  the **human seats' actions** are relayed; every other seat runs AI **locally &
+  identically** on each client, so games stay in lockstep with **no state sync**.
+  Server: an append‑only per‑lobby action log — `POST /api/mp/action` (relay; a player
+  may only post as their own seat — anti‑spoof) + `GET /api/mp/actions?since=N` (poll);
+  `sanitizeLobby` exposes `humanCivs`. Client (`game.js`): my moves relay through a
+  **serialized + retried** post queue; a ~1 s poll applies others' actions in seq
+  order, running the intervening AI seats between turns; **watch‑mode** disables input
+  and shows a top‑center turn **banner** (`#mp-banner`); a per‑turn state
+  **fingerprint** (`mpFingerprint`, excludes the per‑client `humanPlayerId` marker)
+  flags desync (warn‑only). **Determinism** is enforced by neutralising every
+  per‑client input online: the lobby's **`civOrder`** flows to `generateMap` so all
+  clients build the SAME map (this fixed a latent divergence — each client used to
+  order the roster by its own civ → different civ→capital placement), plus **seeded
+  generals** and **forced normal difficulty / fixed victory / no loadout perks**.
+  `test/mp-lockstep.test.ts` proves two clients (different `humanPlayerId`) stay
+  byte‑identical 10+ rounds. **v1 gaps:** no disconnect/timeout AI‑takeover, no
+  mid‑game rejoin/resync, MP loadouts disabled, desync detection is warn‑only. Live
+  lockstep verified via a 16/16 server relay smoke + an 8/8 online browser smoke.
 
 ### Audio (procedural, `audio.js` → `window.HGAudio`)
 Everything **synthesized** with the Web Audio API (no files, no copyright — do NOT
@@ -453,6 +468,26 @@ aqueducts, law-administration, currency-reform, crop-rotation, nile-bureaucracy.
 
 The last push of work (see `git log` for exact diffs) delivered, roughly:
 
+- **Multiplayer Phase 2b — live turn sync (lockstep).** Real head‑to‑head
+  multiplayer now works. The deterministic engine means only the **human seats'
+  actions** cross the wire; every other seat runs AI **locally & identically** on
+  each client, so no game state is ever synced. Server gained a per‑lobby append‑only
+  action log (`POST /api/mp/action` with anti‑spoof + `GET /api/mp/actions?since=N`)
+  and exposes `humanCivs`; `net.js` got `mpAction`/`mpActions`. Client (`game.js`): a
+  serialized + retried relay of my moves, a ~1 s poll that applies others' moves in
+  seq order and runs the intervening AI, a **watch‑mode** input lock + top‑center turn
+  **banner**, and a per‑turn **fingerprint** desync warning. Every per‑client input is
+  neutralised online — the lobby's **`civOrder`** now flows to `generateMap` so all
+  clients build the SAME map (fixing a **latent map‑divergence bug**: each client used
+  to order the roster by its own civ, so capitals landed differently), plus **seeded
+  generals** and forced **normal difficulty / fixed victory / no loadout perks**.
+  Verified: **247/247 tests** (new `test/mp-lockstep.test.ts` proves two clients with
+  different `humanPlayerId` stay byte‑identical 10+ rounds), a **16/16** server relay
+  smoke (register→friend→lobby→start→relay both ways→`since` filter→anti‑spoof/auth
+  403/401), and an **8/8** online browser client smoke (loads online, methods wired,
+  0 console errors). **v1 gaps:** no disconnect/timeout AI‑takeover, no mid‑game
+  rejoin/resync, MP loadouts disabled, desync detection is warn‑only. See §5
+  "Multiplayer".
 - **Multiplayer Phase 2a — matchmaking lobby.** In‑memory lobby backend on the
   Phase‑1 server (`/api/mp/*`): **Quick Match** (public; a 60 s `QUICK_WAIT_MS`
   waits for humans then fills seats with AI, or starts early when full) and

@@ -277,6 +277,11 @@
     heat: { icon: "🔥", label: "heat" }
   };
   let HUMAN_ID = "rome";
+  // Live online session (Phase 2b). null = solo/offline. When set, this game is a
+  // deterministic lockstep match: my moves are relayed, other humans' moves arrive
+  // by poll, and every other seat runs AI locally & identically on all clients.
+  // { lobbyId, myCiv, humanCivs:[...], appliedSeq, posting:Promise, pollTimer, warnedDesync }
+  let mp = null;
   // Historic civ colours + names, driven by the engine roster.
   const CIV_COLORS = {};
   const HISTORIC_COLORS = {};
@@ -369,7 +374,9 @@
       const legs = legendsForCiv(p.civ || p.id);
       if (!legs.length) return;
       let ref = null;
-      if (p.id === HUMAN_ID && gsel && gsel.value) ref = leaderRef(legs.find(function (l) { return l.id === gsel.value; }));
+      // In a live online game the general MUST be seeded (identical on every
+      // client) — a locally-picked general would diverge the seats. Solo only.
+      if (!mp && p.id === HUMAN_ID && gsel && gsel.value) ref = leaderRef(legs.find(function (l) { return l.id === gsel.value; }));
       if (!ref) ref = leaderRef(legs[hashStr((st.seed || "") + ":general:" + p.id) % legs.length]);
       if (ref) st.leaders[p.id] = ref;
     });
@@ -1048,6 +1055,9 @@
       return;
     }
 
+    // The game is over — tear down any live online session (stops polling/relay).
+    if (mp) mpStop();
+
     // Count the finished game into the profile exactly once.
     if (!resultRecorded) {
       resultRecorded = true;
@@ -1611,6 +1621,12 @@
         action.type === "DEMAND_TRIBUTE_VILLAGE" ||
         action.type === "ABSORB_VILLAGE";
       state = engine.applyAction(state, action);
+      // Online: relay this move to the other humans. The fingerprint on END_TURN is
+      // taken HERE — after applying, before local AI runs — the one state point all
+      // clients agree on, so a mismatch flags a desync. Only my own seat is relayed.
+      if (mp && action.playerId === mp.myCiv) {
+        mpRelay(action, action.type === "END_TURN" ? mpFingerprint(state) : null);
+      }
       // Surface a Minor-People reaction (comply/threaten) the moment it resolves,
       // before the AI takes its turn and overwrites the transient outcome.
       if (state.lastReaction && state.lastReaction.playerId === HUMAN_ID) {
@@ -1669,6 +1685,9 @@
   function runAiUntilHuman() {
     while (state.players[state.currentPlayerIndex].id !== HUMAN_ID) {
       const active = state.players[state.currentPlayerIndex].id;
+      // Online: a remote human's seat is NOT AI-driven here — pause and wait for
+      // their relayed moves (they arrive via mpGamePoll). Only true AI seats run.
+      if (mp && mp.humanCivs.indexOf(active) !== -1) break;
       const result = engine.runAiTurn(state, active, 12);
       for (const action of result.actions) {
         logAction(`Turn ${state.turn}: ${action.playerId} -> ${action.type}`);
@@ -3458,6 +3477,8 @@
   }
 
   function newGame(withBriefing, override) {
+    // Starting a plain local game abandons any live online session first.
+    if (!override && mp) mpStop();
     // Clear any leftover result modal first, so a new game can never inherit a
     // stale "Victory/Defeat" overlay even if something below misbehaves.
     resultModalEl.classList.add("hidden");
@@ -3480,7 +3501,10 @@
       } else {
         const seed = override ? override.seed : ("map-" + choice + "-" + Date.now());
         const playerCount = override ? override.playerCount : (playerCountSelectEl ? parseInt(playerCountSelectEl.value, 10) || 2 : 2);
-        config = engine.generateMap({ size: choice, seed: seed, playerCount: playerCount, humanCiv: chosenCiv });
+        // Online games pass the lobby's exact seat order (civOrder) so EVERY client
+        // assigns the same civ to the same capital → byte-identical maps. Without it,
+        // each client would order the roster by its own civ and diverge.
+        config = engine.generateMap({ size: choice, seed: seed, playerCount: playerCount, humanCiv: chosenCiv, civOrder: override ? override.civOrder : undefined });
         const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
         label = sizeLabel + " random map (" + config.map.width + "×" + config.map.height + "), " +
           config.players.length + " civs";
@@ -3501,14 +3525,16 @@
     // Victory mode: "domination" removes the turn limit (win by holding every
     // capital); "quick" ends the age at a player-chosen turn count and awards
     // the score win. This overrides whatever limit the map/scenario carried.
-    const mode = (victoryModeSelectEl && victoryModeSelectEl.value) || "quick";
+    // Online games force fixed rules so every client's game is identical (a local
+    // difficulty/victory/turns pick would diverge the match).
+    const mode = override ? "quick" : ((victoryModeSelectEl && victoryModeSelectEl.value) || "quick");
     let victoryLine;
     if (mode === "domination") {
       config.turnLimit = 0;
       label += " — Domination (hold every capital)";
       victoryLine = "Victory: seize every enemy capital — there is no turn limit.";
     } else {
-      let turns = turnsInputEl ? parseInt(turnsInputEl.value, 10) : 60;
+      let turns = override ? 60 : (turnsInputEl ? parseInt(turnsInputEl.value, 10) : 60);
       if (!Number.isFinite(turns) || turns < 10) turns = 10;
       if (turns > 300) turns = 300;
       config.turnLimit = turns;
@@ -3517,11 +3543,12 @@
     }
 
     // Difficulty handicaps the AI economy; the human's chosen civ is exempt.
-    const difficulty = (difficultySelectEl && difficultySelectEl.value) || "normal";
+    // Online = fixed "normal" (a per-client handicap would diverge the game).
+    const difficulty = override ? "normal" : ((difficultySelectEl && difficultySelectEl.value) || "normal");
     config.difficulty = difficulty;
     config.humanPlayerId = HUMAN_ID;
     // Alliance victory (§6) — on by default; a setup toggle can switch it off.
-    config.allianceVictory = !allianceVictoryToggleEl || allianceVictoryToggleEl.checked;
+    config.allianceVictory = override ? true : (!allianceVictoryToggleEl || allianceVictoryToggleEl.checked);
     if (difficulty !== "normal") {
       label += ", " + difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
     }
@@ -3530,11 +3557,14 @@
 
     // Bring your equipped Legend + Edict perks into the campaign (the human only,
     // and only the slots matching your civ). Effects the engine can't do yet are
-    // flagged in the deck, not applied.
-    const startPerks = loadoutPerks(HUMAN_ID);
-    if (Object.keys(startPerks).length && config.players) {
-      const hp = config.players.find((pl) => pl.id === HUMAN_ID);
-      if (hp) hp.perks = startPerks;
+    // flagged in the deck, not applied. SKIPPED online: perks would apply only on
+    // their owner's client and diverge the match (MP loadouts are a later phase).
+    if (!override) {
+      const startPerks = loadoutPerks(HUMAN_ID);
+      if (Object.keys(startPerks).length && config.players) {
+        const hp = config.players.find((pl) => pl.id === HUMAN_ID);
+        if (hp) hp.perks = startPerks;
+      }
     }
 
     state = engine.createInitialGameState(config);
@@ -5315,10 +5345,145 @@
     } catch (e) {}
   }
   function launchMpGame(lobby) {
-    // Every client uses the SAME seed + roster → the SAME map; you play your seat's
-    // civ, empty seats are AI. (Live turn-by-turn sync between humans is Phase 2b.)
-    newGame(false, { mapSize: lobby.mapSize, seed: lobby.seed, humanCiv: lobby.yourCiv, playerCount: lobby.maxSeats });
-    showCombatToast("🌐 Online game started — you are " + (CIV_LABEL[lobby.yourCiv] || lobby.yourCiv), "gate");
+    // Phase 2b — live lockstep. Every client builds the SAME map from the shared
+    // seed + the lobby's exact seat order, then plays a deterministic match: my
+    // moves are relayed, other humans' moves arrive by poll, and every non-human
+    // seat runs AI locally & identically on all clients.
+    const seatCivs = (lobby.seats || []).map(function (s) { return s.civ; });
+    const humanCivs = (lobby.humanCivs && lobby.humanCivs.length)
+      ? lobby.humanCivs.slice()
+      : (lobby.seats || []).filter(function (s) { return !s.isAI; }).map(function (s) { return s.civ; });
+    mp = {
+      lobbyId: lobby.id,
+      myCiv: lobby.yourCiv,
+      humanCivs: humanCivs,
+      appliedSeq: 0,
+      posting: Promise.resolve(),
+      pollTimer: null,
+      warnedDesync: false,
+    };
+    newGame(false, {
+      mapSize: lobby.mapSize, seed: lobby.seed, humanCiv: lobby.yourCiv,
+      playerCount: seatCivs.length || lobby.maxSeats, civOrder: seatCivs,
+    });
+    // Advance through any AI seats that come BEFORE the first human (in solo the
+    // human is always seat 0, but online the seat order is the lobby's).
+    runAiUntilHuman();
+    render();
+    showCombatToast("🌐 Online game — you are " + (CIV_LABEL[lobby.yourCiv] || lobby.yourCiv) +
+      " · " + humanCivs.length + " human" + (humanCivs.length === 1 ? "" : "s"), "gate");
+    mpUpdateTurnBanner();
+    mpGamePoll();
+  }
+
+  // Serialize relays so the server receives my moves in the exact order I made
+  // them (HTTP posts could otherwise arrive out of order and scramble the log).
+  function mpRelay(action, fp) {
+    if (!mp || !window.HGNet) return;
+    const session = mp;
+    session.posting = session.posting.then(function () {
+      if (mp !== session) return;
+      return mpPostWithRetry(session, action, fp, 3);
+    });
+  }
+  function mpPostWithRetry(session, action, fp, tries) {
+    return window.HGNet.mpAction(session.lobbyId, action, fp).then(function (r) {
+      // Mark my own move applied so the poll doesn't try to re-apply the echo.
+      if (mp === session && r && typeof r.seq === "number") session.appliedSeq = Math.max(session.appliedSeq, r.seq);
+    }).catch(function (err) {
+      if (tries > 1) return mpPostWithRetry(session, action, fp, tries - 1);
+      console.error("MP relay failed (a move was not sent):", err);
+      if (mp === session) showCombatToast("⚠ A move didn't reach the other players.", "loss");
+    });
+  }
+
+  // Poll for other players' moves and apply them in order.
+  function mpGamePoll() {
+    if (!mp || !window.HGNet) return;
+    const session = mp;
+    window.HGNet.mpActions(session.lobbyId, session.appliedSeq).then(function (r) {
+      if (mp !== session) return;
+      const fresh = (r.actions || []).filter(function (e) { return e.seq > session.appliedSeq; });
+      if (fresh.length) mpApplyRemote(fresh);
+      else mpUpdateTurnBanner();
+    }).catch(function () {}).then(function () {
+      if (mp === session) session.pollTimer = setTimeout(mpGamePoll, 1000);
+    });
+  }
+
+  // Apply a batch of relayed entries in seq order. After each remote END_TURN we
+  // run the intervening AI seats locally, so the current player always matches the
+  // next entry's civ (a batch may span several humans if we polled behind).
+  function mpApplyRemote(entries) {
+    let advanced = false;
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      mp.appliedSeq = Math.max(mp.appliedSeq, e.seq);
+      if (e.civ === mp.myCiv) continue; // my own echoed move — already applied locally
+      try {
+        state = engine.applyAction(state, e.action);
+      } catch (err) {
+        console.error("MP: could not apply a remote move", e, err);
+        if (!mp.warnedDesync) { mp.warnedDesync = true; showCombatToast("⚠ Online games may have drifted out of sync.", "loss"); }
+        continue;
+      }
+      advanced = true;
+      logAction("Turn " + state.turn + ": " + e.action.playerId + " → " + e.action.type + " (online)");
+      if (e.action.type === "END_TURN") {
+        if (e.fp != null) mpCheckFp(e.fp); // compare at the agreed pre-AI point
+        runAiUntilHuman();                 // advance AI seats up to the next human / me
+      }
+    }
+    if (advanced) {
+      render();
+      checkEliminations();
+      saveGame();
+    }
+    mpUpdateTurnBanner();
+  }
+
+  // A cheap, order-independent fingerprint of the shared game state. Compared right
+  // after a seat's END_TURN (before any AI) — the one point every client agrees on.
+  function mpFingerprint(s) {
+    try {
+      const parts = [];
+      parts.push(s.turn + ":" + s.currentPlayerIndex);
+      const uids = Object.keys(s.map.units).sort();
+      for (const k of uids) { const u = s.map.units[k]; parts.push(u.id + "|" + u.ownerId + "|" + u.type + "|" + (u.hp || 0) + "|" + (u.position ? u.position.q + "," + u.position.r : "")); }
+      const cids = Object.keys(s.map.cities).sort();
+      for (const k of cids) { const c = s.map.cities[k]; parts.push(c.id + "|" + c.ownerId + "|" + (c.population || 0) + "|" + (c.hp || 0)); }
+      for (const p of s.players) parts.push(p.id + "|" + (p.gold || 0) + "|" + (p.science || 0) + "|" + ((p.techs && p.techs.length) || 0));
+      const str = parts.join(";");
+      let h = 2166136261;
+      for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+      return h >>> 0;
+    } catch (e) { return 0; }
+  }
+  function mpCheckFp(remoteFp) {
+    if (mpFingerprint(state) === remoteFp || mp.warnedDesync) return;
+    mp.warnedDesync = true;
+    console.warn("HEGEMON MP desync at turn " + state.turn + ": local != remote fingerprint");
+    showCombatToast("⚠ Online games may have drifted out of sync.", "loss");
+  }
+
+  // Banner: hidden on my turn, otherwise names whose move we're waiting for.
+  function mpUpdateTurnBanner() {
+    const banner = document.getElementById("mp-banner");
+    if (!banner) return;
+    if (!mp || !state) { banner.classList.add("hidden"); return; }
+    const victory = engine.getVictoryStatus(state);
+    const active = state.players[state.currentPlayerIndex].id;
+    if ((victory && victory.winnerId) || active === mp.myCiv) { banner.classList.add("hidden"); return; }
+    const who = CIV_LABEL[active] || active;
+    banner.textContent = mp.humanCivs.indexOf(active) !== -1 ? ("⏳ Waiting for " + who + "…") : ("🤖 " + who + " is moving…");
+    banner.classList.remove("hidden");
+  }
+
+  // Tear down the live session (game over, or leaving for a local game).
+  function mpStop() {
+    if (mp && mp.pollTimer) clearTimeout(mp.pollTimer);
+    mp = null;
+    mpUpdateTurnBanner();
   }
   async function refreshInvites() {
     const el = document.getElementById("mp-invites"); if (!el || !window.HGNet || !window.HGNet.isOnline()) return;

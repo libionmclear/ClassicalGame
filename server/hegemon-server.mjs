@@ -327,6 +327,12 @@ function startLobby(lobby) {
   for (const s of lobby.seats) if (s.userId === null) { s.isAI = true; s.name = "AI"; }
   lobby.seed = "mp-" + lobby.id;
   lobby.status = "active";
+  lobby.startedAt = now();
+  // Phase 2b live turn relay: an ordered, append-only log of the HUMAN seats'
+  // engine actions. AI seats run locally & deterministically on every client, so
+  // only human moves cross the wire. Clients poll /api/mp/actions?since=N.
+  lobby.log = [];      // [{ seq, civ, action, fp }]
+  lobby.logSeq = 0;
 }
 function maybeAutoStart(lobby) {
   if (!lobby || lobby.status !== "waiting") return;
@@ -342,6 +348,9 @@ function sanitizeLobby(lobby, userId) {
     timeLeft: lobby.mode === "quick" && lobby.status === "waiting" ? Math.max(0, Math.round((lobby.deadline - now()) / 1000)) : 0,
     seats: lobby.seats.map((s) => ({ name: s.name, civ: s.civ, isAI: s.isAI, filled: s.userId !== null || s.isAI, you: s.userId === userId })),
     yourCiv: (lobby.seats.find((s) => s.userId === userId) || {}).civ || null,
+    // Which seat-civs are human (Phase 2b): clients run AI for every OTHER seat
+    // locally and only wait on these for relayed moves. Meaningful once active.
+    humanCivs: lobby.seats.filter((s) => !s.isAI && s.userId !== null).map((s) => s.civ),
   };
 }
 
@@ -408,6 +417,42 @@ route("GET /api/mp/mine", async ({ res, user }) => {
     }
   }
   send(res, 200, { lobby: cur ? sanitizeLobby(cur, user.id) : null, invites });
+});
+
+// ---------------------------------------------------------------- live turn relay (Phase 2b)
+// The engine is deterministic, so true multiplayer only needs the ORDERED stream
+// of human moves — never the game state. Each client applies its own moves
+// optimistically, POSTs them here, and polls for everyone else's. Because turns
+// run in strict seat order, only the active seat is posting at any moment, so the
+// server's arrival order == causal order and a plain monotonic seq is enough.
+function activeGameFor(lobbyId, user) {
+  const lobby = lobbies.get(lobbyId);
+  if (!lobby) return { code: 404, error: "Game not found." };
+  if (lobby.status !== "active") return { code: 409, error: "That game isn't active." };
+  const seat = lobby.seats.find((s) => s.userId === user.id);
+  if (!seat) return { code: 403, error: "You're not in this game." };
+  return { lobby, seat };
+}
+
+route("POST /api/mp/action", async ({ res, user, body }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const g = activeGameFor(body.lobbyId, user);
+  if (g.error) return send(res, g.code, { error: g.error });
+  const action = body.action;
+  if (!action || typeof action !== "object") return send(res, 400, { error: "Missing action." });
+  // A player may only relay actions for their OWN seat's civ (anti-spoof).
+  if (action.playerId && action.playerId !== g.seat.civ) return send(res, 403, { error: "That isn't your seat." });
+  const entry = { seq: ++g.lobby.logSeq, civ: g.seat.civ, action, fp: body.fp != null ? body.fp : null };
+  g.lobby.log.push(entry);
+  send(res, 200, { seq: entry.seq });
+});
+
+route("GET /api/mp/actions", async ({ res, user, query }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const g = activeGameFor(query.id, user);
+  if (g.error) return send(res, g.code, { error: g.error });
+  const since = Number(query.since) || 0;
+  send(res, 200, { actions: g.lobby.log.filter((e) => e.seq > since), status: g.lobby.status });
 });
 
 // ---------------------------------------------------------------- server

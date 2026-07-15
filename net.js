@@ -70,6 +70,10 @@
     mpLeave: async function (lobbyId) { return api("POST", "/api/mp/leave", { lobbyId: lobbyId }); },
     mpStart: async function (lobbyId) { return (await api("POST", "/api/mp/start", { lobbyId: lobbyId })).lobby; },
     mpLobby: async function (lobbyId) { return (await api("GET", "/api/mp/lobby?id=" + encodeURIComponent(lobbyId))).lobby; },
-    mpMine: async function () { return api("GET", "/api/mp/mine"); }
+    mpMine: async function () { return api("GET", "/api/mp/mine"); },
+
+    // Live turn relay (Phase 2b): post one of your moves, poll for everyone else's.
+    mpAction: async function (lobbyId, action, fp) { return api("POST", "/api/mp/action", { lobbyId: lobbyId, action: action, fp: fp }); },
+    mpActions: async function (lobbyId, since) { return api("GET", "/api/mp/actions?id=" + encodeURIComponent(lobbyId) + "&since=" + (since || 0)); }
   };
 })();
