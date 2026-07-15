@@ -36,8 +36,11 @@ live in [ROADMAP.md](ROADMAP.md); this file is for what's imperfect *today*.
   **"I always take the first turn"** turns off rotating initiative (engine
   `rotateInitiative`, default on). Online games always rotate (fixed for
   determinism); solo players can opt to always open the round.
-- **3D camera inclination is a fixed default (~38°).** You can drag to change it,
-  but there's no in-game control/preset. Default may not suit everyone.
+- ~~**3D camera inclination is a fixed default (~38°), no in-game control/preset**~~ —
+  FIXED: press **`[` / `]`** to tilt the camera (top-down ↔ horizon), **Home** or the
+  **🎥 View** HUD button to reset the framing. Your chosen tilt **persists** as a
+  preset (localStorage `hegemon_cam_tilt`) across new maps and reloads. (Drag still
+  orbits, wheel zooms, WASD roams.)
 - ~~**Headless UI testing is awkward**~~ — FIXED: `game.js` exposes a tiny test hook
   `window.HGTest` (`snapshot()`, board-agnostic `clickTile(q,r)`, `endTurn()`), and
   `test/browser-smoke.mjs` now drives the **default 3D board** through it against the

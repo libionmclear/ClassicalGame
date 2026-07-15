@@ -88,10 +88,12 @@ re‑renders, runs AI turns, and saves.
 - **`npm run test:browser`** — the reliable UI smoke (`test/browser-smoke.mjs`):
   Playwright + `channel:"msedge"`, spawns the real backend, signs in as **admin /
   1234567**, and drives the **default 3D board** through the game's test hook
-  **`window.HGTest`** (`snapshot()`, board‑agnostic `clickTile(q,r)`, `endTurn()`) —
-  so it checks boot/render/selection/turn‑loop without canvas pixel‑picking or the
-  (opt‑in, flaky headless) 2D DOM tiles. It separates real JS errors (fail) from
-  benign asset 404s (optional `.glb`/sprite‑less civs — reported, not a failure).
+  **`window.HGTest`** (`snapshot()`, board‑agnostic `clickTile(q,r)`,
+  `openUnitPanel()`, `endTurn()`, camera `camTilt()`/`nudgeTilt(d)`/`resetView()`) —
+  so it checks boot/render/selection/turn‑loop/panel‑dock/camera without canvas
+  pixel‑picking or the (opt‑in, flaky headless) 2D DOM tiles. **20 checks.** It
+  separates real JS errors (fail) from benign asset 404s (optional `.glb`/sprite‑less
+  civs — reported, not a failure).
 - One‑off deeper checks: **Playwright + `channel:"msedge"`** with WebGL flags
   `--use-gl=angle --use-angle=swiftshader --ignore-gpu-blocklist`, logging in as
   admin, to screenshot the real client. Temp scripts live in the session scratchpad

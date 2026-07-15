@@ -3948,6 +3948,10 @@
     pendingRecenter = true;
     render();
   });
+  // Reset-view button (revealed by init3D — 3D board only): return the camera to the
+  // default framing + inclination and clear the saved tilt preset. Tilt is [ / ].
+  var resetViewBtn = document.getElementById("reset-view-btn");
+  if (resetViewBtn) resetViewBtn.addEventListener("click", function () { if (board3d && board3d.resetCamera) board3d.resetCamera(); });
   if (handCloseBtn) handCloseBtn.addEventListener("click", function () { handModalEl.classList.add("hidden"); });
   if (handModalEl) handModalEl.addEventListener("click", function (e) { if (e.target === handModalEl) handModalEl.classList.add("hidden"); });
 
@@ -5063,6 +5067,9 @@
       USE_3D = true;
       const wrap = boardEl.parentElement;
       if (wrap) wrap.classList.add("three");
+      // The camera reset/tilt controls only apply to the 3D board — reveal the button.
+      var rvb = document.getElementById("reset-view-btn");
+      if (rvb) rvb.classList.remove("hidden");
       board3d.resize(); // the canvas is now visible with a real size
       board3d.onPick(function (key) {
         if (!key) return;
@@ -5593,6 +5600,10 @@
     // panel (what the unit-detail symbol does) so tests can inspect it.
     openUnitPanel: function () { unitDetailsOpen = true; render(); },
     endTurn: function () { if (isHumanTurn()) apply({ type: "END_TURN", playerId: HUMAN_ID }); },
+    // Camera (3D board only) — for the UI smoke's tilt/reset checks.
+    camTilt: function () { return board3d && board3d.getTilt ? board3d.getTilt() : null; },
+    nudgeTilt: function (d) { if (board3d && board3d.nudgeTilt) board3d.nudgeTilt(d); },
+    resetView: function () { if (board3d && board3d.resetCamera) board3d.resetCamera(); },
   };
 
   resumeOrNew();

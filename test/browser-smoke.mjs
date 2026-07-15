@@ -111,6 +111,23 @@ try {
   check("ending the turn advances the game turn", s2 && s2.turn > before, { before, after: s2 && s2.turn });
   check("control returns to the human", s2 && s2.current === s2.humanId, s2);
 
+  // 5b) Camera inclination control (3D board): tilt changes it, reset restores it,
+  //     and the reset-view HUD button is visible.
+  const camBefore = await page.evaluate(() => window.HGTest.camTilt());
+  check("camera tilt is readable on the 3D board", typeof camBefore === "number", camBefore);
+  await page.evaluate(() => window.HGTest.nudgeTilt(0.25));
+  await page.waitForTimeout(60);
+  const camTilted = await page.evaluate(() => window.HGTest.camTilt());
+  check("tilting the camera changes the inclination", Math.abs(camTilted - camBefore) > 0.05, { camBefore, camTilted });
+  await page.evaluate(() => window.HGTest.resetView());
+  await page.waitForTimeout(60);
+  const camReset = await page.evaluate(() => window.HGTest.camTilt());
+  // Reset re-frames to the default ~38°-off-vertical inclination (polar ~0.66),
+  // undoing the tilt. (It doesn't equal camBefore: earlier renders moved the focus
+  // target, which shifts the polar angle without rotating.)
+  check("reset view returns to the default framing (undoes the tilt)", camReset > 0.55 && camReset < 0.78 && Math.abs(camReset - camTilted) > 0.05, { camBefore, camTilted, camReset });
+  check("the Reset-view HUD button is visible on the 3D board", await page.evaluate(() => { const b = document.getElementById("reset-view-btn"); return !!b && !b.classList.contains("hidden"); }));
+
   // 6) No SCRIPT errors through the whole flow. Benign asset 404s (e.g. civs
   //    without sprite art — see KNOWN-ISSUES) are network-level, not JS errors, so
   //    they're reported for visibility but don't fail the smoke.

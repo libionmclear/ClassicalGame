@@ -93,6 +93,12 @@ export interface BoardController {
   onHover(fn: (key: string | null) => void): void;
   strike(q: number, r: number): void;
   resize(): void;
+  /** Tilt the camera by `delta` radians of polar angle (+ = toward the horizon). */
+  nudgeTilt(delta: number): void;
+  /** Reframe the board at the default inclination and clear the saved tilt preset. */
+  resetCamera(): void;
+  /** Current camera inclination (polar angle, radians). */
+  getTilt(): number;
   dispose(): void;
 }
 
@@ -823,13 +829,50 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
+  // ---- Camera inclination (tilt) ----------------------------------------------
+  // Tilt = the polar angle (small = top-down, large = toward the horizon). Dragging
+  // already changes it; this adds a keyboard control ([ / ]) and a reset (Home), and
+  // PERSISTS your chosen tilt as a lasting preset (localStorage) that survives new
+  // maps and reloads. The API exposes these so a HUD button can drive them too.
+  const TILT_KEY = "hegemon_cam_tilt";
+  function clampPolar(p: number): number { return Math.max(controls.minPolarAngle + 0.02, Math.min(controls.maxPolarAngle - 0.02, p)); }
+  function getTilt(): number { return new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target)).phi; }
+  function setTilt(polar: number): void {
+    const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+    sph.phi = clampPolar(polar);
+    camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(sph));
+    camera.lookAt(controls.target);
+    controls.update();
+  }
+  function saveTilt(p: number): void { try { window.localStorage.setItem(TILT_KEY, p.toFixed(4)); } catch { /* ignore */ } }
+  function loadTilt(): number | null { try { const v = parseFloat(window.localStorage.getItem(TILT_KEY) || ""); return Number.isFinite(v) ? v : null; } catch { return null; } }
+  function nudgeTilt(delta: number): void { setTilt(getTilt() + delta); saveTilt(getTilt()); }
+  function resetCamera(): void {
+    if (boardBounds) {
+      const cx = (boardBounds.minX + boardBounds.maxX) / 2, cz = (boardBounds.minZ + boardBounds.maxZ) / 2;
+      const span = Math.max(boardBounds.maxX - boardBounds.minX, boardBounds.maxZ - boardBounds.minZ) || 20;
+      controls.target.set(cx, 0, cz);
+      camera.position.set(cx, span * 0.8, cz + span * 0.62);
+      camera.lookAt(cx, 0, cz);
+      controls.update();
+    }
+    try { window.localStorage.removeItem(TILT_KEY); } catch { /* ignore */ }
+  }
+
   // Keyboard roaming (WASD / arrows) — glide the focus across the ground plane,
   // relative to where the camera is facing, at a speed that scales with zoom.
   const UP = new THREE.Vector3(0, 1, 0);
   const panKeys = new Set<string>();
   const PAN_VEC: Record<string, [number, number]> = { w: [0, 1], s: [0, -1], a: [-1, 0], d: [1, 0], arrowup: [0, 1], arrowdown: [0, -1], arrowleft: [-1, 0], arrowright: [1, 0] };
   const isTyping = () => { const el = document.activeElement as HTMLElement | null; return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable); };
-  const onKeyDown = (e: KeyboardEvent) => { const k = e.key.toLowerCase(); if (PAN_VEC[k] && !isTyping()) { panKeys.add(k); if (k.startsWith("arrow")) e.preventDefault(); } };
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (isTyping()) return;
+    const k = e.key.toLowerCase();
+    if (PAN_VEC[k]) { panKeys.add(k); if (k.startsWith("arrow")) e.preventDefault(); return; }
+    if (k === "[") { nudgeTilt(-0.09); e.preventDefault(); }       // tilt toward top-down
+    else if (k === "]") { nudgeTilt(0.09); e.preventDefault(); }   // tilt toward the horizon
+    else if (k === "home") { resetCamera(); e.preventDefault(); }  // reset the framing
+  };
   const onKeyUp = (e: KeyboardEvent) => { panKeys.delete(e.key.toLowerCase()); };
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
@@ -1239,6 +1282,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     sunDisc.position.set(cx - span * 0.15, span * 0.5, cz - span * 3.0);
     sunDisc.scale.setScalar(Math.max(12, span * 0.6));
     controls.update();
+    // Restore the player's saved tilt preset over the default framing (once per map).
+    const savedTilt = loadTilt();
+    if (savedTilt != null) setTilt(savedTilt);
   }
 
   function colorFor(tv: TileView, civColors: Record<string, string>): THREE.Color {
@@ -1822,6 +1868,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     onHover(fn) { hoverFn = fn; },
     strike,
     resize,
+    nudgeTilt,
+    resetCamera,
+    getTilt,
     dispose() { running = false; window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); renderer.dispose(); }
   };
 }
