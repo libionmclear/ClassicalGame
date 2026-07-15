@@ -67,7 +67,7 @@ re‑renders, runs AI turns, and saves.
 | Task | Command |
 |---|---|
 | Type‑check | `npm run typecheck` (`tsc --noEmit`) |
-| Engine + game tests | `npm test` (node's test runner via `tsx`) — **249 tests, 24 suites** |
+| Engine + game tests | `npm test` (node's test runner via `tsx`) — **252 tests, 25 suites** |
 | Build the web bundle | `npm run build:web` → wipes/rebuilds **`public/`** (gitignored) |
 | Run with the backend | `npm run server` (builds `public/`, then serves it **and** the `/api` on `http://localhost:8787`) — enables accounts, friends, admin, and multiplayer lobbies. `serve:only` skips the rebuild. |
 | Deploy | Vercel runs `vercel-build` → `build:web`; serves `public/` **statically** (no backend — the client auto‑falls back to localStorage accounts; see §5). |
@@ -121,7 +121,8 @@ scripts/build-web.mjs      # the web build (also copies net.js into public/)
 test/*.test.ts    # 24 suites (engine, combat, economy, ai, buildings, events,
                   #   mapgen, scenario, visibility, diplomacy, discovery, peoples,
                   #   districts, districtmodels, stability, effects, titles, civs,
-                  #   branches, units, techtree-v2, recruitment, garrison, mp-lockstep)
+                  #   branches, units, techtree-v2, recruitment, garrison, mp-lockstep,
+                  #   initiative)
 ```
 
 Docs already in repo: `ROADMAP.md`, `KNOWN-ISSUES.md`, `HEGEMON_Game_Design_Brief_v1.md`,

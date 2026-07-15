@@ -1591,7 +1591,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   // rotation is a pure function of turn + player count, so replay stays exact.
   const n = state.players.length;
   const prevTurn = state.turn;
-  if (n >= 3) {
+  if (n >= 3 && state.rotateInitiative !== false) {
     const roundStart = (state.turn - 1) % n;
     if ((state.currentPlayerIndex + 1) % n === roundStart) {
       state.turn += 1;
@@ -1867,7 +1867,8 @@ export function createInitialGameState(config: CreateGameConfig = {}): GameState
     tradeRoutes: [],
     actionLog: [],
     costScale: mapCostScale(map.width, map.height),
-    allianceVictory: config.allianceVictory ?? true
+    allianceVictory: config.allianceVictory ?? true,
+    rotateInitiative: config.rotateInitiative ?? true
   };
 
   syncOwnershipIndexes(state);

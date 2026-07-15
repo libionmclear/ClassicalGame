@@ -28,8 +28,10 @@ live in [ROADMAP.md](ROADMAP.md); this file is for what's imperfect *today*.
 - **In-play panel still blocks a tile under a button.** For a selected unit the
   panel is click-through except its buttons, so a move-target directly under a
   button (e.g. Found City) is still blocked. Rare, but real.
-- **Human no longer always moves first** in 3+ player games (rotating initiative).
-  Intended for fairness, but it is a feel change; no opt-out.
+- ~~**Human no longer always moves first** — no opt-out~~ — FIXED: a setup toggle
+  **"I always take the first turn"** turns off rotating initiative (engine
+  `rotateInitiative`, default on). Online games always rotate (fixed for
+  determinism); solo players can opt to always open the round.
 - **3D camera inclination is a fixed default (~38°).** You can drag to change it,
   but there's no in-game control/preset. Default may not suit everyone.
 - **Headless city-selection is awkward to test** (the capital starts unit-stacked,

@@ -12,6 +12,7 @@
   const mapSizeSelectEl = document.getElementById("map-size-select");
   const playerCountSelectEl = document.getElementById("player-count-select");
   const allianceVictoryToggleEl = document.getElementById("alliance-victory-toggle");
+  const humanFirstToggleEl = document.getElementById("human-first-toggle");
   const victoryModeSelectEl = document.getElementById("victory-mode-select");
   const turnsInputEl = document.getElementById("turns-input");
   const turnsPickerEl = document.getElementById("turns-picker");
@@ -3549,6 +3550,10 @@
     config.humanPlayerId = HUMAN_ID;
     // Alliance victory (§6) — on by default; a setup toggle can switch it off.
     config.allianceVictory = override ? true : (!allianceVictoryToggleEl || allianceVictoryToggleEl.checked);
+    // Rotating initiative (fairness) is on by default. A solo player can opt to always
+    // open the round ("I always take the first turn"). Online games always rotate so
+    // every client agrees on turn order (it's a pure function of turn + seat count).
+    config.rotateInitiative = override ? true : !(humanFirstToggleEl && humanFirstToggleEl.checked);
     if (difficulty !== "normal") {
       label += ", " + difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
     }

@@ -239,6 +239,10 @@ export interface GameState {
   diplomacy?: Record<string, DiploPair>;
   /** Whether a joint Full-Alliance victory is allowed (§6; default true). */
   allianceVictory?: boolean;
+  /** Rotate which seat opens each round in 3+ player games so no seat is always last
+   *  (default true). Off = linear order (seat 0 always first) — the human, seated
+   *  first, then always takes the opening turn. */
+  rotateInitiative?: boolean;
   /** Per-player chosen general/Legend, feeding diplomacy rolls (§10.3 / cards). Keyed by player id. */
   leaders?: Record<string, { id: string; name?: string; role: string; rarity: string }>;
   /** Civs each player has made first contact with (via an Explorer envoy or borders). Keyed by player id → met player ids. */
@@ -561,6 +565,9 @@ export interface CreateGameConfig {
   humanPlayerId?: string | null;
   /** Allow a joint win by two long-standing Full Allies (§6; default on). */
   allianceVictory?: boolean;
+  /** Rotate the opening seat each round in 3+ player games (default on). Off pins
+   *  the first seat (the human) to always open. */
+  rotateInitiative?: boolean;
   players?: Partial<Player>[];
   map?: {
     width?: number;
