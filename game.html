@@ -119,6 +119,8 @@
         <div class="menu-section menu-actions">
           <button id="profile-btn" class="ghost-btn" title="Your profile, stats & badges">👤 Profile &amp; Stats</button>
           <button id="cards-btn" class="ghost-btn" title="Card collection & packs">🃏 My Deck</button>
+          <button id="friends-btn" class="ghost-btn hidden" title="Your friends &amp; connections">👥 Friends</button>
+          <button id="admin-btn" class="ghost-btn hidden" title="Admin — manage users">🛡️ Admin</button>
           <a href="gallery.html" target="_blank" rel="noopener" class="ghost-btn" title="All civs' units &amp; cities in 3D">🖼️ 3D Showcase</a>
         </div>
         <div class="menu-section menu-account">
@@ -391,9 +393,38 @@
     </div>
   </div>
 
+  <!-- Friends & connections (online only) -->
+  <div id="friends-modal" class="result-modal hidden">
+    <div class="result-card codex-card">
+      <div class="codex-header">
+        <h2>👥 Friends</h2>
+        <button id="friends-close" class="codex-close" title="Close">×</button>
+      </div>
+      <div class="friends-add">
+        <input id="friends-search" type="text" placeholder="Find players by username…" autocomplete="off" />
+        <div id="friends-results" class="friends-results"></div>
+      </div>
+      <div id="friends-incoming" class="friends-group"></div>
+      <div id="friends-list" class="friends-group"></div>
+      <div id="friends-outgoing" class="friends-group"></div>
+    </div>
+  </div>
+
+  <!-- Admin — manage users (admins only) -->
+  <div id="admin-modal" class="result-modal hidden">
+    <div class="result-card codex-card admin-card">
+      <div class="codex-header">
+        <h2>🛡️ Admin — Users</h2>
+        <button id="admin-close" class="codex-close" title="Close">×</button>
+      </div>
+      <div id="admin-users" class="admin-users">Loading…</div>
+    </div>
+  </div>
+
   <script src="web/engine.bundle.js"></script>
   <script src="web/sprites.js"></script>
   <script src="web/board3d.bundle.js"></script>
+  <script src="net.js"></script>
   <script src="audio.js"></script>
   <script src="cards-data.js"></script>
   <script src="game.js"></script>

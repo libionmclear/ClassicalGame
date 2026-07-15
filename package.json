@@ -11,6 +11,8 @@
     "balance": "node --import tsx scripts/balance-sim.ts",
     "build:web": "node scripts/build-web.mjs",
     "slice-sprites": "node scripts/slice-sprites.mjs",
+    "server": "node scripts/build-web.mjs && node --no-warnings=ExperimentalWarning server/hegemon-server.mjs",
+    "serve:only": "node --no-warnings=ExperimentalWarning server/hegemon-server.mjs",
     "play:web": "npm run build:web",
     "vercel-build": "npm run build:web",
     "push:auto": "node scripts/publish-auto.mjs"

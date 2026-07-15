@@ -3,3 +3,6 @@ node_modules/
 .env
 .env.local
 public/
+server/*.db
+server/*.db-wal
+server/*.db-shm

@@ -52,6 +52,7 @@ await Promise.all([
   copyFile(path.join(root, "game.html"), path.join(publicDir, "game.html")),
   copyFile(path.join(root, "game.css"), path.join(publicDir, "game.css")),
   copyFile(path.join(root, "game.js"), path.join(publicDir, "game.js")),
+  copyFile(path.join(root, "net.js"), path.join(publicDir, "net.js")),
   copyFile(path.join(root, "audio.js"), path.join(publicDir, "audio.js")),
   copyFile(path.join(root, "gallery.html"), path.join(publicDir, "gallery.html")),
   copyFile(path.join(root, "board3d.html"), path.join(publicDir, "board3d.html")),

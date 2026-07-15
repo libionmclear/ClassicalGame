@@ -1052,6 +1052,8 @@
     if (!resultRecorded) {
       resultRecorded = true;
       try { recordGameResult(HUMAN_ID, victory.winnerId === HUMAN_ID, victory.type); } catch (e) {}
+      // Also report to the server so online stats/leaderboards stay in sync.
+      try { if (window.HGNet && window.HGNet.isOnline()) window.HGNet.reportStats(victory.winnerId === HUMAN_ID ? "win" : "loss", HUMAN_ID); } catch (e) {}
     }
 
     const humanWon = victory.winnerId === HUMAN_ID || (victory.allies && victory.allies.indexOf(HUMAN_ID) !== -1);
@@ -5082,15 +5084,27 @@
   }
   if (authShowRegister) authShowRegister.addEventListener("click", showRegisterPane);
   if (authShowLogin) authShowLogin.addEventListener("click", showLoginPane);
+  const netOn = function () { return window.HGNet && window.HGNet.isOnline(); };
   if (authLoginBtn) authLoginBtn.addEventListener("click", async function () {
     authLoginErr.textContent = "…";
-    const res = await doLogin(authLoginUser.value, authLoginPass.value);
+    if (netOn()) { // server accounts when the backend is reachable
+      try { const u = await window.HGNet.login(authLoginUser.value, authLoginPass.value); authLoginPass.value = ""; activateServerAccount(u); hideAuth(); afterSignIn(); }
+      catch (e) { authLoginErr.textContent = e.message; }
+      return;
+    }
+    const res = await doLogin(authLoginUser.value, authLoginPass.value); // offline fallback
     if (res.ok) { authLoginPass.value = ""; hideAuth(); afterSignIn(); }
     else authLoginErr.textContent = res.error;
   });
   if (authRegisterBtn) authRegisterBtn.addEventListener("click", async function () {
     authRegErr.textContent = "…";
-    const res = await doRegister(authRegName.value, authRegEmail.value, authRegPass.value);
+    if (netOn()) {
+      const uname = String(authRegName.value || "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+      try { const u = await window.HGNet.register(uname, authRegPass.value, authRegName.value, authRegEmail.value); authRegPass.value = ""; activateServerAccount(u); hideAuth(); afterSignIn(); }
+      catch (e) { authRegErr.textContent = e.message; }
+      return;
+    }
+    const res = await doRegister(authRegName.value, authRegEmail.value, authRegPass.value); // offline fallback
     if (res.ok) { authRegPass.value = ""; hideAuth(); afterSignIn(); }
     else authRegErr.textContent = res.error;
   });
@@ -5103,17 +5117,41 @@
     const res = await changePassword(oldPw, newPw);
     window.alert(res.ok ? "Password changed." : res.error);
   });
-  if (logoutBtn) logoutBtn.addEventListener("click", function () {
+  if (logoutBtn) logoutBtn.addEventListener("click", async function () {
+    if (window.HGNet && window.HGNet.hasToken()) { try { await window.HGNet.logout(); } catch (e) {} }
     try { window.localStorage.removeItem(SESSION_KEY); } catch (e) {}
     currentAccount = null;
     PROFILE_KEY = "hegemon_profile";
     updateAccountLine();
+    refreshOnlineUI();
     if (menuOverlayEl) menuOverlayEl.classList.add("hidden");
     showAuth();
   });
 
-  // Seed the admin account, then gate on the saved session.
+  // Map a server account onto the client's currentAccount + refresh online UI.
+  function activateServerAccount(user) {
+    activateAccount({ username: user.username, name: user.displayName || user.username, email: user.email || "", isAdmin: !!user.isAdmin, server: true, id: user.id });
+    refreshOnlineUI();
+  }
+  function refreshOnlineUI() {
+    const on = !!(window.HGNet && window.HGNet.isOnline() && currentAccount);
+    const fb = document.getElementById("friends-btn"), ab = document.getElementById("admin-btn");
+    if (fb) fb.classList.toggle("hidden", !on);
+    if (ab) ab.classList.toggle("hidden", !(on && currentAccount && currentAccount.isAdmin));
+  }
+
+  // Probe the backend; use server accounts when it's reachable, else the offline
+  // localStorage accounts (solo play always works).
   (async function initAuth() {
+    let serverUp = false;
+    try { serverUp = window.HGNet ? await window.HGNet.probe() : false; } catch (e) { serverUp = false; }
+    if (serverUp) {
+      try {
+        if (window.HGNet.hasToken()) { const u = await window.HGNet.me(); activateServerAccount(u); hideAuth(); }
+        else { window.HGNet.clearToken(); showAuth(); }
+      } catch (e) { window.HGNet.clearToken(); showAuth(); }
+      return;
+    }
     try {
       await seedAdmin();
       const sess = window.localStorage.getItem(SESSION_KEY);
@@ -5121,6 +5159,89 @@
       if (acct) { activateAccount(acct); hideAuth(); }
       else { showAuth(); }
     } catch (e) { console.error("Auth init failed:", e); showAuth(); }
+  })();
+
+  // ===== Friends & Admin panels (online only) =====
+  (function wireOnlinePanels() {
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+    const friendsBtn = document.getElementById("friends-btn");
+    const adminBtn = document.getElementById("admin-btn");
+    const friendsModal = document.getElementById("friends-modal");
+    const adminModal = document.getElementById("admin-modal");
+    function backdropClose(m) { if (m) m.addEventListener("click", function (e) { if (e.target === m) m.classList.add("hidden"); }); }
+    backdropClose(friendsModal); backdropClose(adminModal);
+    const fClose = document.getElementById("friends-close"); if (fClose) fClose.addEventListener("click", function () { friendsModal.classList.add("hidden"); });
+    const aClose = document.getElementById("admin-close"); if (aClose) aClose.addEventListener("click", function () { adminModal.classList.add("hidden"); });
+
+    function personRow(u, actions) {
+      const s = u.stats || {};
+      const meta = s.games ? (s.wins || 0) + "W / " + (s.losses || 0) + "L · " + s.games + " games" : "no games yet";
+      const div = document.createElement("div"); div.className = "person-row";
+      div.innerHTML = '<span class="person-name">' + esc(u.displayName || u.username) + ' <small>@' + esc(u.username) + '</small><br><span class="person-meta">' + meta + "</span></span>";
+      const btns = document.createElement("span"); btns.className = "person-actions";
+      (actions || []).forEach(function (a) { const b = document.createElement("button"); b.textContent = a.label; if (a.danger) b.className = "danger"; if (a.disabled) b.disabled = true; if (a.fn) b.addEventListener("click", a.fn); btns.appendChild(b); });
+      div.appendChild(btns); return div;
+    }
+
+    // ---- Friends ----
+    async function renderFriends() {
+      const listEl = document.getElementById("friends-list"), inEl = document.getElementById("friends-incoming"), outEl = document.getElementById("friends-outgoing");
+      listEl.innerHTML = inEl.innerHTML = outEl.innerHTML = "";
+      try {
+        const f = await window.HGNet.friends();
+        if (f.incoming.length) { inEl.innerHTML = "<h3>Requests received</h3>"; f.incoming.forEach(function (u) { inEl.appendChild(personRow(u, [
+          { label: "✓ Accept", fn: async function () { await window.HGNet.friendRespond(u.id, true); renderFriends(); } },
+          { label: "Decline", danger: true, fn: async function () { await window.HGNet.friendRespond(u.id, false); renderFriends(); } }
+        ])); }); }
+        listEl.innerHTML = "<h3>Friends" + (f.friends.length ? " (" + f.friends.length + ")" : "") + "</h3>";
+        if (!f.friends.length) listEl.innerHTML += '<div class="friends-empty">No friends yet — search above to add some.</div>';
+        f.friends.forEach(function (u) { listEl.appendChild(personRow(u, [{ label: "Remove", danger: true, fn: async function () { await window.HGNet.friendRemove(u.id); renderFriends(); } }])); });
+        if (f.outgoing.length) { outEl.innerHTML = "<h3>Requests sent</h3>"; f.outgoing.forEach(function (u) { outEl.appendChild(personRow(u, [{ label: "Cancel", danger: true, fn: async function () { await window.HGNet.friendRemove(u.id); renderFriends(); } }])); }); }
+      } catch (e) { listEl.innerHTML = '<div class="friends-empty">' + esc(e.message) + "</div>"; }
+    }
+    const searchEl = document.getElementById("friends-search"), resultsEl = document.getElementById("friends-results");
+    let searchTimer = null;
+    if (searchEl) searchEl.addEventListener("input", function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(async function () {
+        const q = searchEl.value.trim(); resultsEl.innerHTML = "";
+        if (q.length < 2) return;
+        try {
+          const us = await window.HGNet.search(q);
+          if (!us.length) { resultsEl.innerHTML = '<div class="friends-empty">No players found.</div>'; return; }
+          us.forEach(function (u) {
+            const st = u.friendState;
+            const label = st === "friends" ? "✓ Friends" : st === "pending_out" ? "Requested" : st === "pending_in" ? "✓ Accept" : "+ Add friend";
+            resultsEl.appendChild(personRow(u, [{ label: label, disabled: st === "friends" || st === "pending_out", fn: async function () { await window.HGNet.friendRequestId(u.id); searchEl.value = ""; resultsEl.innerHTML = ""; renderFriends(); } }]));
+          });
+        } catch (e) {}
+      }, 250);
+    });
+    if (friendsBtn) friendsBtn.addEventListener("click", function () { if (!friendsModal) return; friendsModal.classList.remove("hidden"); if (resultsEl) resultsEl.innerHTML = ""; if (searchEl) searchEl.value = ""; renderFriends(); });
+
+    // ---- Admin ----
+    async function renderAdmin() {
+      const el = document.getElementById("admin-users"); el.innerHTML = "Loading…";
+      try {
+        const users = await window.HGNet.adminUsers();
+        el.innerHTML = "";
+        users.forEach(function (u) {
+          const s = u.stats || {};
+          const row = document.createElement("div"); row.className = "admin-row" + (u.banned ? " banned" : "");
+          const status = u.banned ? '<b class="bad">banned</b>' : u.online ? '<b class="good">● online</b>' : "offline";
+          row.innerHTML = '<span class="admin-name">' + (u.isAdmin ? "🛡️ " : "") + esc(u.displayName || u.username) + ' <small>@' + esc(u.username) + "</small></span>" +
+            '<span class="admin-stat">' + (s.games || 0) + " games · " + (s.wins || 0) + "W/" + (s.losses || 0) + "L</span>" +
+            '<span class="admin-status">' + status + "</span>";
+          const acts = document.createElement("span"); acts.className = "admin-actions";
+          if (!u.isAdmin) {
+            const kick = document.createElement("button"); kick.textContent = "Kick"; kick.disabled = !u.sessions; kick.title = "End all their sessions"; kick.addEventListener("click", async function () { await window.HGNet.adminKick(u.id); renderAdmin(); }); acts.appendChild(kick);
+            const ban = document.createElement("button"); ban.textContent = u.banned ? "Unban" : "Ban"; ban.className = "danger"; ban.addEventListener("click", async function () { await window.HGNet.adminBan(u.id, !u.banned); renderAdmin(); }); acts.appendChild(ban);
+          }
+          row.appendChild(acts); el.appendChild(row);
+        });
+      } catch (e) { el.innerHTML = '<div class="friends-empty">' + esc(e.message) + "</div>"; }
+    }
+    if (adminBtn) adminBtn.addEventListener("click", function () { if (!adminModal) return; adminModal.classList.remove("hidden"); renderAdmin(); });
   })();
 
   resumeOrNew();

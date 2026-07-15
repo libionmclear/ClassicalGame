@@ -3309,3 +3309,37 @@ body.fullscreen .status-panel {
 .db-opt:disabled { opacity: 0.45; cursor: default; }
 .db-name { font-weight: 600; font-size: 0.82rem; }
 .db-benefit { font-size: 0.74rem; color: var(--ok); }
+
+/* ===== Friends & Admin panels (online) ===== */
+.friends-add { margin: 6px 0 10px; }
+#friends-search {
+  width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--parchment); font-size: 0.9rem;
+}
+.friends-results { margin-top: 6px; }
+.friends-group { margin-top: 10px; }
+.friends-group h3 { margin: 6px 0; font-size: 0.9rem; color: var(--gold); }
+.friends-empty { color: var(--faint, #7b8a99); font-size: 0.85rem; padding: 6px 2px; font-style: italic; }
+.person-row, .admin-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; margin: 4px 0; border-radius: 8px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line);
+}
+.person-name, .admin-name { font-size: 0.9rem; }
+.person-name small, .admin-name small { color: var(--faint, #7b8a99); font-weight: 400; }
+.person-meta { color: var(--muted, #9fb0c0); font-size: 0.74rem; }
+.person-actions, .admin-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.person-actions button, .admin-actions button {
+  padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;
+  background: linear-gradient(135deg, var(--panel-2), var(--panel)); color: var(--parchment); border: 1px solid var(--line);
+}
+.person-actions button:disabled, .admin-actions button:disabled { opacity: 0.5; cursor: default; }
+.person-actions button.danger, .admin-actions button.danger { border-color: #7a2f2f; color: #ffb4a2; }
+.admin-card { max-width: 640px; }
+.admin-users { max-height: 60vh; overflow-y: auto; }
+.admin-row { display: grid; grid-template-columns: 1.6fr 1.2fr 0.9fr auto; align-items: center; }
+.admin-row.banned { opacity: 0.6; }
+.admin-stat { color: var(--muted, #9fb0c0); font-size: 0.78rem; }
+.admin-status .good { color: var(--food, #7ed957); }
+.admin-status .bad, .bad { color: var(--bad, #e0533d); }
+.good { color: var(--food, #7ed957); }
