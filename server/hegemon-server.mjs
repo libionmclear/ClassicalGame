@@ -146,6 +146,9 @@ function bearer(req) {
 const routes = {}; // "METHOD /api/path": (ctx) => void
 function route(key, handler) { routes[key] = handler; }
 
+// --- health (the client probes this to decide online vs offline) ---
+route("GET /api/health", async ({ res }) => { send(res, 200, { ok: true, service: "hegemon", ts: now() }); });
+
 // --- auth ---
 route("POST /api/register", async ({ res, body }) => {
   const username = String(body.username || "").trim().toLowerCase();

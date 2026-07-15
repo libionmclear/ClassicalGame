@@ -25,12 +25,16 @@
     hasToken: function () { return !!token(); },
     clearToken: function () { setToken(""); },
 
-    // Is the backend reachable at all? (200 or 401 both count as "server is up".)
+    // Is the backend actually reachable? Only a real /api/health response counts —
+    // a static host (no backend) returns 404 here, so we stay OFFLINE and fall
+    // back to localStorage accounts. (Avoids getting stuck at a server login that
+    // has no server behind it.)
     probe: async function () {
       try {
-        var tk = token();
-        var res = await fetch("/api/me", { headers: tk ? { Authorization: "Bearer " + tk } : {} });
-        online = res.status < 500;
+        var res = await fetch("/api/health", { cache: "no-store" });
+        if (!res.ok) { online = false; return online; }
+        var data = await res.json().catch(function () { return null; });
+        online = !!(data && data.ok === true);
       } catch (e) { online = false; }
       return online;
     },

@@ -539,11 +539,30 @@ function addLandmark(g: THREE.Group, s: CivStyle, tier: number): void {
     const th = meshOf(GEO.thatch, s.roofColor); th.scale.set(1.8 * k, 1.1 * k, 1.8 * k); th.position.y = rh + 0.06; g.add(th);
   }
 }
-// A primitive round thatched hut — the very first stage of a settlement.
+// A primitive round thatched hut — the very first stage of a settlement, and the
+// building block of a Minor-People village marker.
 function buildHut(wallColor: number): THREE.Group {
   const g = new THREE.Group();
   const wall = meshOf(GEO.roundWall, wallColor); wall.scale.set(0.52, 0.5, 0.52); wall.position.y = 0.075; g.add(wall);
   const roof = meshOf(GEO.thatch, 0x9a7238); roof.scale.set(0.6, 0.55, 0.6); roof.position.y = 0.17; g.add(roof);
+  return g;
+}
+// A weathered ruin — a broken plinth, standing & toppled columns, a fallen block.
+// Sits ON the hex so an Ancient Ruin reads as ruins, not a floating icon (§10.2).
+function buildRuinModel(): THREE.Group {
+  const g = new THREE.Group();
+  const stone = 0xc3bca9;
+  const plinth = meshOf(GEO.slab, 0xb4ad9a); plinth.scale.set(0.7, 0.5, 0.7); plinth.position.y = 0.02; g.add(plinth);
+  const cols: [number, number][] = [[0.30, 0.4], [0.19, 1.7], [0.28, 3.0], [0.12, 4.6], [0.24, 5.5]];
+  for (let i = 0; i < cols.length; i += 1) {
+    const [ch, a] = cols[i];
+    const col = meshOf(GEO.column, i % 2 ? shade("#c3bca9", -0.07) : stone);
+    col.scale.set(1.1, ch / 0.34, 1.1);
+    col.position.set(Math.cos(a) * 0.17, ch * 0.5, Math.sin(a) * 0.17);
+    if (i === 1) { col.rotation.z = 0.55; col.position.y = ch * 0.3; } // one toppling over
+    g.add(col);
+  }
+  const fallen = meshOf(GEO.building, stone); fallen.scale.set(0.26, 0.12, 0.46); fallen.position.set(0.15, 0.05, -0.15); fallen.rotation.y = 0.6; g.add(fallen);
   return g;
 }
 // A little marble colonnaded temple — Rome's signature, shown even before the forum.
@@ -1015,21 +1034,34 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     }
   }
 
-  // Discovery markers (§10): a floating glyph over each un-excavated Ruin and each
-  // Minor-People village. Rebuilt each render; billboards face the camera.
+  // Discovery markers (§10): a real MODEL on the hex for each un-excavated Ruin
+  // (broken columns) and each Minor-People village (a cluster of thatched huts),
+  // instead of a floating icon that read as a UI element. Rebuilt each render.
   function placeMarkers(view: BoardView): void {
-    for (const o of markerGroup.children) { const m = (o as THREE.Sprite).material as THREE.SpriteMaterial | undefined; m?.dispose(); }
+    markerGroup.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.material) { const mm = m.material as THREE.Material | THREE.Material[]; if (Array.isArray(mm)) mm.forEach((x) => x.dispose()); else mm.dispose(); }
+    });
     markerGroup.clear();
     for (const tv of view.tiles) {
-      const glyph = tv.ruin ? "🏛️" : tv.village ? "🛖" : null;
-      if (!glyph) continue;
+      if (!tv.ruin && !tv.village) continue;
       const w = axialToWorld(tv.q, tv.r);
-      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(glyph), transparent: true, depthWrite: false, depthTest: false }));
-      spr.center.set(0.5, 0);
-      spr.scale.set(0.75, 0.75, 0.75);
-      spr.position.set(w.x, topOf(tv.t) + 0.55, w.z);
-      spr.renderOrder = 998;
-      markerGroup.add(spr);
+      const top = topOf(tv.t);
+      let model: THREE.Group;
+      if (tv.ruin) {
+        model = buildRuinModel();
+        model.scale.setScalar(1.7);
+      } else {
+        // A small cluster of huts — the village of a minor people.
+        model = new THREE.Group();
+        const h1 = buildHut(0xcaa06a); h1.position.set(-0.16, 0, 0.07); h1.scale.setScalar(1.05); model.add(h1);
+        const h2 = buildHut(0xbf9560); h2.position.set(0.18, 0, -0.1); h2.scale.setScalar(0.85); model.add(h2);
+        const h3 = buildHut(0xd0a878); h3.position.set(0.02, 0, 0.22); h3.scale.setScalar(0.7); model.add(h3);
+        model.scale.setScalar(1.75);
+      }
+      model.position.set(w.x, top + 0.01, w.z);
+      model.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+      markerGroup.add(model);
     }
   }
 

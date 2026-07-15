@@ -70,7 +70,7 @@ export function buildCity(THREE, opts = {}) {
     const r = ringMin + rng() * (ringMax - ringMin);
     const w = 0.07 + rng() * 0.06, d = 0.07 + rng() * 0.06;
     const h = hBase * (0.7 + rng() * 0.7);
-    const house = makeHouse(THREE, S, rng, w, h, d, mat, wallMat);
+    const house = makeHouse(THREE, S, rng, w, h, d, mat, wallMat, tier);
     house.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
     house.rotation.y = a + Math.PI / 2 + (rng() - 0.5) * 0.4;
     g.add(house);
@@ -157,7 +157,7 @@ export function jitterColor(THREE, hex, rng, amt) {
 
 // A house = walls + a style-appropriate roof. The roof/wall material split is
 // what makes tiny buildings readable at board distance.
-function makeHouse(THREE, S, rng, w, h, d, mat, wallMat) {
+function makeHouse(THREE, S, rng, w, h, d, mat, wallMat, tier) {
   const grp = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), (wallMat || ((j) => mat(S.wall, j)))(1));
   body.position.y = h / 2;
@@ -173,20 +173,23 @@ function makeHouse(THREE, S, rng, w, h, d, mat, wallMat) {
     grp.add(win);
   }
   const roofH = h * (0.5 + rng() * 0.3);
-  let roof;
-  switch (S.roof) {
-    case "gable":  roof = prism(THREE, w * 1.12, roofH, d * 1.12); break;
-    case "flat":   roof = new THREE.BoxGeometry(w * 1.06, roofH * 0.25, d * 1.06); break;
-    case "thatch": roof = new THREE.ConeGeometry(Math.max(w, d) * 0.78, roofH * 1.3, 7); break;
-    case "eaves": { // Han: oversized slab roof with a hint of lift
-      roof = new THREE.BoxGeometry(w * 1.5, roofH * 0.22, d * 1.5); break;
-    }
-    default:       roof = prism(THREE, w * 1.1, roofH, d * 1.1);
+  // The earliest settlements are thatched huts; the civ's proper roof only arrives
+  // once the town is built up (tier 3+). Each roof type is seated so its underside
+  // rests ON the wall top — no more floating roofs.
+  const roofType = (tier != null && tier <= 2) ? "thatch" : S.roof;
+  let roof, roofY;
+  switch (roofType) {
+    case "gable":  roof = prism(THREE, w * 1.12, roofH, d * 1.12); roofY = h - 0.002; break;              // prism base at local 0 → sits on the wall
+    case "flat":   roof = new THREE.BoxGeometry(w * 1.06, roofH * 0.25, d * 1.06); roofY = h + roofH * 0.1; break;
+    case "thatch": roof = new THREE.ConeGeometry(Math.max(w, d) * 0.82, roofH * 1.4, 7); roofY = h + roofH * 0.6; break; // cone centred → base tucks into the wall top
+    case "eaves":  roof = new THREE.BoxGeometry(w * 1.5, roofH * 0.22, d * 1.5); roofY = h + roofH * 0.1; break;
+    default:       roof = prism(THREE, w * 1.1, roofH, d * 1.1); roofY = h - 0.002;
   }
-  const roofMesh = new THREE.Mesh(roof, mat(S.roofColor, 1));
-  roofMesh.position.y = h + (S.roof === "flat" || S.roof === "eaves" ? roofH * 0.12 : roofH / 2);
+  // Thatch is straw-brown regardless of civ; other roofs keep the civ colour.
+  const roofMesh = new THREE.Mesh(roof, mat(roofType === "thatch" ? 0x9a7238 : S.roofColor, 1));
+  roofMesh.position.y = roofY;
   grp.add(roofMesh);
-  if (S.roof === "eaves") { // second smaller eave = pagoda feel without cost
+  if (roofType === "eaves") { // second smaller eave = pagoda feel without cost
     const top = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, roofH * 0.18, d * 0.9), mat(S.roofColor, 1));
     top.position.y = h + roofH * 0.5;
     grp.add(top);
