@@ -1,5 +1,5 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
-import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv, computeCityStability, computePlayerIncome } from "./index";
+import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv, computeCityStability, computePlayerIncome, upgradeTargetFor, upgradeCost } from "./index";
 import { districtSlots, districtForbidden } from "./districts";
 import { canProposeAgreement, aiAcceptsProposal, personalityOf, relationBand, getRelation, isVassal, canDemandVassalage, militaryStrength, isAtWar } from "./diplomacy";
 import { unitNear, explorerNear, befriendCostFor } from "./peoples";
@@ -623,6 +623,20 @@ function diplomacyAction(state: GameState, player: Player): GameAction | null {
   return null;
 }
 
+// Upgrade veterans into the people's signature elite once the tech is in hand (a
+// Roman Swordsman → Legionary, etc.). The AI used to field elites only when it
+// built them fresh, leaving units trained before the tech stuck at the base type.
+export function upgradeAction(state: GameState, player: Player): GameAction | null {
+  if (player.gold < 22) return null; // nothing to spend
+  for (const unit of unitsOf(state, player)) {
+    const target = upgradeTargetFor(player, unit);
+    if (!target) continue;
+    if (player.gold < upgradeCost(unit.type, target) + 10) continue; // keep a reserve
+    return { type: "UPGRADE_UNIT", playerId: player.id, unitId: unit.id };
+  }
+  return null;
+}
+
 // --- Discovery & Minor Peoples (§10) -----------------------------------------
 // The AI used to ignore the whole discovery layer: its Explorer never moved, no
 // ruin was ever dug, no village ever courted — all rewards (gold/science/XP, and
@@ -739,6 +753,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => villageAction(state, player),      // §10: absorb/court/seize a village beside a unit
     () => buildAction(state, player),
     () => buildingAction(state, player),
+    () => upgradeAction(state, player),      // turn veterans into the civ elite with spare gold
     () => districtAction(state, player),
     () => tradeAction(state, player),
     () => improveAction(state, player),

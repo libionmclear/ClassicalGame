@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createInitialGameState, getVictoryStatus, applyAction } from "../src/engine";
-import { chooseAiAction, runAiTurn, aggression, districtAction } from "../src/engine/ai";
+import { chooseAiAction, runAiTurn, aggression, districtAction, upgradeAction } from "../src/engine/ai";
 import { loadScenario } from "../src/engine/scenarios";
 import { neighborsOf, keyOf } from "../src/engine/hex";
 import type { CreateGameConfig, GameState } from "../src/engine/types";
@@ -26,6 +26,29 @@ function makeState(
     map: { width: 8, height: 8, regions: ["core"], tiles, units, cities }
   });
 }
+
+test("upgradeAction turns a veteran into the civ elite once the tech is in hand", () => {
+  const s = makeState(
+    { sw: { id: "sw", type: "swordsman", ownerId: "p1", position: { q: 1, r: 1 } } },
+    { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 2, hp: 24, maxHp: 24 } },
+    ["legionary-system"]
+  );
+  s.playersById["p1"]!.gold = 200;
+  const action = upgradeAction(s, s.playersById["p1"]!);
+  assert.ok(action && action.type === "UPGRADE_UNIT" && action.unitId === "sw", String(action));
+  const ns = applyAction(s, action!);
+  assert.equal(ns.map.units["sw"].type, "legionary", "the swordsman became a Legionary");
+});
+
+test("upgradeAction holds off when the treasury can't cover it", () => {
+  const s = makeState(
+    { sw: { id: "sw", type: "swordsman", ownerId: "p1", position: { q: 1, r: 1 } } },
+    {},
+    ["legionary-system"]
+  );
+  s.playersById["p1"]!.gold = 5;
+  assert.equal(upgradeAction(s, s.playersById["p1"]!), null);
+});
 
 test("aggression temperament scales monotonically with difficulty", () => {
   const easy = aggression({ difficulty: "easy" } as GameState);
