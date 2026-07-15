@@ -2,6 +2,7 @@ import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data"
 import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv, computeCityStability, computePlayerIncome } from "./index";
 import { districtSlots, districtForbidden } from "./districts";
 import { canProposeAgreement, aiAcceptsProposal, personalityOf, relationBand, getRelation, isVassal, canDemandVassalage, militaryStrength, isAtWar } from "./diplomacy";
+import { unitNear, explorerNear, befriendCostFor } from "./peoples";
 import { getEvent } from "./events";
 import { distance, DIRECTIONS, keyOf, parseKey, neighborsOf } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
@@ -622,6 +623,92 @@ function diplomacyAction(state: GameState, player: Player): GameAction | null {
   return null;
 }
 
+// --- Discovery & Minor Peoples (§10) -----------------------------------------
+// The AI used to ignore the whole discovery layer: its Explorer never moved, no
+// ruin was ever dug, no village ever courted — all rewards (gold/science/XP, and
+// free towns) went to the human alone. These steps put the Explorer to work and
+// engage villages a unit is standing beside.
+
+function nearestRuinKey(state: GameState, from: Coord): string | null {
+  const ruins = state.map.ruins;
+  if (!ruins) return null;
+  let best: string | null = null, bestD = Infinity;
+  for (const [key, site] of Object.entries(ruins)) {
+    if (site.excavated) continue;
+    const d = distance(from, parseKey(key));
+    if (d < bestD) { bestD = d; best = key; }
+  }
+  return best;
+}
+
+// The nearest village this player could still gain from (not already their friend).
+function nearestOpenVillageKey(state: GameState, from: Coord, playerId: string): string | null {
+  const vs = state.map.villages;
+  if (!vs) return null;
+  let best: string | null = null, bestD = Infinity;
+  for (const [key, v] of Object.entries(vs)) {
+    if (v.befriendedBy === playerId) continue; // already friends — nothing new to court
+    const d = distance(from, parseKey(key));
+    if (d < bestD) { bestD = d; best = key; }
+  }
+  return best;
+}
+
+// Engage a Minor-People village a unit is standing beside: absorb a friend into
+// the realm (a free town), court a newcomer for its gifts, or — when a soldier is
+// already adjacent and there's no peaceful path — take a hostile one by force.
+export function villageAction(state: GameState, player: Player): GameAction | null {
+  const vs = state.map.villages;
+  if (!vs) return null;
+  const agg = aggression(state);
+  for (const [hex, v] of Object.entries(vs)) {
+    if (!unitNear(state, player.id, hex)) continue; // must be standing on/beside it
+    // 1) Already our friend → absorb them (join = a free town at their hex).
+    if (v.befriendedBy === player.id && v.disposition !== "hostile") {
+      return { type: "ABSORB_VILLAGE", playerId: player.id, hex, mode: "join" };
+    }
+    // 2) A newcomer we can still court: decent odds, gold in hand (keep a reserve),
+    //    and we haven't already worn out our welcome (attempts cap avoids gold spam).
+    const cost = befriendCostFor(state, player.id, hex);
+    const canCourt = v.disposition !== "hostile" || explorerNear(state, player.id, hex);
+    if (v.befriendedBy !== player.id && canCourt && (v.attempts ?? 0) < 2 && player.gold >= cost + 15) {
+      return { type: "BEFRIEND_VILLAGE", playerId: player.id, hex };
+    }
+    // 3) Hostile / unfriendable, but a soldier is already adjacent → take it (a free
+    //    town at a reputation cost; aggressive AIs also seize the merely-resistant).
+    if (v.befriendedBy !== player.id && unitNear(state, player.id, hex, true) && (v.disposition === "hostile" || agg.acceptLoss)) {
+      return { type: "CONQUER_VILLAGE", playerId: player.id, hex };
+    }
+  }
+  return null;
+}
+
+// Send the Explorer to WORK the map: stand on the nearest un-excavated ruin (it
+// auto-digs at turn-end for the FULL reward), else approach the nearest village to
+// court it, else scout toward the nearest rival. (Without this the Explorer, not
+// being military, was never moved at all.)
+export function exploreAction(state: GameState, player: Player): GameAction | null {
+  for (const unit of unitsOf(state, player)) {
+    if (unit.type !== "explorer" || unit.movementRemaining <= 0) continue;
+    const ruinKey = nearestRuinKey(state, unit.position);
+    const villageKey = nearestOpenVillageKey(state, unit.position, player.id);
+    let targetPos: Coord | null = null;
+    if (ruinKey) targetPos = parseKey(ruinKey);
+    else if (villageKey) targetPos = parseKey(villageKey);
+    else {
+      const foe = nearestCity(enemyCities(state, player.id), unit.position);
+      targetPos = foe ? foe.position : null;
+    }
+    if (!targetPos || distance(unit.position, targetPos) === 0) continue;
+    const path = findPath(state, moveCtx(unit), unit.position, targetPos);
+    if (!path || path.length < 2) continue;
+    const dest = reachableAlong(state, unit, path);
+    if (!dest) continue;
+    return { type: "MOVE_UNIT", playerId: player.id, unitId: unit.id, destination: dest };
+  }
+  return null;
+}
+
 export function chooseAiAction(state: GameState, playerId: string): GameAction {
   const player = state.playersById[playerId];
   if (!player) throw new Error(`Unknown player ${playerId}`);
@@ -649,6 +736,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     },
     () => attackAction(state, player),
     () => foundCityAction(state, player),
+    () => villageAction(state, player),      // §10: absorb/court/seize a village beside a unit
     () => buildAction(state, player),
     () => buildingAction(state, player),
     () => districtAction(state, player),
@@ -657,6 +745,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => maneuverAction(state, player),
     () => navalManeuverAction(state, player),
     () => settlerMoveAction(state, player),
+    () => exploreAction(state, player),      // §10: send the Explorer to ruins/villages
     () => diplomacyAction(state, player),
     () => {
       const techId = bestBuildableTech(state, player);

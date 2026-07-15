@@ -67,7 +67,7 @@ re‑renders, runs AI turns, and saves.
 | Task | Command |
 |---|---|
 | Type‑check | `npm run typecheck` (`tsc --noEmit`) |
-| Engine + game tests | `npm test` (node's test runner via `tsx`) — **252 tests, 25 suites** |
+| Engine + game tests | `npm test` (node's test runner via `tsx`) — **259 tests, 26 suites** |
 | Build the web bundle | `npm run build:web` → wipes/rebuilds **`public/`** (gitignored) |
 | Run with the backend | `npm run server` (builds `public/`, then serves it **and** the `/api` on `http://localhost:8787`) — enables accounts, friends, admin, and multiplayer lobbies. `serve:only` skips the rebuild. |
 | Deploy | Vercel runs `vercel-build` → `build:web`; serves `public/` **statically** (no backend — the client auto‑falls back to localStorage accounts; see §5). |
@@ -111,7 +111,8 @@ src/engine/
   types.ts        # GameState, actions (the GameAction union), rules interfaces
   pathfinding.ts  # movementCost + findPath (roads, rivers, embarking, mountains)
   mapgen.ts       # random maps: MAP_SIZES, CIV_ROSTER, terrain bands, resources
-  ai.ts           # the opponent AI (chooseAiAction / runAiTurn)
+  ai.ts           # the opponent AI (chooseAiAction / runAiTurn). Now DISCOVERY-aware
+                  #   (§10): moves its Explorer to dig ruins + court/absorb/seize villages
   visibility.ts   # fog of war (computeVisibility; discovered persists in state)
   events.ts       # one-time "Crossroads" event cards
   hex.ts, rng.ts  # axial hex math; seeded deterministic RNG
@@ -130,7 +131,7 @@ test/*.test.ts    # 24 suites (engine, combat, economy, ai, buildings, events,
                   #   mapgen, scenario, visibility, diplomacy, discovery, peoples,
                   #   districts, districtmodels, stability, effects, titles, civs,
                   #   branches, units, techtree-v2, recruitment, garrison, mp-lockstep,
-                  #   initiative)
+                  #   initiative, ai-discovery)
 ```
 
 Docs already in repo: `ROADMAP.md`, `KNOWN-ISSUES.md`, `HEGEMON_Game_Design_Brief_v1.md`,
