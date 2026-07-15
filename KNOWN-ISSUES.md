@@ -25,9 +25,13 @@ live in [ROADMAP.md](ROADMAP.md); this file is for what's imperfect *today*.
   strong enough brake; may need tuning.
 
 ## UI / UX
-- **In-play panel still blocks a tile under a button.** For a selected unit the
-  panel is click-through except its buttons, so a move-target directly under a
-  button (e.g. Found City) is still blocked. Rare, but real.
+- **In-play panel can block a tile under a button — reduced.** A selected unit
+  shows only a small toggle by default (no occlusion); opening the actions panel now
+  **left-docks** it (`.cp-clickthrough`), so its buttons cover left-edge tiles
+  instead of the right — and a unit + its reachable ring usually sit toward your own
+  territory. A move-target directly under a button is still blocked in that opened
+  state (regression-guarded by the UI smoke's left-dock check). Full fix = a
+  bottom-center action footer (deferred).
 - ~~**Human no longer always moves first** — no opt-out~~ — FIXED: a setup toggle
   **"I always take the first turn"** turns off rotating initiative (engine
   `rotateInitiative`, default on). Online games always rotate (fixed for

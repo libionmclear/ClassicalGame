@@ -5589,6 +5589,9 @@
       };
     },
     clickTile: function (q, r) { onTileClick(q, r); },
+    // A selected unit shows only a small toggle by default; open the full actions
+    // panel (what the unit-detail symbol does) so tests can inspect it.
+    openUnitPanel: function () { unitDetailsOpen = true; render(); },
     endTurn: function () { if (isHumanTurn()) apply({ type: "END_TURN", playerId: HUMAN_ID }); },
   };
 

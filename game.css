@@ -1102,9 +1102,17 @@ button:hover:not(:disabled) {
 }
 
 /* When a unit is selected, the panel is click-through except its own controls,
-   so the board tiles behind it stay clickable for moving/attacking. */
+   so the board tiles behind it stay clickable for moving/attacking. It also docks
+   to the LEFT edge (a unit and its reachable ring usually sit toward your own
+   territory), so the action buttons occlude fewer move-targets than on the right.
+   The civ accent + shadow flip to face the board. */
 .control-panel.cp-clickthrough {
   pointer-events: none;
+  left: 8px;
+  right: auto;
+  border-left: 1px solid var(--line);
+  border-right: 3px solid var(--civ);
+  box-shadow: 8px 0 34px rgba(0, 0, 0, 0.5);
 }
 
 .control-panel.cp-clickthrough button,

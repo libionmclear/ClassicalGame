@@ -87,6 +87,22 @@ try {
   const selLine = await page.locator("#selection-line").textContent();
   check("the selection line reflects the selected unit", /Move|move/.test(selLine || ""), selLine);
 
+  // A freshly-selected unit shows only a small toggle; open the full actions panel.
+  // Once open it docks LEFT + is click-through, so its buttons occlude fewer board
+  // move-targets than a right-docked panel.
+  await page.evaluate(() => window.HGTest.openUnitPanel());
+  await page.waitForTimeout(100);
+  const dock = await page.evaluate(() => {
+    const el = document.getElementById("control-panel");
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return { hidden: el.classList.contains("hidden"), clickthrough: el.classList.contains("cp-clickthrough"), pe: cs.pointerEvents, left: Math.round(r.left), rightGap: Math.round(window.innerWidth - r.right) };
+  });
+  check("the opened unit panel is click-through (board stays clickable behind it)", !dock.hidden && dock.pe === "none", dock);
+  // Left-docked: the gap on its left is far smaller than the gap on its right
+  // (a right-docked panel would be the reverse). Robust to the board's left offset.
+  check("the opened unit panel docks to the LEFT side", dock.clickthrough && dock.left + 200 < dock.rightGap, dock);
+
   // 5) Ending the turn runs the AI and returns control to the human on a later turn.
   const before = s1.turn;
   await page.evaluate(() => window.HGTest.endTurn());
