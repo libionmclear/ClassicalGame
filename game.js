@@ -3457,7 +3457,7 @@
     legendEl.innerHTML = parts.join("");
   }
 
-  function newGame(withBriefing) {
+  function newGame(withBriefing, override) {
     // Clear any leftover result modal first, so a new game can never inherit a
     // stale "Victory/Defeat" overlay even if something below misbehaves.
     resultModalEl.classList.add("hidden");
@@ -3465,8 +3465,10 @@
     announcedDead = {};
     // playedEvents reset on the new state below
 
-    const choice = (mapSizeSelectEl && mapSizeSelectEl.value) || "medium";
-    const chosenCiv = (civSelectEl && civSelectEl.value) || "rome";
+    // `override` (from a multiplayer lobby) forces the map size, seed, civ and
+    // player count so every client generates the SAME map from the shared seed.
+    const choice = override ? override.mapSize : ((mapSizeSelectEl && mapSizeSelectEl.value) || "medium");
+    const chosenCiv = override ? override.humanCiv : ((civSelectEl && civSelectEl.value) || "rome");
     let config;
     let label;
     let scenario = null;
@@ -3476,8 +3478,8 @@
         config = scenario.config;
         label = scenario.name;
       } else {
-        const seed = "map-" + choice + "-" + Date.now();
-        const playerCount = playerCountSelectEl ? parseInt(playerCountSelectEl.value, 10) || 2 : 2;
+        const seed = override ? override.seed : ("map-" + choice + "-" + Date.now());
+        const playerCount = override ? override.playerCount : (playerCountSelectEl ? parseInt(playerCountSelectEl.value, 10) || 2 : 2);
         config = engine.generateMap({ size: choice, seed: seed, playerCount: playerCount, humanCiv: chosenCiv });
         const sizeLabel = (engine.MAP_SIZES && engine.MAP_SIZES[choice] && engine.MAP_SIZES[choice].label) || choice;
         label = sizeLabel + " random map (" + config.map.width + "×" + config.map.height + "), " +
@@ -5135,9 +5137,11 @@
   }
   function refreshOnlineUI() {
     const on = !!(window.HGNet && window.HGNet.isOnline() && currentAccount);
-    const fb = document.getElementById("friends-btn"), ab = document.getElementById("admin-btn");
+    const fb = document.getElementById("friends-btn"), ab = document.getElementById("admin-btn"), mo = document.getElementById("menu-online");
     if (fb) fb.classList.toggle("hidden", !on);
+    if (mo) mo.classList.toggle("hidden", !on);
     if (ab) ab.classList.toggle("hidden", !(on && currentAccount && currentAccount.isAdmin));
+    if (on && typeof refreshInvites === "function") refreshInvites();
   }
 
   // Probe the backend; use server accounts when it's reachable, else the offline
@@ -5242,6 +5246,107 @@
       } catch (e) { el.innerHTML = '<div class="friends-empty">' + esc(e.message) + "</div>"; }
     }
     if (adminBtn) adminBtn.addEventListener("click", function () { if (!adminModal) return; adminModal.classList.remove("hidden"); renderAdmin(); });
+  })();
+
+  // ===== Multiplayer lobby (Phase 2a) =====
+  let mpLobbyId = null, mpPollTimer = null, mpLaunched = false;
+  const CIV_LABEL = { rome: "Rome", greece: "Greece", egypt: "Egypt", carthage: "Carthage", gaul: "Gaul", parthia: "Parthia", britons: "Britons", kush: "Kush" };
+  function mpSize() { const sz = mapSizeSelectEl && mapSizeSelectEl.value; return (engine.MAP_SIZES && engine.MAP_SIZES[sz]) ? sz : "medium"; }
+  function stopLobbyPoll() { if (mpPollTimer) { clearTimeout(mpPollTimer); mpPollTimer = null; } }
+  function closeLobby(leave) {
+    stopLobbyPoll();
+    if (leave && mpLobbyId && window.HGNet) { try { window.HGNet.mpLeave(mpLobbyId); } catch (e) {} }
+    mpLobbyId = null; mpLaunched = false;
+    const m = document.getElementById("lobby-modal"); if (m) m.classList.add("hidden");
+    refreshInvites();
+  }
+  function openLobby(lobby) {
+    mpLobbyId = lobby.id; mpLaunched = false;
+    const m = document.getElementById("lobby-modal"); if (m) m.classList.remove("hidden");
+    if (menuOverlayEl) menuOverlayEl.classList.add("hidden");
+    renderLobby(lobby); pollLobby();
+  }
+  function renderLobby(lobby) {
+    if (!lobby) return;
+    const title = document.getElementById("lobby-title"), statusEl = document.getElementById("lobby-status");
+    const seatsEl = document.getElementById("lobby-seats"), inviteWrap = document.getElementById("lobby-invite"), startBtn = document.getElementById("lobby-start");
+    if (title) title.textContent = (lobby.mode === "quick" ? "⚔️ Quick Match" : "🔒 Private Game") + " · " + (lobby.mapSize || "");
+    if (statusEl) {
+      if (lobby.status === "active") statusEl.textContent = "Starting the game…";
+      else if (lobby.mode === "quick") statusEl.textContent = "Waiting for players — filling with AI in " + (lobby.timeLeft || 0) + "s…";
+      else statusEl.textContent = lobby.youAreHost ? "Invite friends, then press Start." : "Waiting for the host to start…";
+    }
+    if (seatsEl) {
+      seatsEl.innerHTML = "";
+      lobby.seats.forEach(function (s) {
+        const div = document.createElement("div"); div.className = "lobby-seat" + (s.you ? " you" : "") + (s.filled ? " filled" : " empty");
+        div.innerHTML = '<span class="seat-civ">' + (CIV_LABEL[s.civ] || s.civ) + "</span>" +
+          '<span class="seat-who">' + (s.isAI ? "🤖 AI" : s.filled ? (s.you ? "You" : (s.name || "Player")) : "— open —") + "</span>";
+        seatsEl.appendChild(div);
+      });
+    }
+    const canInvite = lobby.mode === "private" && lobby.youAreHost && lobby.status === "waiting";
+    if (inviteWrap) inviteWrap.classList.toggle("hidden", !canInvite);
+    if (canInvite) renderLobbyFriends();
+    if (startBtn) startBtn.classList.toggle("hidden", !(lobby.youAreHost && lobby.status === "waiting"));
+    if (lobby.status === "active" && !mpLaunched) {
+      mpLaunched = true; stopLobbyPoll();
+      const m = document.getElementById("lobby-modal"); if (m) m.classList.add("hidden");
+      launchMpGame(lobby);
+    }
+  }
+  async function pollLobby() {
+    if (!mpLobbyId || !window.HGNet) return;
+    try { const lobby = await window.HGNet.mpLobby(mpLobbyId); renderLobby(lobby); }
+    catch (e) { closeLobby(false); return; }
+    if (mpLobbyId && !mpLaunched) mpPollTimer = setTimeout(pollLobby, 1500);
+  }
+  async function renderLobbyFriends() {
+    const el = document.getElementById("lobby-friends"); if (!el || !window.HGNet) return;
+    try {
+      const f = await window.HGNet.friends();
+      el.innerHTML = "";
+      if (!f.friends.length) { el.innerHTML = '<div class="friends-empty">Add friends first via 👥 Friends.</div>'; return; }
+      f.friends.forEach(function (u) {
+        const b = document.createElement("button"); b.textContent = "Invite " + (u.displayName || u.username);
+        b.addEventListener("click", async function () { try { await window.HGNet.mpInvite(mpLobbyId, u.id); b.textContent = "Invited ✓"; b.disabled = true; } catch (e) { b.textContent = e.message; } });
+        el.appendChild(b);
+      });
+    } catch (e) {}
+  }
+  function launchMpGame(lobby) {
+    // Every client uses the SAME seed + roster → the SAME map; you play your seat's
+    // civ, empty seats are AI. (Live turn-by-turn sync between humans is Phase 2b.)
+    newGame(false, { mapSize: lobby.mapSize, seed: lobby.seed, humanCiv: lobby.yourCiv, playerCount: lobby.maxSeats });
+    showCombatToast("🌐 Online game started — you are " + (CIV_LABEL[lobby.yourCiv] || lobby.yourCiv), "gate");
+  }
+  async function refreshInvites() {
+    const el = document.getElementById("mp-invites"); if (!el || !window.HGNet || !window.HGNet.isOnline()) return;
+    try {
+      const mine = await window.HGNet.mpMine();
+      el.innerHTML = "";
+      if (mine.lobby && mine.lobby.status === "waiting") {
+        const d = document.createElement("div"); d.className = "mp-invite-row";
+        d.innerHTML = "<span>You're in a lobby</span>";
+        const b = document.createElement("button"); b.textContent = "Reopen"; b.addEventListener("click", function () { openLobby(mine.lobby); }); d.appendChild(b);
+        el.appendChild(d);
+      }
+      (mine.invites || []).forEach(function (inv) {
+        const d = document.createElement("div"); d.className = "mp-invite-row";
+        d.innerHTML = "<span>🔒 " + inv.host + " invited you</span>";
+        const b = document.createElement("button"); b.textContent = "Join"; b.addEventListener("click", async function () { try { const lobby = await window.HGNet.mpJoin(inv.lobbyId); openLobby(lobby); } catch (e) { showCombatToast("⚠ " + e.message, "loss"); } }); d.appendChild(b);
+        el.appendChild(d);
+      });
+    } catch (e) {}
+  }
+  (function wireLobbyButtons() {
+    const q = document.getElementById("mp-quick-btn"), p = document.getElementById("mp-private-btn");
+    const startBtn = document.getElementById("lobby-start"), leaveBtn = document.getElementById("lobby-leave"), closeBtn = document.getElementById("lobby-close");
+    if (q) q.addEventListener("click", async function () { try { openLobby(await window.HGNet.mpQuick(mpSize())); } catch (e) { showCombatToast("⚠ " + e.message, "loss"); } });
+    if (p) p.addEventListener("click", async function () { try { openLobby(await window.HGNet.mpPrivate(mpSize(), 4)); } catch (e) { showCombatToast("⚠ " + e.message, "loss"); } });
+    if (startBtn) startBtn.addEventListener("click", async function () { try { renderLobby(await window.HGNet.mpStart(mpLobbyId)); } catch (e) { showCombatToast("⚠ " + e.message, "loss"); } });
+    if (leaveBtn) leaveBtn.addEventListener("click", function () { closeLobby(true); });
+    if (closeBtn) closeBtn.addEventListener("click", function () { closeLobby(true); });
   })();
 
   resumeOrNew();

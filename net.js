@@ -60,6 +60,16 @@
 
     adminUsers: async function () { return (await api("GET", "/api/admin/users")).users; },
     adminKick: async function (userId) { return api("POST", "/api/admin/kick", { userId: userId }); },
-    adminBan: async function (userId, banned) { return api("POST", "/api/admin/ban", { userId: userId, banned: banned }); }
+    adminBan: async function (userId, banned) { return api("POST", "/api/admin/ban", { userId: userId, banned: banned }); },
+
+    // Multiplayer lobby (Phase 2a)
+    mpQuick: async function (mapSize) { return (await api("POST", "/api/mp/quick", { mapSize: mapSize })).lobby; },
+    mpPrivate: async function (mapSize, maxSeats) { return (await api("POST", "/api/mp/private", { mapSize: mapSize, maxSeats: maxSeats })).lobby; },
+    mpInvite: async function (lobbyId, userId) { return api("POST", "/api/mp/invite", { lobbyId: lobbyId, userId: userId }); },
+    mpJoin: async function (lobbyId) { return (await api("POST", "/api/mp/join", { lobbyId: lobbyId })).lobby; },
+    mpLeave: async function (lobbyId) { return api("POST", "/api/mp/leave", { lobbyId: lobbyId }); },
+    mpStart: async function (lobbyId) { return (await api("POST", "/api/mp/start", { lobbyId: lobbyId })).lobby; },
+    mpLobby: async function (lobbyId) { return (await api("GET", "/api/mp/lobby?id=" + encodeURIComponent(lobbyId))).lobby; },
+    mpMine: async function () { return api("GET", "/api/mp/mine"); }
   };
 })();

@@ -3343,3 +3343,24 @@ body.fullscreen .status-panel {
 .admin-status .good { color: var(--food, #7ed957); }
 .admin-status .bad, .bad { color: var(--bad, #e0533d); }
 .good { color: var(--food, #7ed957); }
+
+/* ===== Multiplayer lobby (online) ===== */
+.menu-online h3 { margin: 6px 0; }
+.mp-invites { margin-top: 8px; }
+.mp-invite-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; margin: 4px 0; border-radius: 8px; background: rgba(126,217,87,0.08); border: 1px solid rgba(126,217,87,0.25); font-size: 0.85rem; }
+.mp-invite-row button { padding: 4px 12px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--gold), #caa23a); color: #2a2010; border: none; font-weight: 700; }
+.lobby-card { max-width: 460px; }
+.lobby-status { color: var(--gold); font-size: 0.9rem; margin: 4px 0 10px; }
+.lobby-seats { display: flex; flex-direction: column; gap: 6px; }
+.lobby-seat { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--line); }
+.lobby-seat.you { border-color: var(--gold); background: rgba(242,204,105,0.08); }
+.lobby-seat.empty { opacity: 0.6; border-style: dashed; }
+.lobby-seat .seat-civ { font-weight: 700; }
+.lobby-seat .seat-who { color: var(--muted, #9fb0c0); font-size: 0.85rem; }
+.lobby-invite { margin-top: 12px; }
+.lobby-invite h3 { margin: 6px 0; font-size: 0.9rem; color: var(--gold); }
+.lobby-friends { display: flex; flex-wrap: wrap; gap: 6px; }
+.lobby-friends button { padding: 5px 12px; border-radius: 6px; cursor: pointer; background: linear-gradient(135deg, var(--panel-2), var(--panel)); color: var(--parchment); border: 1px solid var(--line); font-size: 0.82rem; }
+.lobby-friends button:disabled { opacity: 0.6; }
+.lobby-actions { display: flex; gap: 8px; margin-top: 16px; }
+.lobby-actions .primary-btn, .lobby-actions .ghost-btn { flex: 1; }

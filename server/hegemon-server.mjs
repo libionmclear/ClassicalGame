@@ -287,6 +287,129 @@ route("POST /api/admin/ban", async ({ res, user, body }) => {
   send(res, 200, { ok: true, banned: !!banned });
 });
 
+// ---------------------------------------------------------------- multiplayer lobbies (Phase 2a)
+// In-memory matchmaking. A QUICK match waits up to 60s for real players, then
+// fills the empty seats with AI. A PRIVATE match is invite-only (friends) and the
+// host starts it. Seat i is fixed to civ CIVS[i], so every client generates the
+// SAME map from the shared seed. (Live turn-by-turn sync is Phase 2b.)
+const CIVS = ["rome", "greece", "egypt", "carthage", "gaul", "parthia", "britons", "kush"];
+const QUICK_WAIT_MS = 60 * 1000;
+const lobbies = new Map();
+let lobbySeq = 1;
+
+function makeLobby(mode, host, mapSize, maxSeats) {
+  const id = "L" + lobbySeq++ + "-" + crypto.randomBytes(3).toString("hex");
+  const seats = [];
+  for (let i = 0; i < maxSeats; i += 1) seats.push({ userId: null, name: null, civ: CIVS[i % CIVS.length], isAI: false });
+  const lobby = { id, mode, hostId: host.id, status: "waiting", mapSize: mapSize || "small", maxSeats, seats, invited: [], createdAt: now(), deadline: mode === "quick" ? now() + QUICK_WAIT_MS : 0, seed: null };
+  lobbies.set(id, lobby);
+  return lobby;
+}
+function lobbyOfUser(userId) { for (const l of lobbies.values()) if (l.seats.some((s) => s.userId === userId)) return l; return null; }
+function seatUser(lobby, user) {
+  if (lobby.seats.some((s) => s.userId === user.id)) return true;
+  const seat = lobby.seats.find((s) => s.userId === null && !s.isAI);
+  if (!seat) return false;
+  seat.userId = user.id; seat.name = user.display_name || user.username;
+  return true;
+}
+function leaveLobby(lobby, userId) {
+  const seat = lobby.seats.find((s) => s.userId === userId);
+  if (seat) { seat.userId = null; seat.name = null; }
+  const humans = lobby.seats.filter((s) => s.userId !== null);
+  if (lobby.status === "waiting") {
+    if (!humans.length) { lobbies.delete(lobby.id); return; }
+    if (lobby.hostId === userId) lobby.hostId = humans[0].userId; // reassign host
+  }
+}
+function startLobby(lobby) {
+  if (lobby.status !== "waiting") return;
+  for (const s of lobby.seats) if (s.userId === null) { s.isAI = true; s.name = "AI"; }
+  lobby.seed = "mp-" + lobby.id;
+  lobby.status = "active";
+}
+function maybeAutoStart(lobby) {
+  if (!lobby || lobby.status !== "waiting") return;
+  const full = lobby.seats.every((s) => s.userId !== null);
+  if (lobby.mode === "quick" && (now() >= lobby.deadline || full)) startLobby(lobby);
+  else if (full) startLobby(lobby); // a private lobby that fills up starts too
+}
+function sanitizeLobby(lobby, userId) {
+  maybeAutoStart(lobby);
+  return {
+    id: lobby.id, mode: lobby.mode, status: lobby.status, mapSize: lobby.mapSize, maxSeats: lobby.maxSeats,
+    hostId: lobby.hostId, youAreHost: lobby.hostId === userId, seed: lobby.seed,
+    timeLeft: lobby.mode === "quick" && lobby.status === "waiting" ? Math.max(0, Math.round((lobby.deadline - now()) / 1000)) : 0,
+    seats: lobby.seats.map((s) => ({ name: s.name, civ: s.civ, isAI: s.isAI, filled: s.userId !== null || s.isAI, you: s.userId === userId })),
+    yourCiv: (lobby.seats.find((s) => s.userId === userId) || {}).civ || null,
+  };
+}
+
+route("POST /api/mp/quick", async ({ res, user, body }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const cur = lobbyOfUser(user.id); if (cur && cur.status === "waiting") leaveLobby(cur, user.id);
+  let lobby = null;
+  for (const l of lobbies.values()) { maybeAutoStart(l); if (l.mode === "quick" && l.status === "waiting" && l.seats.some((s) => s.userId === null && !s.isAI)) { lobby = l; break; } }
+  if (!lobby) lobby = makeLobby("quick", user, body.mapSize || "small", 4);
+  seatUser(lobby, user);
+  send(res, 200, { lobby: sanitizeLobby(lobby, user.id) });
+});
+route("POST /api/mp/private", async ({ res, user, body }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const cur = lobbyOfUser(user.id); if (cur && cur.status === "waiting") leaveLobby(cur, user.id);
+  const lobby = makeLobby("private", user, body.mapSize || "small", Math.max(2, Math.min(8, Number(body.maxSeats) || 4)));
+  seatUser(lobby, user);
+  send(res, 200, { lobby: sanitizeLobby(lobby, user.id) });
+});
+route("POST /api/mp/invite", async ({ res, user, body }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const lobby = lobbies.get(body.lobbyId); if (!lobby) return send(res, 404, { error: "Lobby not found." });
+  if (lobby.hostId !== user.id) return send(res, 403, { error: "Only the host can invite." });
+  const friendId = Number(body.userId);
+  if (friendState(user.id, friendId) !== "friends") return send(res, 400, { error: "You can only invite friends." });
+  if (!lobby.invited.includes(friendId)) lobby.invited.push(friendId);
+  send(res, 200, { ok: true });
+});
+route("POST /api/mp/join", async ({ res, user, body }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const lobby = lobbies.get(body.lobbyId); if (!lobby) return send(res, 404, { error: "Lobby not found." });
+  maybeAutoStart(lobby);
+  if (lobby.status !== "waiting") return send(res, 400, { error: "That game already started." });
+  if (lobby.mode === "private" && !lobby.invited.includes(user.id) && lobby.hostId !== user.id) return send(res, 403, { error: "You weren't invited." });
+  const cur = lobbyOfUser(user.id); if (cur && cur.id !== lobby.id && cur.status === "waiting") leaveLobby(cur, user.id);
+  if (!seatUser(lobby, user)) return send(res, 400, { error: "Lobby is full." });
+  send(res, 200, { lobby: sanitizeLobby(lobby, user.id) });
+});
+route("POST /api/mp/leave", async ({ res, user, body }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const lobby = lobbies.get(body.lobbyId); if (lobby) leaveLobby(lobby, user.id);
+  send(res, 200, { ok: true });
+});
+route("POST /api/mp/start", async ({ res, user, body }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const lobby = lobbies.get(body.lobbyId); if (!lobby) return send(res, 404, { error: "Lobby not found." });
+  if (lobby.hostId !== user.id) return send(res, 403, { error: "Only the host can start." });
+  startLobby(lobby);
+  send(res, 200, { lobby: sanitizeLobby(lobby, user.id) });
+});
+route("GET /api/mp/lobby", async ({ res, user, query }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const lobby = lobbies.get(query.id); if (!lobby) return send(res, 404, { error: "Lobby not found." });
+  send(res, 200, { lobby: sanitizeLobby(lobby, user.id) });
+});
+route("GET /api/mp/mine", async ({ res, user }) => {
+  if (!user) return send(res, 401, { error: "Not signed in." });
+  const cur = lobbyOfUser(user.id);
+  const invites = [];
+  for (const l of lobbies.values()) {
+    if (l.status === "waiting" && l.mode === "private" && l.invited.includes(user.id) && !l.seats.some((s) => s.userId === user.id)) {
+      const host = userById(l.hostId);
+      invites.push({ lobbyId: l.id, host: host ? (host.display_name || host.username) : "?", mapSize: l.mapSize });
+    }
+  }
+  send(res, 200, { lobby: cur ? sanitizeLobby(cur, user.id) : null, invites });
+});
+
 // ---------------------------------------------------------------- server
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", "http://x");
