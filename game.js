@@ -5562,5 +5562,35 @@
     if (closeBtn) closeBtn.addEventListener("click", function () { closeLobby(true); });
   })();
 
+  // Test hook (test/browser-smoke.mjs). Exposes read-only game state and a
+  // board-agnostic tile click, so UI smoke tests work on EITHER the 3D or 2D board
+  // without depending on canvas pixel-picking or DOM tile classes. Harmless in prod
+  // (read access + the same actions the UI already allows on the human's turn).
+  window.HGTest = {
+    ready: function () { return !!state; },
+    use3d: function () { return !!USE_3D; },
+    snapshot: function () {
+      if (!state) return null;
+      var me = HUMAN_ID;
+      var units = Object.values(state.map.units).filter(function (u) { return u.ownerId === me; });
+      var cities = Object.values(state.map.cities).filter(function (c) { return c.ownerId === me; });
+      var cap = cities.filter(function (c) { return c.isCapital; })[0] || cities[0] || null;
+      var u0 = units.filter(function (u) { return !u.garrison; })[0] || units[0] || null;
+      return {
+        turn: state.turn,
+        current: state.players[state.currentPlayerIndex].id,
+        humanId: me,
+        myUnits: units.length,
+        myCities: cities.length,
+        selectedUnitId: selectedUnitId,
+        selectedCityId: selectedCityId,
+        firstUnit: u0 ? { id: u0.id, q: u0.position.q, r: u0.position.r } : null,
+        capital: cap ? { id: cap.id, q: cap.position.q, r: cap.position.r } : null,
+      };
+    },
+    clickTile: function (q, r) { onTileClick(q, r); },
+    endTurn: function () { if (isHumanTurn()) apply({ type: "END_TURN", playerId: HUMAN_ID }); },
+  };
+
   resumeOrNew();
 })();

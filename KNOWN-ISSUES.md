@@ -34,8 +34,12 @@ live in [ROADMAP.md](ROADMAP.md); this file is for what's imperfect *today*.
   determinism); solo players can opt to always open the round.
 - **3D camera inclination is a fixed default (~38°).** You can drag to change it,
   but there's no in-game control/preset. Default may not suit everyone.
-- **Headless city-selection is awkward to test** (the capital starts unit-stacked,
-  so scripts must clear it first) — verification friction, not a game bug.
+- ~~**Headless UI testing is awkward**~~ — FIXED: `game.js` exposes a tiny test hook
+  `window.HGTest` (`snapshot()`, board-agnostic `clickTile(q,r)`, `endTurn()`), and
+  `test/browser-smoke.mjs` now drives the **default 3D board** through it against the
+  served backend (signed in as admin) — no canvas pixel-picking or 2D DOM classes.
+  Verifies boot / render / unit-selection / turn-loop; benign asset 404s (optional
+  `.glb` models, sprite-less civs) are reported but don't fail. `npm run test:browser`.
 
 ## Graphics (the biggest gap — see ROADMAP + graphics plan)
 - **Units are flat billboard sprites** (placeholder). Plan: animated low-poly glTF

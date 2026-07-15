@@ -85,11 +85,17 @@ re‑renders, runs AI turns, and saves.
 - `npm run typecheck` (board3d/engine are TS) + `node -e "new Function(fs.read('game.js'))"`
   to syntax‑check `game.js`/`audio.js` (they're plain JS, not type‑checked).
 - `npm test` for engine rules.
-- **Playwright + `channel:"msedge"`** with WebGL flags
-  `--use-gl=angle --use-angle=swiftshader --ignore-gpu-blocklist`, served from an
-  inline Node http server over `public/`, logging in as **admin / 1234567**, to
-  smoke‑test the real client and take screenshots. Temp scripts live in the
-  session scratchpad or a throwaway `_verify.mjs` (deleted after).
+- **`npm run test:browser`** — the reliable UI smoke (`test/browser-smoke.mjs`):
+  Playwright + `channel:"msedge"`, spawns the real backend, signs in as **admin /
+  1234567**, and drives the **default 3D board** through the game's test hook
+  **`window.HGTest`** (`snapshot()`, board‑agnostic `clickTile(q,r)`, `endTurn()`) —
+  so it checks boot/render/selection/turn‑loop without canvas pixel‑picking or the
+  (opt‑in, flaky headless) 2D DOM tiles. It separates real JS errors (fail) from
+  benign asset 404s (optional `.glb`/sprite‑less civs — reported, not a failure).
+- One‑off deeper checks: **Playwright + `channel:"msedge"`** with WebGL flags
+  `--use-gl=angle --use-angle=swiftshader --ignore-gpu-blocklist`, logging in as
+  admin, to screenshot the real client. Temp scripts live in the session scratchpad
+  or a throwaway `_verify.mjs` (deleted after).
 
 ---
 
