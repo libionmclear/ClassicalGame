@@ -67,7 +67,7 @@ re‑renders, runs AI turns, and saves.
 | Task | Command |
 |---|---|
 | Type‑check | `npm run typecheck` (`tsc --noEmit`) |
-| Engine + game tests | `npm test` (node's test runner via `tsx`) — **261 tests, 26 suites** |
+| Engine + game tests | `npm test` (node's test runner via `tsx`) — **265 tests, 26 suites** |
 | Build the web bundle | `npm run build:web` → wipes/rebuilds **`public/`** (gitignored) |
 | Run with the backend | `npm run server` (builds `public/`, then serves it **and** the `/api` on `http://localhost:8787`) — enables accounts, friends, admin, and multiplayer lobbies. `serve:only` skips the rebuild. |
 | Deploy | Vercel runs `vercel-build` → `build:web`; serves `public/` **statically** (no backend — the client auto‑falls back to localStorage accounts; see §5). |

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createInitialGameState, getVictoryStatus, applyAction } from "../src/engine";
-import { chooseAiAction, runAiTurn, aggression, districtAction, upgradeAction } from "../src/engine/ai";
+import { chooseAiAction, runAiTurn, aggression, districtAction, upgradeAction, rushAction } from "../src/engine/ai";
 import { loadScenario } from "../src/engine/scenarios";
 import { neighborsOf, keyOf } from "../src/engine/hex";
 import type { CreateGameConfig, GameState } from "../src/engine/types";
@@ -26,6 +26,46 @@ function makeState(
     map: { width: 8, height: 8, regions: ["core"], tiles, units, cities }
   });
 }
+
+test("rushAction buys a defender for a threatened, undefended city", () => {
+  const s = makeState(
+    { e: { id: "e", type: "swordsman", ownerId: "p2", position: { q: 2, r: 0 } } }, // enemy 2 tiles off
+    { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 3, hp: 30, maxHp: 30, queue: ["warrior"] } }
+  );
+  s.playersById["p1"]!.gold = 300;
+  const action = rushAction(s, s.playersById["p1"]!);
+  assert.ok(action && action.type === "RUSH_PRODUCTION" && action.cityId === "c1", String(action));
+});
+
+test("rushAction stays its hand when the city is not under threat", () => {
+  const s = makeState(
+    { e: { id: "e", type: "swordsman", ownerId: "p2", position: { q: 7, r: 7 } } }, // far away
+    { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 3, hp: 30, maxHp: 30, queue: ["warrior"] } }
+  );
+  s.playersById["p1"]!.gold = 300;
+  assert.equal(rushAction(s, s.playersById["p1"]!), null);
+});
+
+test("rushAction stays its hand when the city already has a defender", () => {
+  const s = makeState(
+    {
+      e: { id: "e", type: "swordsman", ownerId: "p2", position: { q: 2, r: 0 } },
+      d: { id: "d", type: "warrior", ownerId: "p1", position: { q: 1, r: 0 } } // a defender beside the city
+    },
+    { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 3, hp: 30, maxHp: 30, queue: ["warrior"] } }
+  );
+  s.playersById["p1"]!.gold = 300;
+  assert.equal(rushAction(s, s.playersById["p1"]!), null);
+});
+
+test("rushAction won't rush a non-defender at the queue front", () => {
+  const s = makeState(
+    { e: { id: "e", type: "swordsman", ownerId: "p2", position: { q: 2, r: 0 } } },
+    { c1: { id: "c1", ownerId: "p1", position: { q: 0, r: 0 }, population: 3, hp: 30, maxHp: 30, queue: ["granary"] } }
+  );
+  s.playersById["p1"]!.gold = 300;
+  assert.equal(rushAction(s, s.playersById["p1"]!), null);
+});
 
 test("upgradeAction turns a veteran into the civ elite once the tech is in hand", () => {
   const s = makeState(

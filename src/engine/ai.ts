@@ -1,5 +1,5 @@
 import { TECHS, UNIT_BUILD_COSTS, UNITS, BUILDINGS, IMPROVEMENTS } from "./data";
-import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv, computeCityStability, computePlayerIncome, upgradeTargetFor, upgradeCost } from "./index";
+import { applyAction, computeCombatPreview, researchCost, canResearch, isCoastalCity, claimingCity, isEmbarked, playerControlsCiv, computeCityStability, computePlayerIncome, upgradeTargetFor, upgradeCost, rushProductionCost } from "./index";
 import { districtSlots, districtForbidden } from "./districts";
 import { canProposeAgreement, aiAcceptsProposal, personalityOf, relationBand, getRelation, isVassal, canDemandVassalage, militaryStrength, isAtWar } from "./diplomacy";
 import { unitNear, explorerNear, befriendCostFor } from "./peoples";
@@ -623,6 +623,32 @@ function diplomacyAction(state: GameState, player: Player): GameAction | null {
   return null;
 }
 
+// Rush-buy the front of a threatened city's queue when it has no defender of its
+// own — an assault catching a city empty-handed is the main runaway-game driver,
+// so spending hoarded gold to muster a defender NOW is worth it. Only a land
+// combat unit at the front (a real defender) is worth rushing.
+export function rushAction(state: GameState, player: Player): GameAction | null {
+  if (player.gold < 40) return null; // keep a working reserve
+  for (const cityId of player.cityIds) {
+    const city = state.map.cities[cityId];
+    if (!city || !city.queue || city.queue.length === 0) continue;
+    const front = city.queue[0];
+    const def = UNITS[front];
+    if (!def || (def.attack ?? 0) <= 0 || def.domain !== "land") continue; // must be a defender
+    const threatened = Object.values(state.map.units).some(
+      (u) => u.ownerId !== player.id && isMilitary(u) && distance(u.position, city.position) <= 3
+    );
+    if (!threatened) continue;
+    const hasDefender = unitsOf(state, player).some((u) => isMilitary(u) && distance(u.position, city.position) <= 1);
+    if (hasDefender) continue;
+    const rush = rushProductionCost(state, cityId);
+    if (!rush || rush.goldCost <= 0) continue;
+    if (player.gold < rush.goldCost + 20) continue; // keep a reserve after rushing
+    return { type: "RUSH_PRODUCTION", playerId: player.id, cityId };
+  }
+  return null;
+}
+
 // Upgrade veterans into the people's signature elite once the tech is in hand (a
 // Roman Swordsman → Legionary, etc.). The AI used to field elites only when it
 // built them fresh, leaving units trained before the tech stuck at the base type.
@@ -751,6 +777,7 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
     () => attackAction(state, player),
     () => foundCityAction(state, player),
     () => villageAction(state, player),      // §10: absorb/court/seize a village beside a unit
+    () => rushAction(state, player),         // rush a defender in a threatened, undefended city
     () => buildAction(state, player),
     () => buildingAction(state, player),
     () => upgradeAction(state, player),      // turn veterans into the civ elite with spare gold
