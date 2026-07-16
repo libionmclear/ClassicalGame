@@ -1628,6 +1628,15 @@
       if (mp && action.playerId === mp.myCiv) {
         mpRelay(action, action.type === "END_TURN" ? mpFingerprint(state) : null);
       }
+      // Ships that sailed too far past the world's edge never came home (§ open sea).
+      if (state.lostAtSea && state.lostAtSea.length) {
+        state.lostAtSea.forEach(function (l) {
+          if (l.playerId !== HUMAN_ID) return;
+          var nm = unitName(l.type) || l.type;
+          showCombatToast("🌊 Your " + nm + " was lost at sea — it sailed too far beyond the known world.", "loss");
+          logAction("🌊 A " + nm + " sailed past the edge of the map and was lost at sea.");
+        });
+      }
       // Surface a Minor-People reaction (comply/threaten) the moment it resolves,
       // before the AI takes its turn and overwrites the transient outcome.
       if (state.lastReaction && state.lastReaction.playerId === HUMAN_ID) {
@@ -2217,7 +2226,10 @@
       const wx = v === 2 && state.weather && state.weather.current ? (state.weather.current[tile.region] || "clear") : "clear";
       const ruinHere = v > 0 && state.map.ruins && state.map.ruins[key] && !state.map.ruins[key].excavated ? 1 : 0;
       const vilHere = v > 0 && state.map.villages && state.map.villages[key] ? state.map.villages[key] : null;
-      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null, wx: wx, ruin: ruinHere, village: vilHere ? vilHere.disposition : null });
+      // `open` = the world-ocean belt beyond the map's border. Flagged so the board
+      // can render it as sea but keep it OUT of the framing (or the camera would zoom
+      // out to fit the whole ocean instead of the playable map).
+      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null, wx: wx, ruin: ruinHere, village: vilHere ? vilHere.disposition : null, open: tile.open || 0 });
       if (owner && v > 0) {
         for (const d of AXIAL_DIRS) {
           const nk = q + d[0] + "," + (r + d[1]);

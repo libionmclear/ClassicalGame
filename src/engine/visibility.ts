@@ -59,6 +59,14 @@ export function computeVisibility(state: GameState, playerId: string): Visibilit
   }
   state.discovered[playerId] = [...discovered];
 
+  // The OPEN OCEAN ringing the board is always in view: there is nothing out there to
+  // hide, a fleet has to be able to steer into it, and fogging it would ring the map
+  // with blank tiles. Added to `visible` only — writing thousands of empty ocean keys
+  // into `discovered` would bloat every save for nothing.
+  for (const [key, tile] of Object.entries(state.map.tiles)) {
+    if (tile.open) visible.add(key);
+  }
+
   return {
     visibleTiles: [...visible],
     discoveredTiles: [...discovered]

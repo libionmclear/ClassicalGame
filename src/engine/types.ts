@@ -29,6 +29,10 @@ export interface Tile {
   road?: boolean;
   /** A strategic resource deposit (grain, iron, timber, …) — bonus yields when worked. */
   resource?: string;
+  /** Open ocean OUTSIDE the playable map: how many hexes beyond the border this tile
+   *  lies (1..OPEN_SEA_MARGIN). Absent on every playable tile. Sailable, but a ship
+   *  that reaches LOST_AT_SEA_DIST is lost; it never counts as a city's coast. */
+  open?: number;
 }
 
 export interface TerrainRule {
@@ -243,6 +247,10 @@ export interface GameState {
    *  (default true). Off = linear order (seat 0 always first) — the human, seated
    *  first, then always takes the opening turn. */
   rotateInitiative?: boolean;
+  /** Transient: units swallowed by the open ocean on the turn that just ended
+   *  (pushed too far past the map's border). The client reports these, then it's
+   *  overwritten on the next end-turn. */
+  lostAtSea?: Array<{ playerId: string; unitId: string; type: string }>;
   /** Per-player chosen general/Legend, feeding diplomacy rolls (§10.3 / cards). Keyed by player id. */
   leaders?: Record<string, { id: string; name?: string; role: string; rarity: string }>;
   /** Civs each player has made first contact with (via an Explorer envoy or borders). Keyed by player id → met player ids. */

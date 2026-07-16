@@ -1089,7 +1089,10 @@ export function isCoastalCity(state: GameState, cityId: string): boolean {
   if (!city) return false;
   return neighborsOf(city.position).some((n) => {
     const tile = state.map.tiles[keyOf(n)];
-    return tile && (tile.terrain === "coast" || tile.terrain === "sea");
+    // The open ocean ringing the world is NOT a city's coast — a town on the map's
+    // edge shouldn't gain a harbour just because the belt starts next door.
+    if (!tile || tile.open) return false;
+    return tile.terrain === "coast" || tile.terrain === "sea";
   });
 }
 
@@ -1578,6 +1581,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
   }
 
   applyDiplomacyIncome(state, endingPlayer); // trade-pact gold + tribute transfer
+  loseShipsAtSea(state, endingPlayer);       // the open ocean swallows anyone who sails too far
   excavateRuins(state, endingPlayer.id);     // §10.2: units ending on a ruin dig it up
   contactVillages(state, endingPlayer.id);   // §10.3: an Explorer warms a wary village
   contactCivs(state, endingPlayer.id);       // §10.3: an Explorer envoy makes first contact with civs
@@ -1848,9 +1852,64 @@ function applyBuildUnit(state: GameState, action: BuildUnitAction): void {
   enqueueProduction(city, action.unitType);
 }
 
+// ---- The open ocean beyond the map's edge -----------------------------------
+// The world does not stop at the border: a belt of open ocean rings the playable
+// board so a fleet can genuinely sail "off the map". It is real, sailable DEEP sea
+// (so it still needs open-sea-sailing), but a ship that pushes LOST_AT_SEA_DIST
+// hexes past the border never finds its way home (see loseShipsAtSea). The belt is
+// deliberately NOT part of map.width/height, so costScale — which paces research and
+// building off the PLAYABLE map's area — is unchanged by it.
+export const OPEN_SEA_MARGIN = 8;   // rings of ocean ringing the board
+export const LOST_AT_SEA_DIST = 7;  // push this far past the border and you're lost
+
+/** Hexes this position lies BEYOND the playable border (0 = on the map proper). */
+export function openSeaDistance(state: GameState, pos: Coord): number {
+  return state.map.tiles[keyOf(pos)]?.open ?? 0;
+}
+
+// Anyone who ends a turn LOST_AT_SEA_DIST hexes or more beyond the border is lost —
+// ship, cargo and all. Reported on state.lostAtSea so the client can tell the story.
+function loseShipsAtSea(state: GameState, player: Player): void {
+  state.lostAtSea = [];
+  for (const unitId of [...player.unitIds]) {
+    const unit = state.map.units[unitId];
+    if (!unit) continue;
+    if (openSeaDistance(state, unit.position) < LOST_AT_SEA_DIST) continue;
+    delete state.map.units[unitId];
+    player.unitIds = player.unitIds.filter((id) => id !== unitId);
+    state.lostAtSea.push({ playerId: player.id, unitId, type: unit.type });
+  }
+  if (state.lostAtSea.length) syncOwnershipIndexes(state);
+}
+
+// Grow the belt OUTWARD from the map's actual outline, one ring at a time, tagging
+// each tile with how far past the border it lies. Flooding from the real shape (not a
+// width/height rectangle) means this works for any layout — generated offset maps,
+// hand-drawn scenarios, or the axial test maps — and `open` records a true hex
+// distance, so nothing downstream has to guess where the border was.
+function addOpenSeaMargin(map: GameMap): void {
+  const region = map.regions?.[0] ?? "core";
+  const seen = new Set(Object.keys(map.tiles));
+  let frontier: Coord[] = Object.keys(map.tiles).map(parseKey);
+  for (let ring = 1; ring <= OPEN_SEA_MARGIN; ring += 1) {
+    const next: Coord[] = [];
+    for (const c of frontier) {
+      for (const n of neighborsOf(c)) {
+        const k = keyOf(n);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        map.tiles[k] = { terrain: "sea", region, open: ring };
+        next.push(n);
+      }
+    }
+    frontier = next;
+  }
+}
+
 export function createInitialGameState(config: CreateGameConfig = {}): GameState {
   const players = normalizePlayers(config.players);
   const map = normalizeMap(config.map);
+  addOpenSeaMargin(map); // sailable ocean around the board (see above)
 
   const state: GameState = {
     version: 1,

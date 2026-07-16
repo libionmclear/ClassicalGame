@@ -69,7 +69,7 @@ const topOf = (t: string): number => (WATER.has(t) ? SEA_TOP : (TERRAIN_ELEV[t] 
 
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
-export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; ruin?: number; village?: string | null; }
+export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; ruin?: number; village?: string | null; /** Hexes past the map's border (the open-ocean belt); 0/absent on the playable map. */ open?: number; }
 export interface SpriteView { civ: string; kind: "unit" | "city"; name: string; q: number; r: number; id?: string; badge?: string; color?: string; t?: string; form?: string; utype?: string; pop?: number; tier?: number; hpFrac?: number; garrison?: number; gForm?: string | null; gColor?: string; }
 export interface BorderView { q: number; r: number; nq: number; nr: number; color: string; }
 // A district built on a hex adjacent to a city (Cities v3 §5). t = the hex's
@@ -1407,8 +1407,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const key = tv.q + "," + tv.r;
       indexByKey[key] = i;
       keyByIndex.push(key);
-      minX = Math.min(minX, w.x); maxX = Math.max(maxX, w.x);
-      minZ = Math.min(minZ, w.z); maxZ = Math.max(maxZ, w.z);
+      // Frame (and clamp panning to) the PLAYABLE map only — the open-ocean belt
+      // around it would otherwise drag the camera out to fit thousands of empty hexes.
+      if (!tv.open) {
+        minX = Math.min(minX, w.x); maxX = Math.max(maxX, w.x);
+        minZ = Math.min(minZ, w.z); maxZ = Math.max(maxZ, w.z);
+      }
     });
     mesh.instanceMatrix.needsUpdate = true;
     wmesh.instanceMatrix.needsUpdate = true;
