@@ -48,12 +48,22 @@ live in [ROADMAP.md](ROADMAP.md); this file is for what's imperfect *today*.
   Verifies boot / render / unit-selection / turn-loop; benign asset 404s (optional
   `.glb` models, sprite-less civs) are reported but don't fail. `npm run test:browser`.
 
-## Graphics (the biggest gap — see ROADMAP + graphics plan)
-- **Units are flat billboard sprites** (placeholder). Plan: animated low-poly glTF
-  units + stylized hex terrain + post-processing (AO/HDRI/water). Deferred.
-- **Carthage & Parthia have no sprite art** — they render as coloured markers.
-- **No animation** (unit movement / combat), **no roads/rivers in 3D**, **no
-  terrain textures** on tile tops.
+## Graphics (see ROADMAP + graphics plan)
+- ~~**No post-processing / textures / flat water**~~ — DONE (procedural, no assets):
+  a full post-FX pipeline — **GTAO ambient occlusion** (contact shadows) + **SMAA**
+  antialiasing + existing bloom + ACES; **PMREM env reflections** (marble/bronze/water
+  catch the sky); **procedural terrain normal map** (tile-top micro-relief); and
+  **animated water** (a tileable ripple normal map scrolled each frame + stronger
+  reflection). Softer/larger sun shadows too. All gated behind a **Low/High graphics
+  toggle** (topbar **✨/▫**, localStorage `hegemon_gfx`) so weak GPUs drop the costly
+  passes. Verified via the UI smoke (0 errors) + HIGH/LOW screenshots. `board3d.ts`.
+- **Units/cities are still procedural low-poly geometry**, not authored glTF models.
+  The `.glb` loader path exists (`assets/models/*.glb`); animated glTF units are the
+  remaining leap and need real 3D assets (being sourced separately).
+- **Carthage & Parthia have no 2D sprite art** — they render as coloured markers on
+  the 2D board (the 3D board builds them procedurally).
+- **No skeletal unit animation** (movement glides + combat strikes exist); **no
+  roads/rivers texturing** beyond the procedural ribbons.
 
 ## Economy / features (deferred)
 - **Resources phase 3 not built:** no spendable stockpile (wood/ore/stone

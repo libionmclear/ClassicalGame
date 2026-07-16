@@ -5099,6 +5099,23 @@
     });
   })();
 
+  // Graphics quality toggle (3D board only): High = ambient occlusion + reflections +
+  // procedural terrain/water textures + animated water; Low drops the costly passes
+  // for weak GPUs / phones. Persists + reloads to rebuild the pipeline cleanly.
+  (function wireGfxToggle() {
+    const btn = document.getElementById("gfx-toggle-btn");
+    if (!btn) return;
+    if (!USE_3D) { btn.classList.add("hidden"); return; }
+    btn.classList.remove("hidden");
+    const high = (function () { try { return (window.localStorage.getItem("hegemon_gfx") || "high") !== "low"; } catch (e) { return true; } })();
+    btn.textContent = high ? "✨ High" : "▫ Low";
+    btn.title = high ? "Graphics: High — tap for Low (faster on weak GPUs)" : "Graphics: Low — tap for High (full effects)";
+    btn.addEventListener("click", function () {
+      try { window.localStorage.setItem("hegemon_gfx", high ? "low" : "high"); } catch (e) {}
+      location.reload();
+    });
+  })();
+
   let resizeTimer = null;
   window.addEventListener("resize", function () {
     if (board3d) board3d.resize();

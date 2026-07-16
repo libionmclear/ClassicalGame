@@ -7,9 +7,13 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
+import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
 import { createInitialGameState } from "../engine/index";
 import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
@@ -779,6 +783,49 @@ function rnd(q: number, r: number, i: number): number {
   return s - Math.floor(s);
 }
 
+// A perfectly TILEABLE tangent-space normal map from layered simplex noise (sampled
+// on a torus via noise4d so the edges wrap seamlessly). Procedural, no image assets —
+// used for terrain micro-relief and the water surface. `octaves` = [frequency, amp].
+function makeNoiseNormalMap(size: number, octaves: Array<[number, number]>, strength: number): THREE.CanvasTexture {
+  const simplex = new SimplexNoise();
+  const TAU = Math.PI * 2;
+  const h = new Float32Array(size * size);
+  for (let y = 0; y < size; y += 1) {
+    const a2 = (y / size) * TAU;
+    for (let x = 0; x < size; x += 1) {
+      const a1 = (x / size) * TAU;
+      let v = 0, amp = 0;
+      for (const [f, a] of octaves) {
+        v += a * simplex.noise4d(Math.cos(a1) * f, Math.sin(a1) * f, Math.cos(a2) * f, Math.sin(a2) * f);
+        amp += a;
+      }
+      h[y * size + x] = v / amp;
+    }
+  }
+  const at = (x: number, y: number) => h[(((y % size) + size) % size) * size + (((x % size) + size) % size)];
+  const cv = document.createElement("canvas"); cv.width = cv.height = size;
+  const ctx = cv.getContext("2d")!;
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const nx = -dx, ny = -dy, nz = 1;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      const i = (y * size + x) * 4;
+      img.data[i] = ((nx / len) * 0.5 + 0.5) * 255;
+      img.data[i + 1] = ((ny / len) * 0.5 + 0.5) * 255;
+      img.data[i + 2] = ((nz / len) * 0.5 + 0.5) * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -789,6 +836,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // at the end of the post-processing chain).
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
+
+  // Graphics quality (localStorage "hegemon_gfx": "high" default | "low"). HIGH runs
+  // the full pipeline (ambient occlusion + antialiasing + env reflections + procedural
+  // terrain/water textures); LOW drops the costly bits so it stays smooth on weak GPUs.
+  const GFX = (() => { try { return window.localStorage.getItem("hegemon_gfx") || "high"; } catch { return "high"; } })();
+  const HIGH = GFX !== "low";
 
   const scene = new THREE.Scene();
   // A sky-dome gradient: light blue overhead fading to a deep-blue horizon (the
@@ -883,8 +936,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const sun = new THREE.DirectionalLight(0xfff0d4, 1.15);
   sun.position.set(-26, 44, 20);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(HIGH ? 4096 : 2048, HIGH ? 4096 : 2048); // sharper on HIGH
   Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 1, far: 220 });
+  // Soften the PCF shadow edge and lift the acne/peter-panning off contact points.
+  sun.shadow.radius = HIGH ? 3.5 : 2;
+  sun.shadow.bias = -0.00035;
+  sun.shadow.normalBias = 0.025;
   scene.add(sun, sun.target);
 
   const seaMesh = new THREE.Mesh(
@@ -899,6 +956,19 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   seaMesh.receiveShadow = true;
   scene.add(seaMesh);
   const seaMat = seaMesh.material as THREE.MeshStandardMaterial;
+  // Living water: a tileable ripple normal map (scrolled each frame in the loop) plus
+  // lower roughness + stronger env reflection so the sea catches the sky instead of
+  // reading as a dead flat slab. HIGH only.
+  let waterNormal: THREE.CanvasTexture | null = null;
+  if (HIGH) {
+    waterNormal = makeNoiseNormalMap(256, [[3, 1], [7, 0.55], [15, 0.28]], 1.7);
+    waterNormal.repeat.set(220, 220);
+    seaMat.normalMap = waterNormal;
+    seaMat.normalScale = new THREE.Vector2(0.32, 0.32);
+    seaMat.roughness = 0.22;
+    seaMat.metalness = 0.1;
+    seaMat.envMapIntensity = 1.4;
+  }
 
   // ---- Sky weather: a soft radial texture reused for the sun disc and clouds ---
   function radialTexture(r: number, g: number, b: number, softness: number): THREE.CanvasTexture {
@@ -1012,6 +1082,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // nest edge-to-edge (a hair under, plus a slight base taper, for clean seams).
   const hexGeo = new THREE.CylinderGeometry(SIZE * 0.998, SIZE * 0.95, 1, 6);
   const hexMat = new THREE.MeshStandardMaterial({ roughness: 0.94, metalness: 0.02, flatShading: true });
+  // Micro-relief on the land: a tileable procedural normal map breaks up the flat
+  // colour so tile tops read as ground, not painted card. Kept subtle (low scale).
+  if (HIGH) {
+    hexMat.normalMap = makeNoiseNormalMap(256, [[4, 1], [9, 0.5], [18, 0.25]], 2.4);
+    hexMat.normalScale = new THREE.Vector2(0.5, 0.5);
+  }
 
   let tileMesh: THREE.InstancedMesh | null = null;
   let indexByKey: Record<string, number> = {};
@@ -1668,12 +1744,32 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     pickFn(id >= 0 ? keyByIndex[id] : null);
   });
 
-  // Post-processing chain: render -> subtle bloom (only the brightest pixels
-  // bleed) -> tone-mapped output. Adds sheen and depth without new assets.
+  // A neutral studio environment (PMREM) so every PBR material picks up soft, uniform
+  // sky reflection — marble, bronze, water and metal read as real surfaces instead of
+  // flat paint. Generated once from a procedural room; no external HDRI/asset.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environment = envMap;
+  scene.environmentIntensity = HIGH ? 0.55 : 0.35; // keep it a sheen, not a mirror
+
+  const cw = () => canvas.clientWidth || 800;
+  const ch = () => canvas.clientHeight || 600;
+
+  // Post-processing chain: render -> ground-truth ambient occlusion (contact shadows
+  // where models meet the land, walls meet towers — the biggest "reads as 3D" lift) ->
+  // subtle bloom -> antialiasing (SMAA) -> tone-mapped output. AO + SMAA are HIGH-only.
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  if (HIGH) {
+    const gtao = new GTAOPass(scene, camera, cw(), ch());
+    gtao.output = GTAOPass.OUTPUT.Default;
+    gtao.blendIntensity = 0.85;
+    gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.0, thickness: 1.0, scale: 1.0, samples: 16 });
+    composer.addPass(gtao);
+  }
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.32, 0.6, 0.85);
   composer.addPass(bloom);
+  if (HIGH) composer.addPass(new SMAAPass());
   composer.addPass(new OutputPass());
 
   function resize(): void {
@@ -1782,6 +1878,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     sun.color.copy(sunC); sun.intensity = curSunI;
     ambLight.intensity = curAmbI; hemiLight.intensity = curHemiI;
     seaMat.color.copy(seaC);
+    if (waterNormal) { waterNormal.offset.x = (waterNormal.offset.x + dt * 0.018) % 1; waterNormal.offset.y = (waterNormal.offset.y + dt * 0.011) % 1; } // drifting ripples
     sunGlowMat.opacity = curDisc * 0.85; sunCoreMat.opacity = curDisc;
     sunDisc.visible = curDisc > 0.02;
     cloudDeck.visible = curCloud > 0.02;
