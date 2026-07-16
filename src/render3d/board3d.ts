@@ -987,10 +987,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     new THREE.MeshStandardMaterial({ color: 0x24446a, roughness: 0.35, metalness: 0.15 })
   );
   seaMesh.rotation.x = -Math.PI / 2;
-  // Sit the water backdrop clearly BELOW the sea tiles (tops at -0.18) so the two
-  // are no longer at the same depth — that coplanarity was the dark-area flicker
-  // (z-fighting between the ocean plane and the deep/undiscovered sea tiles).
-  seaMesh.position.y = -0.3;
+  // THE sea surface. It sits at sea level (a hair under the tint hexes) and runs
+  // unbroken across the board AND out past the edge, so there is exactly ONE water
+  // level: the reflective, rippling plane. Discovered sea hexes only tint it for
+  // depth; land and undiscovered tiles stand above it and hide it.
+  seaMesh.position.y = SEA_TOP - 0.012;
   seaMesh.receiveShadow = true;
   scene.add(seaMesh);
   const seaMat = seaMesh.material as THREE.MeshStandardMaterial;
@@ -1133,8 +1134,20 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     hexMat.roughnessMap = makeNoiseGrayMap(256, [[3, 1], [7, 0.5], [16, 0.3]], 0.72, 1.0);
     hexMat.map = makeNoiseGrayMap(256, [[5, 1], [11, 0.5]], 0.86, 1.0, true); // faint mottle × instance tint
   }
+  // The sea is ONE reflective, rippling surface (the seaMesh plane at sea level). A
+  // discovered sea hex is just a thin, semi-transparent TINT laid on that surface —
+  // so the water is continuous and at a single level, and the hexes only carry DEPTH
+  // (coast lighter, open sea darker) and fog. No second, stepped sea.
+  const waterTintMat = new THREE.MeshStandardMaterial({
+    transparent: true, opacity: 0.5, roughness: 0.3, metalness: 0.05,
+    depthWrite: false, flatShading: true,
+  });
 
   let tileMesh: THREE.InstancedMesh | null = null;
+  // Discovered sea hexes live in their OWN mesh: thin, semi-transparent tints that sit
+  // ON the single reflective water surface (see waterTintMat) rather than opaque slabs
+  // floating above it. Land + undiscovered tiles stay in tileMesh.
+  let waterMesh: THREE.InstancedMesh | null = null;
   let indexByKey: Record<string, number> = {};
   let builtSig = "";
   // World-space extent of the current board (set in buildTiles). The loop clamps
@@ -1361,11 +1374,20 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       scene.remove(tileMesh);
       tileMesh.dispose();
     }
+    if (waterMesh) {
+      scene.remove(waterMesh);
+      waterMesh.dispose();
+    }
     const n = view.tiles.length;
     const mesh = new THREE.InstancedMesh(hexGeo, hexMat, n);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+    // Parallel mesh for the sea tints (same indices); paintTiles shows each tile in
+    // exactly one of the two and collapses it (scale 0) in the other.
+    const wmesh = new THREE.InstancedMesh(hexGeo, waterTintMat, n);
+    wmesh.receiveShadow = true;
+    wmesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
     const m = new THREE.Matrix4();
     const p = new THREE.Vector3();
     const s = new THREE.Vector3();
@@ -1381,6 +1403,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       s.set(1, height, 1);
       m.compose(p, qt, s);
       mesh.setMatrixAt(i, m);
+      wmesh.setMatrixAt(i, m); // paintTiles gives it the real (or collapsed) transform
       const key = tv.q + "," + tv.r;
       indexByKey[key] = i;
       keyByIndex.push(key);
@@ -1388,8 +1411,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       minZ = Math.min(minZ, w.z); maxZ = Math.max(maxZ, w.z);
     });
     mesh.instanceMatrix.needsUpdate = true;
+    wmesh.instanceMatrix.needsUpdate = true;
     scene.add(mesh);
+    scene.add(wmesh);
     tileMesh = mesh;
+    waterMesh = wmesh;
     boardBounds = { minX, maxX, minZ, maxZ };
     // Frame the board once, on first build — start at a moderate inclination
     // (~38° off vertical), square-on. Drag to spin/tilt from here to taste.
@@ -1401,7 +1427,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // Park the sun disc just above the northern horizon (the default view looks
     // north), sized to the board, so it sits in the visible sky band when clear.
     sunDisc.position.set(cx - span * 0.15, span * 0.5, cz - span * 3.0);
-    sunDisc.scale.setScalar(Math.max(12, span * 0.6));
+    // Size it like a SUN, not a wall. It sits at ~span*3 away, so the old span*0.6
+    // made the glow subtend ~32° of the view — a huge pale blob. span*0.12 puts the
+    // glow near ~6° and the core near ~2.5°, which bloom then lifts into a real sun.
+    sunDisc.scale.setScalar(Math.max(2, span * 0.12));
     controls.update();
     // Restore the player's saved tilt preset over the default framing (once per map).
     const savedTilt = loadTilt();
@@ -1460,28 +1489,40 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     for (const tv of view.tiles) {
       const idx = indexByKey[tv.q + "," + tv.r];
       if (idx == null) continue;
-      tileMesh.setColorAt(idx, colorFor(tv, view.civColors));
-      // Height follows visibility: undiscovered tiles lie FLAT (a blank map, no
-      // hex relief); land rises to its terrain elevation; DISCOVERED WATER is a
-      // thin flat slab at the single sea level (a flat sea, no terraced steps and
-      // no tall purple-catching sides).
       const w = axialToWorld(tv.q, tv.r);
+      const col = colorFor(tv, view.civColors);
+      // DISCOVERED SEA is not a slab at all: the reflective plane below IS the water,
+      // and this hex is only a thin translucent tint on it carrying depth + fog. It
+      // therefore renders in waterMesh and is collapsed in the opaque tileMesh.
+      // Everything else (land, and undiscovered tiles lying FLAT as a blank map)
+      // renders in tileMesh and is collapsed in waterMesh.
       const water = tv.v !== 0 && WATER.has(tv.t);
-      let top: number, height: number;
-      if (water) {
-        top = SEA_TOP;
-        height = 0.08; // thin slab
+      if (water && waterMesh) {
+        waterMesh.setColorAt(idx, col);
+        _pp.set(w.x, SEA_TOP, w.z);
+        _ps.set(1, 0.02, 1); // a wafer laid on the water
+        _pm.compose(_pp, _pq, _ps);
+        waterMesh.setMatrixAt(idx, _pm);
+        _ps.set(0, 0, 0); // collapse in the land mesh
+        _pm.compose(_pp, _pq, _ps);
+        tileMesh.setMatrixAt(idx, _pm);
       } else {
-        top = tv.v === 0 ? HIDDEN_ELEV : topOf(tv.t);
-        height = Math.max(0.12, top - FLOOR);
+        tileMesh.setColorAt(idx, col);
+        const top = tv.v === 0 ? HIDDEN_ELEV : topOf(tv.t);
+        const height = Math.max(0.12, top - FLOOR);
+        _pp.set(w.x, top - height / 2, w.z);
+        _ps.set(1, height, 1);
+        _pm.compose(_pp, _pq, _ps);
+        tileMesh.setMatrixAt(idx, _pm);
+        if (waterMesh) { _ps.set(0, 0, 0); _pm.compose(_pp, _pq, _ps); waterMesh.setMatrixAt(idx, _pm); }
       }
-      _pp.set(w.x, top - height / 2, w.z);
-      _ps.set(1, height, 1);
-      _pm.compose(_pp, _pq, _ps);
-      tileMesh.setMatrixAt(idx, _pm);
     }
     if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true;
     tileMesh.instanceMatrix.needsUpdate = true;
+    if (waterMesh) {
+      if (waterMesh.instanceColor) waterMesh.instanceColor.needsUpdate = true;
+      waterMesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
@@ -1766,7 +1807,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     pointer.x = ((cx - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((cy - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
-    const hit = raycaster.intersectObject(tileMesh);
+    // Land lives in tileMesh and discovered sea in waterMesh — hit-test BOTH (they
+    // share instance indices) so the sea stays clickable for ship orders.
+    const hit = raycaster.intersectObjects(waterMesh ? [tileMesh, waterMesh] : [tileMesh], false);
     return hit.length && hit[0].instanceId != null ? (hit[0].instanceId as number) : -1;
   }
 
