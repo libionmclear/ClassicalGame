@@ -10,7 +10,6 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
@@ -826,6 +825,36 @@ function makeNoiseNormalMap(size: number, octaves: Array<[number, number]>, stre
   return tex;
 }
 
+// A tileable GRAYSCALE noise map in [lo, hi] (torus-sampled so it wraps). Used for
+// terrain micro-roughness and faint albedo mottling — procedural, no assets.
+function makeNoiseGrayMap(size: number, octaves: Array<[number, number]>, lo: number, hi: number, srgb = false): THREE.CanvasTexture {
+  const simplex = new SimplexNoise();
+  const TAU = Math.PI * 2;
+  const cv = document.createElement("canvas"); cv.width = cv.height = size;
+  const ctx = cv.getContext("2d")!;
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y += 1) {
+    const a2 = (y / size) * TAU;
+    for (let x = 0; x < size; x += 1) {
+      const a1 = (x / size) * TAU;
+      let v = 0, amp = 0;
+      for (const [f, a] of octaves) {
+        v += a * simplex.noise4d(Math.cos(a1) * f, Math.sin(a1) * f, Math.cos(a2) * f, Math.sin(a2) * f);
+        amp += a;
+      }
+      const c = Math.max(0, Math.min(255, (lo + ((v / amp) * 0.5 + 0.5) * (hi - lo)) * 255));
+      const i = (y * size + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = c; img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -1082,11 +1111,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // nest edge-to-edge (a hair under, plus a slight base taper, for clean seams).
   const hexGeo = new THREE.CylinderGeometry(SIZE * 0.998, SIZE * 0.95, 1, 6);
   const hexMat = new THREE.MeshStandardMaterial({ roughness: 0.94, metalness: 0.02, flatShading: true });
-  // Micro-relief on the land: a tileable procedural normal map breaks up the flat
-  // colour so tile tops read as ground, not painted card. Kept subtle (low scale).
+  // Micro-detail on the land so tile tops read as GROUND, not painted card: a tileable
+  // normal map (relief) + a roughness map (dry/damp patches catch light differently) +
+  // a faint albedo mottle over the per-tile tint. All procedural, kept subtle.
   if (HIGH) {
     hexMat.normalMap = makeNoiseNormalMap(256, [[4, 1], [9, 0.5], [18, 0.25]], 2.4);
     hexMat.normalScale = new THREE.Vector2(0.5, 0.5);
+    hexMat.roughnessMap = makeNoiseGrayMap(256, [[3, 1], [7, 0.5], [16, 0.3]], 0.72, 1.0);
+    hexMat.map = makeNoiseGrayMap(256, [[5, 1], [11, 0.5]], 0.86, 1.0, true); // faint mottle × instance tint
   }
 
   let tileMesh: THREE.InstancedMesh | null = null;
@@ -1744,13 +1776,23 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     pickFn(id >= 0 ? keyByIndex[id] : null);
   });
 
-  // A neutral studio environment (PMREM) so every PBR material picks up soft, uniform
-  // sky reflection — marble, bronze, water and metal read as real surfaces instead of
-  // flat paint. Generated once from a procedural room; no external HDRI/asset.
+  // SKY-DERIVED reflections: PMREM an equirect gradient (zenith blue → horizon →
+  // darker ground) so marble, bronze, water and metal reflect the SKY rather than a
+  // neutral studio — cohesive with the board's daylight. Procedural, no HDRI asset.
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const gradCv = document.createElement("canvas"); gradCv.width = 8; gradCv.height = 128;
+  const gctx = gradCv.getContext("2d")!;
+  const grad = gctx.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, "#c6e4fb"); grad.addColorStop(0.47, "#84b3de");
+  grad.addColorStop(0.53, "#5f7788"); grad.addColorStop(1, "#39434e");
+  gctx.fillStyle = grad; gctx.fillRect(0, 0, 8, 128);
+  const gradTex = new THREE.CanvasTexture(gradCv);
+  gradTex.mapping = THREE.EquirectangularReflectionMapping;
+  gradTex.colorSpace = THREE.SRGBColorSpace; gradTex.needsUpdate = true;
+  const envMap = pmrem.fromEquirectangular(gradTex).texture;
+  gradTex.dispose();
   scene.environment = envMap;
-  scene.environmentIntensity = HIGH ? 0.55 : 0.35; // keep it a sheen, not a mirror
+  scene.environmentIntensity = HIGH ? 0.6 : 0.4; // a sheen, not a mirror
 
   const cw = () => canvas.clientWidth || 800;
   const ch = () => canvas.clientHeight || 600;
