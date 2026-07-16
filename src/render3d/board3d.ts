@@ -67,6 +67,21 @@ function axialToWorld(q: number, r: number): { x: number; z: number } {
 }
 const topOf = (t: string): number => (WATER.has(t) ? SEA_TOP : (TERRAIN_ELEV[t] ?? 0.08));
 
+// World point -> the hex under it (inverse of axialToWorld, with proper cube rounding
+// so the nearest hex wins at the edges). Lets the open ocean — which renders as bare
+// water with no tint hexes — still be clicked, by hit-testing the sea plane.
+function worldToAxial(x: number, z: number): { q: number; r: number } {
+  const rf = z / (1.5 * SIZE);
+  const qf = x / (SIZE * Math.sqrt(3)) - rf / 2;
+  const cx = qf, cz = rf, cy = -cx - cz;
+  let rx = Math.round(cx), ry = Math.round(cy), rz = Math.round(cz);
+  const dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz);
+  if (dx > dy && dx > dz) rx = -ry - rz;
+  else if (dy > dz) ry = -rx - rz;
+  else rz = -rx - ry;
+  return { q: rx, r: rz };
+}
+
 // A tile descriptor from game.js. v: 0 hidden, 1 discovered (dim), 2 visible.
 // h: 0 none, 1 reachable, 2 attackable, 3 selected, 4 tile-selected, 5 path, 6 flash.
 export interface TileView { q: number; r: number; t: string; v: number; o: string | null; h: number; road?: boolean; imp?: string; res?: string | null; wx?: string; ruin?: number; village?: string | null; /** Hexes past the map's border (the open-ocean belt); 0/absent on the playable map. */ open?: number; }
@@ -1139,7 +1154,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // so the water is continuous and at a single level, and the hexes only carry DEPTH
   // (coast lighter, open sea darker) and fog. No second, stepped sea.
   const waterTintMat = new THREE.MeshStandardMaterial({
-    transparent: true, opacity: 0.5, roughness: 0.3, metalness: 0.05,
+    transparent: true, opacity: 0.38, roughness: 0.3, metalness: 0.05,
     depthWrite: false, flatShading: true,
   });
 
@@ -1502,9 +1517,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       // renders in tileMesh and is collapsed in waterMesh.
       const water = tv.v !== 0 && WATER.has(tv.t);
       if (water && waterMesh) {
+        // The OPEN OCEAN beyond the border carries no depth to show, so it wears no
+        // tint at all — you just see the bare reflective, rippling water, exactly as
+        // it looked before the belt existed. It only appears when highlighted (a
+        // reachable/attack hex for a fleet). Clicks out there hit the sea plane
+        // instead (see pickIndex), so ships stay selectable on blank ocean.
+        const bare = !!tv.open && !tv.h;
         waterMesh.setColorAt(idx, col);
         _pp.set(w.x, SEA_TOP, w.z);
-        _ps.set(1, 0.02, 1); // a wafer laid on the water
+        _ps.set(bare ? 0 : 1, bare ? 0 : 0.02, bare ? 0 : 1); // a wafer laid on the water
         _pm.compose(_pp, _pq, _ps);
         waterMesh.setMatrixAt(idx, _pm);
         _ps.set(0, 0, 0); // collapse in the land mesh
@@ -1814,7 +1835,16 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // Land lives in tileMesh and discovered sea in waterMesh — hit-test BOTH (they
     // share instance indices) so the sea stays clickable for ship orders.
     const hit = raycaster.intersectObjects(waterMesh ? [tileMesh, waterMesh] : [tileMesh], false);
-    return hit.length && hit[0].instanceId != null ? (hit[0].instanceId as number) : -1;
+    if (hit.length && hit[0].instanceId != null) return hit[0].instanceId as number;
+    // Nothing solid under the cursor: the OPEN OCEAN wears no tint hexes, so fall back
+    // to the water surface itself and work out which hex was clicked from the point.
+    const sea = raycaster.intersectObject(seaMesh, false);
+    if (sea.length) {
+      const a = worldToAxial(sea[0].point.x, sea[0].point.z);
+      const idx = indexByKey[a.q + "," + a.r];
+      if (idx != null) return idx;
+    }
+    return -1;
   }
 
   let dX = 0, dY = 0, pointerDown = false;
