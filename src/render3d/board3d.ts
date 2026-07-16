@@ -872,6 +872,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const GFX = (() => { try { return window.localStorage.getItem("hegemon_gfx") || "high"; } catch { return "high"; } })();
   const HIGH = GFX !== "low";
 
+  // Atmosphere (sky, clouds, mist, sun, rain) renders on its own layer so the AMBIENT
+  // OCCLUSION pass can ignore it — otherwise GTAO treats the cloud/mist sprites as
+  // solid occluders and smears big black quads across an overcast sky. The MAIN camera
+  // sees both layers; the AO camera (built with the composer) sees only the default.
+  const ATMO_LAYER = 2;
+  const toAtmosphere = (o: THREE.Object3D) => o.traverse((x) => x.layers.set(ATMO_LAYER));
+
   const scene = new THREE.Scene();
   // A sky-dome gradient: light blue overhead fading to a deep-blue horizon (the
   // "not played" floor stays dark). Fog blends distant terrain into the horizon.
@@ -890,8 +897,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   });
   const skyDome = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 16), skyMat);
   scene.add(skyDome);
+  toAtmosphere(skyDome);
 
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 800);
+  camera.layers.enable(ATMO_LAYER); // the main view shows the atmosphere; AO won't
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.09;
@@ -1020,6 +1029,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   sunDisc.add(sunGlow, sunCore);
   sunDisc.position.set(-150, 150, -180);
   scene.add(sunDisc);
+  toAtmosphere(sunDisc);
   // An overcast cloud deck: soft puffs drifting high over the board, faded in for
   // rain / storm / fog and hidden when it's clear.
   const cloudTex = radialTexture(240, 240, 244, 0.35);
@@ -1032,6 +1042,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     cloudDeck.add(c);
   }
   scene.add(cloudDeck);
+  toAtmosphere(cloudDeck);
 
   // A low GROUND MIST for fog weather — wide, soft, near-white sheets drifting just
   // above the surface so fog reads as more than a grey sky.
@@ -1045,6 +1056,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     mistDeck.add(m);
   }
   scene.add(mistDeck);
+  toAtmosphere(mistDeck);
   let curMist = 0, lightningT = 4, lightningFlash = 0;
 
   // Per-weather scene mood. Colours are lerped toward these each frame so weather
@@ -1102,6 +1114,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const rain = new THREE.Points(rainGeo, rainMat);
   rain.visible = false;
   scene.add(rain);
+  toAtmosphere(rain);
   let rainOn = false;
   let rainCX = 0, rainCZ = 0, rainS = 1; // wet-region centre + one uniform scale
 
@@ -1802,11 +1815,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // subtle bloom -> antialiasing (SMAA) -> tone-mapped output. AO + SMAA are HIGH-only.
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  // The AO pass renders the scene through THIS camera, which never enables the
+  // atmosphere layer — so sky/clouds/mist never become AO occluders. Kept in sync
+  // with the real camera each frame (below).
+  let aoCam: THREE.PerspectiveCamera | null = null;
   if (HIGH) {
     const gtao = new GTAOPass(scene, camera, cw(), ch());
     gtao.output = GTAOPass.OUTPUT.Default;
     gtao.blendIntensity = 0.85;
     gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.0, thickness: 1.0, scale: 1.0, samples: 16 });
+    aoCam = new THREE.PerspectiveCamera(camera.fov, camera.aspect, camera.near, camera.far);
+    gtao.camera = aoCam; // default layers = layer 0 only (no atmosphere)
     composer.addPass(gtao);
   }
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.32, 0.6, 0.85);
@@ -1948,6 +1967,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       ambLight.intensity = curAmbI + boost * 1.8;
       sun.intensity = curSunI + boost * 1.4;
       skyMat.uniforms.topColor.value.copy(skyTopC).lerp(new THREE.Color(0xe6ecf2), boost);
+    }
+    if (aoCam) { // keep the AO camera exactly on the real camera (minus the atmosphere layer)
+      aoCam.fov = camera.fov; aoCam.aspect = camera.aspect; aoCam.near = camera.near; aoCam.far = camera.far;
+      aoCam.updateProjectionMatrix();
+      aoCam.position.copy(camera.position); aoCam.quaternion.copy(camera.quaternion);
+      aoCam.updateMatrixWorld(true);
     }
     composer.render();
     requestAnimationFrame(loop);
