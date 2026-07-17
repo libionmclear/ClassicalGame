@@ -2249,7 +2249,11 @@
       if (!visibility.visible.has(ck)) continue;
       // Garrison: the units standing inside the city (drawn beside the walls, so
       // you can see a city is defended without a separate stacked sprite).
-      const garr = (unitsByTile[ck] || []).filter((u) => u.ownerId === city.ownerId);
+      // ONLY troops you actually stationed count. The free auto-mustered defender
+      // (unit.garrison) is an abstraction — the city holding itself — that you can
+      // neither select nor move, so drawing a soldier for it just showed troops in a
+      // house that hasn't got any. Matches how selection already ignores them.
+      const garr = (unitsByTile[ck] || []).filter((u) => u.ownerId === city.ownerId && !u.garrison);
       let gForm = null;
       if (garr.length) {
         const top = garr.slice().sort((a, b) => (engine.UNITS[b.type].attack || 0) - (engine.UNITS[a.type].attack || 0))[0];
