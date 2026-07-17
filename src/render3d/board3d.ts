@@ -1077,10 +1077,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
   // Per-weather scene mood. Colours are lerped toward these each frame so weather
   // transitions glide rather than snap.
+  // `sea` is the colour of the ONE water surface — which, outside the border, is the
+  // infinite OPEN OCEAN. That is deep water, so it must be the DARK of the two sea
+  // tones (matching colorFor's deep 0x224d78), never the lighter coastal one; the
+  // coast tint then lifts the shallows above it. Rain/storm/fog darken/grey it further.
   interface SkyMood { top: number; bottom: number; fog: number; fogNear: number; fogFar: number; sun: number; sunI: number; ambI: number; hemiI: number; sea: number; disc: number; cloud: number; }
   const WEATHER_SKY: Record<string, SkyMood> = {
-    clear: { top: 0x8ec9f0, bottom: 0x0a1626, fog: 0x9ec6e8, fogNear: 150, fogFar: 440, sun: 0xfff0d4, sunI: 1.3, ambI: 0.66, hemiI: 0.55, sea: 0x2b6aa0, disc: 0.95, cloud: 0.0 },
-    heat:  { top: 0xcdb98a, bottom: 0x2a2415, fog: 0xd8c79a, fogNear: 120, fogFar: 380, sun: 0xffe1ad, sunI: 1.45, ambI: 0.72, hemiI: 0.5, sea: 0x2f6a8f, disc: 0.8, cloud: 0.12 },
+    clear: { top: 0x8ec9f0, bottom: 0x0a1626, fog: 0x9ec6e8, fogNear: 150, fogFar: 440, sun: 0xfff0d4, sunI: 1.3, ambI: 0.66, hemiI: 0.55, sea: 0x224d78, disc: 0.95, cloud: 0.0 },
+    heat:  { top: 0xcdb98a, bottom: 0x2a2415, fog: 0xd8c79a, fogNear: 120, fogFar: 380, sun: 0xffe1ad, sunI: 1.45, ambI: 0.72, hemiI: 0.5, sea: 0x235069, disc: 0.8, cloud: 0.12 },
     fog:   { top: 0xaeb8bd, bottom: 0x4b535a, fog: 0xb4bdc2, fogNear: 40, fogFar: 190, sun: 0xd6dce0, sunI: 0.65, ambI: 0.78, hemiI: 0.6, sea: 0x46545e, disc: 0.0, cloud: 0.55 },
     rain:  { top: 0x5c6b79, bottom: 0x272f38, fog: 0x59636e, fogNear: 90, fogFar: 300, sun: 0xb9c4cf, sunI: 0.5, ambI: 0.55, hemiI: 0.5, sea: 0x2c4150, disc: 0.0, cloud: 0.85 },
     storm: { top: 0x3d4650, bottom: 0x1a1f26, fog: 0x39424c, fogNear: 70, fogFar: 250, sun: 0x9aa6b2, sunI: 0.34, ambI: 0.46, hemiI: 0.42, sea: 0x233040, disc: 0.0, cloud: 1.0 }
@@ -1463,7 +1467,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // shown by the coloured border, not a tint — a warm civ colour on blue read as
     // purple.) Depth/visibility change the shade, never the hue.
     if (tv.t === "sea" || tv.t === "coast") {
-      const c = new THREE.Color(tv.t === "coast" ? 0x2f6a9e : 0x224d78);
+      // TWO depths, and the water surface underneath is already the DARK deep tone —
+      // so open sea needs no lift (it matches the surface, in-map and out), while the
+      // coast tint has to be bright enough to read as shallow through 38% opacity.
+      const c = new THREE.Color(tv.t === "coast" ? 0x3f8bc0 : 0x224d78);
       if (tv.v === 1) c.multiplyScalar(0.72); // out of sight — darker, still blue
       if (tv.wx === "storm") c.lerp(new THREE.Color(0x1f2c3a), 0.3);
       else if (tv.wx === "rain") c.lerp(new THREE.Color(0x274661), 0.2);
