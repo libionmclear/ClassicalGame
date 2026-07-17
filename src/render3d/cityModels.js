@@ -40,36 +40,33 @@ export function buildCity(THREE, opts = {}) {
   const wallMat = (jitter = 0) => mat(blendHex(THREE, STAGE.wall, S.wall, 0.35), jitter);
 
   // ---- ground plaza (slightly raised disc, avoids z-fighting with terrain).
-  // From the stone tiers up it becomes a paved forum in the age's material.
+  // The common MATCHES THE AGE: a hamlet's is bare packed DIRT, a mudbrick town's is
+  // dry beaten earth, and only from the stone tiers up does it become a paved forum
+  // in the age's cut stone / marble.
   const plazaR = 0.28 + tier * 0.02;
-  const plazaCol = tier >= 5 ? blendHex(THREE, STAGE.wall, S.plaza, 0.4) : S.plaza;
+  const plazaCol = tier <= 2 ? 0x6f5838                                  // packed dirt
+                 : tier <= 4 ? blendHex(THREE, 0x8a6f47, S.plaza, 0.30)  // dry earth, a hint of the civ
+                 :             blendHex(THREE, STAGE.wall, S.plaza, 0.40); // paved forum in stone/marble
   const plaza = new THREE.Mesh(new THREE.CylinderGeometry(plazaR, plazaR, 0.02, 12), mat(plazaCol));
   plaza.position.y = 0.01;
   g.add(plaza);
 
-  // ---- building budget & scale by tier
+  // ---- building budget & scale by tier. Houses are deliberately BIG relative to the
+  // little figures beside them (a real house dwarfs a soldier), which is also what
+  // lets a unit's squad read as many small men rather than a few giants.
   const nBuildings = [3, 5, 7, 9, 12, 14, 17, 20, 23, 26][tier - 1];
-  const hBase = 0.10 + tier * 0.012;          // base wall height grows with tier
-  const ringMin = plazaR + 0.06, ringMax = 0.62 + tier * 0.03;
+  const hBase = 0.15 + tier * 0.014;          // base wall height grows with tier
+  const ringMin = plazaR + 0.09, ringMax = 0.66 + tier * 0.03;
 
-  // ---- houses in radial clusters with lanes
-  const lanes = 3 + Math.floor(tier / 3);      // gaps the eye reads as streets
-  // Paved streets radiating from the plaza — turns a scatter of huts into a town.
-  for (let i = 0; i < lanes; i++) {
-    const a = (i / lanes) * Math.PI * 2;
-    const len = ringMax - plazaR * 0.4;
-    const street = new THREE.Mesh(new THREE.BoxGeometry(len, 0.012, 0.05 + tier * 0.004), mat(S.plaza, 0.25));
-    const mid = plazaR * 0.4 + len / 2;
-    street.position.set(Math.cos(a) * mid, 0.012, Math.sin(a) * mid);
-    street.rotation.y = -a;
-    g.add(street);
-  }
+  // ---- houses gathered in clusters around the common (no paved radial streets —
+  // they read as odd spokes at hamlet scale). `lanes` is just the clustering, unseen.
+  const lanes = 3 + Math.floor(tier / 3);
   for (let i = 0; i < nBuildings; i++) {
     const lane = Math.floor(rng() * lanes);
     const a = (lane / lanes) * Math.PI * 2 + (0.25 + rng() * 0.5) * ((Math.PI * 2) / lanes);
     const r = ringMin + rng() * (ringMax - ringMin);
-    const w = 0.07 + rng() * 0.06, d = 0.07 + rng() * 0.06;
-    const h = hBase * (0.7 + rng() * 0.7);
+    const w = 0.12 + rng() * 0.09, d = 0.12 + rng() * 0.09;
+    const h = hBase * (0.75 + rng() * 0.7);
     const house = makeHouse(THREE, S, rng, w, h, d, mat, wallMat, tier);
     house.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
     house.rotation.y = a + Math.PI / 2 + (rng() - 0.5) * 0.4;

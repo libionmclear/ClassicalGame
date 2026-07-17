@@ -423,7 +423,7 @@ function squadPositions(n: number): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
   const rows = Math.ceil(n / cols);
-  const sp = 0.26;
+  const sp = 0.17; // tighter, so a dozen small men still sit within the hex
   let i = 0;
   for (let row = 0; row < rows && i < n; row += 1) {
     const inRow = Math.min(cols, n - i);
@@ -440,7 +440,9 @@ function squadPositions(n: number): Array<[number, number]> {
 function buildUnit(form: string, color: string, hpFrac: number, q: number, r: number, civ?: string, utype?: string): THREE.Group {
   const frac = hpFrac == null ? 1 : Math.max(0.05, Math.min(1, hpFrac));
   const single = form === "siege" || form === "naval";
-  const base = form === "elephant" ? 2 : form === "mounted" ? 3 : form === "civilian" ? 3 : 6;
+  // Smaller men, MORE of them: a unit reads as a real company, not a handful of
+  // giants dwarfing the houses. (Elephants/ships stay single; civilians are a few.)
+  const base = form === "elephant" ? 2 : form === "mounted" ? 6 : form === "civilian" ? 2 : form === "ranged" ? 9 : 12;
   const g = new THREE.Group();
   if (single) {
     const fig = buildFigure(form, color, civ, utype);
@@ -452,7 +454,7 @@ function buildUnit(form: string, color: string, hpFrac: number, q: number, r: nu
   const pos = squadPositions(count);
   for (let i = 0; i < count; i += 1) {
     const fig = buildFigure(form, color, civ, utype);
-    fig.scale.setScalar(0.6);
+    fig.scale.setScalar(0.42);
     fig.position.set(pos[i][0], 0, pos[i][1]);
     fig.rotation.y = (rnd(q, r, i) - 0.5) * 0.6; // slight facing variation
     g.add(fig);
