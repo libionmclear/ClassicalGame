@@ -1446,13 +1446,25 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     const span = Math.max(maxX - minX, maxZ - minZ) || 20;
     controls.target.set(cx, 0, cz);
     camera.position.set(cx, span * 0.8, cz + span * 0.62);
-    sun.target.position.set(cx, 0, cz);
-    // Park the sun disc just above the northern horizon (the default view looks
-    // north), sized to the board, so it sits in the visible sky band when clear.
-    sunDisc.position.set(cx - span * 0.15, span * 0.5, cz - span * 3.0);
-    // Size it like a SUN, not a wall. It sits at ~span*3 away, so the old span*0.6
-    // made the glow subtend ~32° of the view — a huge pale blob. span*0.12 puts the
-    // glow near ~6° and the core near ~2.5°, which bloom then lifts into a real sun.
+    // ONE bearing for both the sun's LIGHT and its visible DISC, relative to the board.
+    // Previously the light sat at a fixed world point (so its angle drifted with the
+    // map's size/position) while the disc was pinned due north regardless — you saw the
+    // sun in one half of the sky and the glitter it should be casting in the other.
+    // Anchoring both to the same vector means the reflection always falls beneath it.
+    const center = new THREE.Vector3(cx, 0, cz);
+    const sunDir = new THREE.Vector3(-0.35, 0.5, -0.79).normalize(); // ~30° up, north-west
+    sun.position.copy(center).addScaledVector(sunDir, span * 1.4);
+    sun.target.position.copy(center);
+    sun.target.updateMatrixWorld();
+    // Fit the shadow frustum to the board (it was a fixed +/-90 / far 220, which simply
+    // missed big maps) now that the light rides out with the board's size.
+    const shadowHalf = Math.max(20, span * 0.8);
+    Object.assign(sun.shadow.camera, { left: -shadowHalf, right: shadowHalf, top: shadowHalf, bottom: -shadowHalf, near: 1, far: Math.max(220, span * 4) });
+    sun.shadow.camera.updateProjectionMatrix();
+    // The disc rides the SAME vector, far out. Size it like a sun, not a wall: it sits
+    // ~span*3 away, so the old span*0.6 made the glow subtend ~32° — a huge pale blob.
+    // span*0.12 puts the glow near ~6° and the core ~2.5°, which bloom lifts into a sun.
+    sunDisc.position.copy(center).addScaledVector(sunDir, span * 3);
     sunDisc.scale.setScalar(Math.max(2, span * 0.12));
     controls.update();
     // Restore the player's saved tilt preset over the default framing (once per map).
