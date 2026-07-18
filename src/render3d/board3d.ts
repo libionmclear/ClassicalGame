@@ -1105,12 +1105,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   let curDisc = WEATHER_SKY.clear.disc, curCloud = 0;
   let moodTarget: SkyMood = WEATHER_SKY.clear;
   let moodName = "clear";
-  // Day/night: a cycle over DAY_TURNS turns. `day` is the eased daylight (0 night ..
-  // 1 noon); the sun's elevation/azimuth arc with the turn. Weather then dims on top.
-  const DAY_TURNS = 10;
-  let curDay = 0.9, dayTarget = 0.9;          // daylight
-  let curElev = 0.7, elevTarget = 0.7;        // sun elevation (radians)
-  let curAz = 0.25, azTarget = 0.25;          // sun azimuth offset from north (radians)
+  // DAYLIGHT ONLY — no night, no moon (by request). `day` is held at full; the sun sits
+  // at a steady, bright daytime elevation. (The machinery below still eases these, so a
+  // night cycle can be restored just by animating the targets in render().) Weather
+  // still dims/greys on top.
+  let curDay = 1, dayTarget = 1;              // daylight (held at full)
+  let curElev = 0.6, elevTarget = 0.6;        // sun elevation (radians) — bright mid-day
+  let curAz = 0.3, azTarget = 0.3;            // sun azimuth offset from north (radians)
   const NIGHT_TOP = new THREE.Color(0x0b1b36), NIGHT_BOT = new THREE.Color(0x03060e);
   const MOON_TINT = new THREE.Color(0xbcc9e6), DUSK_TINT = new THREE.Color(0xffb163);
 
@@ -2156,14 +2157,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       // Overall sky mood — sunny is bright with a sun disc; overcast greys it out.
       moodName = view.weather || "clear";
       moodTarget = WEATHER_SKY[moodName] || WEATHER_SKY.clear;
-      // Day/night for this turn: p in [0,1) across the cycle. sinT is +1 at noon,
-      // -1 at midnight, 0 at dawn/dusk. Daylight fades in through dawn; the sun climbs
-      // to a high noon and sinks; the loop eases these so a turn doesn't snap.
-      const p = ((((view.turn ?? 6) - 1) % DAY_TURNS) + DAY_TURNS) % DAY_TURNS / DAY_TURNS;
-      const sinT = Math.sin(p * Math.PI * 2);
-      dayTarget = Math.max(0, Math.min(1, sinT * 0.85 + 0.4)); // 1 noon · ~0.4 dawn/dusk · 0 night
-      elevTarget = 0.14 + Math.max(0, sinT) * 0.92;            // low & golden at the edges, high at noon
-      azTarget = -0.55 + p * 1.1;                              // swings NE → N → NW through the day
+      // DAY ONLY: full daylight, a steady bright sun kept high enough to read as day
+      // and low enough to stay visible above its own glitter. No night, no moon.
+      dayTarget = 1;
+      elevTarget = 0.6;
+      azTarget = 0.3;
       if (view.focus) {
         const w = axialToWorld(view.focus.q, view.focus.r);
         controls.target.set(w.x, 0, w.z);
