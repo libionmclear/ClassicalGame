@@ -102,6 +102,9 @@ export interface BoardView {
   rivers?: EdgeView[];
   roads?: EdgeView[];
   focus?: { q: number; r: number };
+  /** Game turn — drives the day/night cycle (the sun rises, peaks, sets over a span
+   *  of turns; night falls; weather dims on top). */
+  turn?: number;
   weather?: string; // overall sky mood: clear | rain | storm | fog | heat
 }
 
@@ -1085,8 +1088,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // coast tint then lifts the shallows above it. Rain/storm/fog darken/grey it further.
   interface SkyMood { top: number; bottom: number; fog: number; fogNear: number; fogFar: number; sun: number; sunI: number; ambI: number; hemiI: number; sea: number; disc: number; cloud: number; }
   const WEATHER_SKY: Record<string, SkyMood> = {
-    clear: { top: 0x8ec9f0, bottom: 0x0a1626, fog: 0x9ec6e8, fogNear: 150, fogFar: 440, sun: 0xfff0d4, sunI: 1.3, ambI: 0.66, hemiI: 0.55, sea: 0x224d78, disc: 0.95, cloud: 0.0 },
-    heat:  { top: 0xcdb98a, bottom: 0x2a2415, fog: 0xd8c79a, fogNear: 120, fogFar: 380, sun: 0xffe1ad, sunI: 1.45, ambI: 0.72, hemiI: 0.5, sea: 0x235069, disc: 0.8, cloud: 0.12 },
+    clear: { top: 0x9ad2f5, bottom: 0x0a1626, fog: 0xaed4ee, fogNear: 160, fogFar: 470, sun: 0xfff3dc, sunI: 1.65, ambI: 0.78, hemiI: 0.62, sea: 0x224d78, disc: 0.95, cloud: 0.0 },
+    heat:  { top: 0xd6c294, bottom: 0x2a2415, fog: 0xe0d0a4, fogNear: 130, fogFar: 400, sun: 0xffe6b6, sunI: 1.7, ambI: 0.82, hemiI: 0.56, sea: 0x235069, disc: 0.85, cloud: 0.10 },
     fog:   { top: 0xaeb8bd, bottom: 0x4b535a, fog: 0xb4bdc2, fogNear: 40, fogFar: 190, sun: 0xd6dce0, sunI: 0.65, ambI: 0.78, hemiI: 0.6, sea: 0x46545e, disc: 0.0, cloud: 0.55 },
     rain:  { top: 0x5c6b79, bottom: 0x272f38, fog: 0x59636e, fogNear: 90, fogFar: 300, sun: 0xb9c4cf, sunI: 0.5, ambI: 0.55, hemiI: 0.5, sea: 0x2c4150, disc: 0.0, cloud: 0.85 },
     storm: { top: 0x3d4650, bottom: 0x1a1f26, fog: 0x39424c, fogNear: 70, fogFar: 250, sun: 0x9aa6b2, sunI: 0.34, ambI: 0.46, hemiI: 0.42, sea: 0x233040, disc: 0.0, cloud: 1.0 }
@@ -1102,6 +1105,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   let curDisc = WEATHER_SKY.clear.disc, curCloud = 0;
   let moodTarget: SkyMood = WEATHER_SKY.clear;
   let moodName = "clear";
+  // Day/night: a cycle over DAY_TURNS turns. `day` is the eased daylight (0 night ..
+  // 1 noon); the sun's elevation/azimuth arc with the turn. Weather then dims on top.
+  const DAY_TURNS = 10;
+  let curDay = 0.9, dayTarget = 0.9;          // daylight
+  let curElev = 0.7, elevTarget = 0.7;        // sun elevation (radians)
+  let curAz = 0.25, azTarget = 0.25;          // sun azimuth offset from north (radians)
+  const NIGHT_TOP = new THREE.Color(0x0b1b36), NIGHT_BOT = new THREE.Color(0x03060e);
+  const MOON_TINT = new THREE.Color(0xbcc9e6), DUSK_TINT = new THREE.Color(0xffb163);
 
   // Rain/storm: a dense volume of falling STREAKS that follows the view, shown
   // only when a visible region is wet. Storm makes it heavier + darker. Each drop
@@ -1453,20 +1464,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // map's size/position) while the disc was pinned due north regardless — you saw the
     // sun in one half of the sky and the glitter it should be casting in the other.
     // Anchoring both to the same vector means the reflection always falls beneath it.
-    const center = new THREE.Vector3(cx, 0, cz);
-    const sunDir = new THREE.Vector3(-0.35, 0.5, -0.79).normalize(); // ~30° up, north-west
-    sun.position.copy(center).addScaledVector(sunDir, span * 1.4);
-    sun.target.position.copy(center);
-    sun.target.updateMatrixWorld();
-    // Fit the shadow frustum to the board (it was a fixed +/-90 / far 220, which simply
-    // missed big maps) now that the light rides out with the board's size.
-    const shadowHalf = Math.max(20, span * 0.8);
-    Object.assign(sun.shadow.camera, { left: -shadowHalf, right: shadowHalf, top: shadowHalf, bottom: -shadowHalf, near: 1, far: Math.max(220, span * 4) });
+    // Fit the shadow frustum to the board (a fixed +/-90 / far 220 missed big maps).
+    // The sun's POSITION + the disc are driven every frame by the day/night arc in the
+    // loop; here we only size the shadow camera and the disc to the board.
+    const shadowHalf = Math.max(20, span * 0.85);
+    Object.assign(sun.shadow.camera, { left: -shadowHalf, right: shadowHalf, top: shadowHalf, bottom: -shadowHalf, near: 1, far: Math.max(220, span * 6) });
     sun.shadow.camera.updateProjectionMatrix();
-    // The disc rides the SAME vector, far out. Size it like a sun, not a wall: it sits
-    // ~span*3 away, so the old span*0.6 made the glow subtend ~32° — a huge pale blob.
-    // span*0.12 puts the glow near ~6° and the core ~2.5°, which bloom lifts into a sun.
-    sunDisc.position.copy(center).addScaledVector(sunDir, span * 3);
+    // Size the disc like a sun, not a wall: it rides ~span*3 away, so span*0.12 puts the
+    // glow near ~6° and the core ~2.5°, which bloom lifts into a real sun/moon.
     sunDisc.scale.setScalar(Math.max(2, span * 0.12));
     controls.update();
     // Restore the player's saved tilt preset over the default framing (once per map).
@@ -2031,14 +2036,41 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     curFogFar += (moodTarget.fogFar - curFogFar) * kw;
     curDisc += (moodTarget.disc - curDisc) * kw;
     curCloud += (moodTarget.cloud - curCloud) * kw;
-    skyMat.uniforms.topColor.value.copy(skyTopC);
-    skyMat.uniforms.bottomColor.value.copy(skyBotC);
-    if (scene.fog) { (scene.fog as THREE.Fog).color.copy(fogC); (scene.fog as THREE.Fog).near = curFogNear; (scene.fog as THREE.Fog).far = curFogFar; }
-    sun.color.copy(sunC); sun.intensity = curSunI;
-    ambLight.intensity = curAmbI; hemiLight.intensity = curHemiI;
-    seaMat.color.copy(seaC);
+    // Ease the day/night factor + the sun's arc alongside the weather.
+    curDay += (dayTarget - curDay) * kw;
+    curElev += (elevTarget - curElev) * kw;
+    curAz += (azTarget - curAz) * kw;
+    const warm = Math.max(0, 1 - curElev / 0.55) * Math.min(1, curDay * 2); // golden near the horizon
+
+    // Weather sets the palette; DAY/NIGHT scales the light and sinks the sky to night.
+    skyMat.uniforms.topColor.value.copy(NIGHT_TOP).lerp(skyTopC, curDay);
+    skyMat.uniforms.bottomColor.value.copy(NIGHT_BOT).lerp(skyBotC, 0.25 + 0.75 * curDay);
+    if (scene.fog) { (scene.fog as THREE.Fog).color.copy(NIGHT_BOT).lerp(fogC, 0.35 + 0.65 * curDay); (scene.fog as THREE.Fog).near = curFogNear; (scene.fog as THREE.Fog).far = curFogFar; }
+    // Sun light: warm near the horizon, cool moonlight at night; intensity follows the
+    // daylight with a faint moon floor so night is dark but never pitch black.
+    sun.color.copy(sunC).lerp(DUSK_TINT, warm * 0.55).lerp(MOON_TINT, 1 - Math.min(1, curDay * 1.6));
+    sun.intensity = curSunI * (0.05 + curDay);
+    ambLight.intensity = 0.15 + curAmbI * (0.3 + 0.7 * curDay);
+    hemiLight.intensity = curHemiI * (0.28 + 0.72 * curDay);
+    seaMat.color.copy(seaC).multiplyScalar(0.32 + 0.68 * curDay); // the sea goes dark at night
     if (waterNormal) { waterNormal.offset.x = (waterNormal.offset.x + dt * 0.018) % 1; waterNormal.offset.y = (waterNormal.offset.y + dt * 0.011) % 1; } // drifting ripples
-    sunGlowMat.opacity = curDisc * 0.85; sunCoreMat.opacity = curDisc;
+
+    // Place the sun (light + disc) on its arc: azimuth swings around north, elevation
+    // rises to noon. The disc rides the SAME vector, so it always sits over its glitter.
+    if (boardBounds) {
+      const scx = (boardBounds.minX + boardBounds.maxX) / 2, scz = (boardBounds.minZ + boardBounds.maxZ) / 2;
+      const sspan = Math.max(boardBounds.maxX - boardBounds.minX, boardBounds.maxZ - boardBounds.minZ) || 30;
+      const ce = Math.cos(curElev), se = Math.sin(curElev);
+      const dx = Math.sin(curAz) * ce, dy = se, dz = -Math.cos(curAz) * ce; // north = -z
+      sun.position.set(scx + dx * sspan * 1.4, dy * sspan * 1.4, scz + dz * sspan * 1.4);
+      sun.target.position.set(scx, 0, scz); sun.target.updateMatrixWorld();
+      sunDisc.position.set(scx + dx * sspan * 3, Math.max(sspan * 0.05, dy * sspan * 3), scz + dz * sspan * 3);
+    }
+    // The disc is the SUN by day, a pale MOON by night (same sprite, retinted). Weather
+    // still hides it (rain/fog/storm have disc 0).
+    sunCoreMat.color.copy(MOON_TINT).lerp(new THREE.Color(0xfff6e0), curDay);
+    sunGlowMat.color.copy(new THREE.Color(0x9fb8e0)).lerp(new THREE.Color(0xffe4ad), curDay);
+    sunGlowMat.opacity = curDisc * (0.3 + 0.55 * curDay); sunCoreMat.opacity = curDisc * (0.55 + 0.45 * curDay);
     sunDisc.visible = curDisc > 0.02;
     cloudDeck.visible = curCloud > 0.02;
     for (const c of cloudDeck.children) {
@@ -2062,9 +2094,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (lightningFlash > 0.001) {
       lightningFlash = Math.max(0, lightningFlash - dt * 4);
       const boost = lightningFlash * lightningFlash; // sharp falloff
-      ambLight.intensity = curAmbI + boost * 1.8;
-      sun.intensity = curSunI + boost * 1.4;
-      skyMat.uniforms.topColor.value.copy(skyTopC).lerp(new THREE.Color(0xe6ecf2), boost);
+      ambLight.intensity += boost * 1.8; // add onto the day/night-modulated base
+      sun.intensity += boost * 1.4;
+      skyMat.uniforms.topColor.value.lerp(new THREE.Color(0xe6ecf2), boost);
     }
     if (aoCam) { // keep the AO camera exactly on the real camera (minus the atmosphere layer)
       aoCam.fov = camera.fov; aoCam.aspect = camera.aspect; aoCam.near = camera.near; aoCam.far = camera.far;
@@ -2096,7 +2128,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       let wetCount = 0, visCount = 0;
       let mnX = Infinity, mxX = -Infinity, mnZ = Infinity, mxZ = -Infinity;
       for (const t of view.tiles) {
-        if (t.v !== 2) continue;
+        // Count the PLAYABLE visible map only. The open-ocean belt is thousands of
+        // always-visible tiles; letting it into the denominator sank the wet fraction
+        // below the threshold and brought back the on/off "intermittent" rain.
+        if (t.v !== 2 || t.open) continue;
         visCount += 1;
         if (t.wx !== "rain" && t.wx !== "storm") continue;
         wetCount += 1;
@@ -2121,6 +2156,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       // Overall sky mood — sunny is bright with a sun disc; overcast greys it out.
       moodName = view.weather || "clear";
       moodTarget = WEATHER_SKY[moodName] || WEATHER_SKY.clear;
+      // Day/night for this turn: p in [0,1) across the cycle. sinT is +1 at noon,
+      // -1 at midnight, 0 at dawn/dusk. Daylight fades in through dawn; the sun climbs
+      // to a high noon and sinks; the loop eases these so a turn doesn't snap.
+      const p = ((((view.turn ?? 6) - 1) % DAY_TURNS) + DAY_TURNS) % DAY_TURNS / DAY_TURNS;
+      const sinT = Math.sin(p * Math.PI * 2);
+      dayTarget = Math.max(0, Math.min(1, sinT * 0.85 + 0.4)); // 1 noon · ~0.4 dawn/dusk · 0 night
+      elevTarget = 0.14 + Math.max(0, sinT) * 0.92;            // low & golden at the edges, high at noon
+      azTarget = -0.55 + p * 1.1;                              // swings NE → N → NW through the day
       if (view.focus) {
         const w = axialToWorld(view.focus.q, view.focus.r);
         controls.target.set(w.x, 0, w.z);

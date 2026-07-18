@@ -2342,7 +2342,7 @@
       skyWx = (region && state.weather.current[region]) || "clear";
     }
     updateSoundscape(skyWx, tiles);
-    const view = { tiles: tiles, sprites: sprites, borders: borders, districts: districts, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx };
+    const view = { tiles: tiles, sprites: sprites, borders: borders, districts: districts, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx, turn: state.turn };
     if (pendingRecenter) {
       const home =
         Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
