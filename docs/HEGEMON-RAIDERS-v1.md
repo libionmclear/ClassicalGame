@@ -97,11 +97,12 @@ haven.
 
 ### The roster (`src/engine/figures.ts`)
 
-26 figures — far more than any one game surfaces (you meet a handful), so campaigns
+27 figures — far more than any one game surfaces (you meet a handful), so campaigns
 don't repeat. Some are **unique to one people** (civ-gated), which makes each civ's
-playthrough feel distinct. Arrival conditions read the `FigureCtx` the engine
-computes: `coastal, navalThreat, atSea, atWar, cityCount, age, foundRuins, gold,
-unitCount, population`.
+playthrough feel distinct — every one of the eight civs has at least one, and none
+is guaranteed from turn one (fairness). Arrival conditions read the `FigureCtx` the
+engine computes: `coastal, navalThreat, atSea, atWar, cityCount, age, foundRuins,
+gold, unitCount, population`.
 
 **Universal** (open to any people):
 
@@ -131,11 +132,12 @@ unitCount, population`.
 | Figure | People | Arrives when… |
 |---|---|---|
 | **Cincinnatus** · **Appius Claudius Caecus** | Rome | at war · ≥ 2 cities |
+| **Themistocles of Athens** | Greece | coastal / naval threat / at sea |
 | **Hanno the Navigator** | Carthage | coastal or at sea (`seaReach`) |
 | **Imhotep** | Egypt | ≥ 1 city |
-| **Diviciacus the Aeduan** | Gaul | always |
+| **Diviciacus the Aeduan** | Gaul | ≥ 2 cities or age ≥ 2 |
 | **Amanirenas the Kandake** | Kush | at war |
-| **The Druids of Ynys Môn** | Britons | always |
+| **The Druids of Ynys Môn** | Britons | at war or ≥ 2 cities |
 | **Surena** | Parthia | at war |
 
 Civ-gating is enforced in `maybeFireFigure` via `playerControlsCiv`.

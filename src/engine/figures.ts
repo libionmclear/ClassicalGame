@@ -414,6 +414,26 @@ export const FIGURES: HistoricalFigure[] = [
   },
   // ---- Unique to one people ------------------------------------------------------
   {
+    id: "themistocles",
+    name: "Themistocles of Athens",
+    title: "Architect of the Wooden Walls",
+    civ: "greece",
+    note: "He read the oracle's 'wooden walls' as ships, built Athens a fleet from the Laurium silver, and broke Persia at Salamis (480 BC).",
+    when: (c) => c.coastal || c.navalThreat || c.atSea,
+    options: [
+      {
+        label: "🛶 The Wooden Walls",
+        outcome: "Athens' future is staked on her fleet — swifter ships and a coast that holds against any landing.",
+        effects: { perks: { navalMovePlus: 1, defPct: 5 } }
+      },
+      {
+        label: "⛏️ The Silver of Laurium",
+        outcome: "The state silver mines are poured into the navy and the treasury, enriching you now and for good.",
+        effects: { gold: 40, perks: { gold: 1 } }
+      }
+    ]
+  },
+  {
     id: "cincinnatus",
     name: "Cincinnatus",
     title: "The Dictator of the Plough",
@@ -499,7 +519,7 @@ export const FIGURES: HistoricalFigure[] = [
     title: "Druid & Statesman",
     civ: "gaul",
     note: "The one druid history names — envoy, astronomer and ally, who pleaded his people's cause before the Roman Senate.",
-    when: () => true,
+    when: (c) => c.cityCount >= 2 || c.age >= 2,
     options: [
       {
         label: "🌳 The Druids' Counsel",
@@ -539,7 +559,7 @@ export const FIGURES: HistoricalFigure[] = [
     title: "Keepers of the Sacred Isle",
     civ: "britons",
     note: "On Anglesey stood the druids' holy groves — the heart of British resistance that Rome burned in AD 60.",
-    when: () => true,
+    when: (c) => c.atWar || c.cityCount >= 2,
     options: [
       {
         label: "🌲 The Sacred Grove",
