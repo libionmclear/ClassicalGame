@@ -1,0 +1,160 @@
+// HEGEMON — terrain relief (docs/TERRAIN-RELIEF-SPEC.md, "Path A: continuous
+// landscape"). Renderer-only: the board becomes ONE flowing surface whose height is
+// derived from the hex tiles, with the hex grid drawn as an overlay. Zero engine/rules
+// changes — this reads the same view object the board always got.
+//
+// This module is the pipeline + infrastructure:
+//   • the elevation model (per-biome target heights),
+//   • a continuous heightfield SAMPLER that smooths across hex centres (no cliffs
+//     except at mountains),
+//   • the biome texture drop-in convention (assets/terrain/<biome>/…), and
+//   • a subdivided surface-mesh builder (procedural colour now; swaps to painted
+//     biome textures the moment the art lands).
+import * as THREE from "three";
+
+// Hex layout — MUST match board3d.ts (pointy-top, SIZE = 1).
+export const SIZE = 1;
+export function axialToWorld(q: number, r: number): { x: number; z: number } {
+  return { x: SIZE * Math.sqrt(3) * (q + r / 2), z: SIZE * 1.5 * r };
+}
+
+// Per-biome target elevation. Kept in the same range as the board's terraces so units
+// are never hidden behind a hill at the default inclination (spec §2 readability cap).
+export const TERRAIN_ELEV: Record<string, number> = {
+  sea: -0.12, coast: -0.04, plains: 0.14, valley: 0.18, marsh: 0.10,
+  forest: 0.34, hills: 0.54, highlands: 0.74, mountains: 0.96, desert: 0.14
+};
+export const SEA_LEVEL = -0.1;
+const WATER = new Set(["sea", "coast"]);
+export function elevationOf(terrain: string): number {
+  return WATER.has(terrain) ? SEA_LEVEL : (TERRAIN_ELEV[terrain] ?? 0.12);
+}
+
+// Per-biome render config (extended as the art pipeline fills in). tiling = texture
+// repeats per world unit (~one repeat per 3–4 hexes per spec §4); dispAmp = micro
+// relief strength; tint = procedural fallback colour until an albedo is dropped in.
+export interface BiomeCfg { tint: number; tiling: number; dispAmp: number; }
+export const BIOME_CFG: Record<string, BiomeCfg> = {
+  plains:    { tint: 0x7a955a, tiling: 0.30, dispAmp: 0.04 },
+  valley:    { tint: 0x6f9a52, tiling: 0.30, dispAmp: 0.03 },
+  marsh:     { tint: 0x5f7d55, tiling: 0.30, dispAmp: 0.03 },
+  forest:    { tint: 0x3e6440, tiling: 0.28, dispAmp: 0.05 },
+  hills:     { tint: 0x8a744c, tiling: 0.26, dispAmp: 0.08 },
+  highlands: { tint: 0x877a5c, tiling: 0.26, dispAmp: 0.10 },
+  mountains: { tint: 0x7c7264, tiling: 0.24, dispAmp: 0.14 },
+  desert:    { tint: 0xcbab68, tiling: 0.26, dispAmp: 0.05 },
+  coast:     { tint: 0xb8a06a, tiling: 0.30, dispAmp: 0.02 },
+  sea:       { tint: 0x2f5177, tiling: 0.30, dispAmp: 0.0 }
+};
+export const BIOMES = Object.keys(BIOME_CFG);
+
+// The art drop-in convention (spec §4). Drop painted, seamless-tileable PNGs at these
+// paths and the build ships them; the loader uses them, else falls back to procedural.
+export function biomeTexPaths(biome: string): { albedo: string; height: string; normal: string } {
+  return {
+    albedo: `assets/terrain/${biome}/albedo.png`,
+    height: `assets/terrain/${biome}/height.png`,
+    normal: `assets/terrain/${biome}/normal.png`
+  };
+}
+
+// What a vertex needs to know about a tile. Off-map returns undefined → treated as sea.
+export interface TileSample { elev: number; r: number; g: number; b: number }
+export type TileAt = (q: number, r: number) => TileSample | undefined;
+
+// The heightfield: a smooth, distance-weighted blend of the surrounding hex centres'
+// elevations, so the surface flows between hexes with no cliffs (spec §2). Colour is
+// blended by the same kernel so biomes cross-fade at their borders. Deterministic —
+// same tiles in → same surface out.
+const BLEND_R = 2.8 * SIZE;               // blend radius (~1.5 hexes)
+const RING = 2;                           // axial neighbourhood scanned per sample
+export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number; r: number; g: number; b: number } {
+  const rf = z / (1.5 * SIZE);
+  const qf = x / (SIZE * Math.sqrt(3)) - rf / 2;
+  const bq = Math.round(qf), br = Math.round(rf);
+  let ysum = 0, rsum = 0, gsum = 0, bsum = 0, wsum = 0;
+  let nearest: TileSample | undefined; let nearestD = Infinity;
+  for (let dr = -RING; dr <= RING; dr += 1) {
+    for (let dq = -RING; dq <= RING; dq += 1) {
+      const q = bq + dq, r = br + dr;
+      const c = axialToWorld(q, r);
+      const d = Math.hypot(c.x - x, c.z - z);
+      const s = tileAt(q, r);
+      if (d < nearestD) { nearestD = d; nearest = s; }
+      if (d >= BLEND_R) continue;
+      const t = tileAt(q, r);
+      const samp: TileSample = t ?? { elev: SEA_LEVEL, r: 0x2f / 255, g: 0x51 / 255, b: 0x77 / 255 };
+      const w = (1 - d / BLEND_R) * (1 - d / BLEND_R); // smooth falloff
+      ysum += w * samp.elev; rsum += w * samp.r; gsum += w * samp.g; bsum += w * samp.b; wsum += w;
+    }
+  }
+  if (wsum <= 0) {
+    const n = nearest ?? { elev: SEA_LEVEL, r: 0x2f / 255, g: 0x51 / 255, b: 0x77 / 255 };
+    return { y: n.elev, r: n.r, g: n.g, b: n.b };
+  }
+  return { y: ysum / wsum, r: rsum / wsum, g: gsum / wsum, b: bsum / wsum };
+}
+
+// Build the continuous ground surface: a subdivided grid over the board's world
+// bounds, displaced by the heightfield and vertex-coloured by biome. Procedural for
+// now; painted biome textures blend in later via the same UVs (biomeTexPaths).
+export interface SurfaceOpts { subdiv?: number; margin?: number; maxSeg?: number }
+export function buildTerrainSurface(
+  tiles: Array<{ q: number; r: number }>,
+  tileAt: TileAt,
+  opts: SurfaceOpts = {}
+): THREE.Mesh {
+  const subdiv = opts.subdiv ?? 2.4;      // grid vertices per world unit
+  const margin = opts.margin ?? 2.0;
+  const maxSeg = opts.maxSeg ?? 260;      // per-axis cap (perf / quality tier)
+
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const t of tiles) {
+    const c = axialToWorld(t.q, t.r);
+    if (c.x < minX) minX = c.x; if (c.x > maxX) maxX = c.x;
+    if (c.z < minZ) minZ = c.z; if (c.z > maxZ) maxZ = c.z;
+  }
+  if (!isFinite(minX)) { minX = -1; maxX = 1; minZ = -1; maxZ = 1; }
+  minX -= margin; maxX += margin; minZ -= margin; maxZ += margin;
+  const w = maxX - minX, d = maxZ - minZ;
+  const segX = Math.max(1, Math.min(maxSeg, Math.round(w * subdiv)));
+  const segZ = Math.max(1, Math.min(maxSeg, Math.round(d * subdiv)));
+  const nx = segX + 1, nz = segZ + 1;
+
+  const pos = new Float32Array(nx * nz * 3);
+  const col = new Float32Array(nx * nz * 3);
+  const uv = new Float32Array(nx * nz * 2);
+  const UV_SCALE = 0.28; // ~one texture repeat per 3–4 hexes (spec §4)
+  for (let iz = 0; iz < nz; iz += 1) {
+    for (let ix = 0; ix < nx; ix += 1) {
+      const wx = minX + (ix / (nx - 1)) * w;
+      const wz = minZ + (iz / (nz - 1)) * d;
+      const s = sampleSurface(wx, wz, tileAt);
+      const vi = (iz * nx + ix) * 3;
+      pos[vi] = wx; pos[vi + 1] = s.y; pos[vi + 2] = wz;
+      col[vi] = s.r; col[vi + 1] = s.g; col[vi + 2] = s.b;
+      const ui = (iz * nx + ix) * 2;
+      uv[ui] = wx * UV_SCALE; uv[ui + 1] = wz * UV_SCALE;
+    }
+  }
+  const idx: number[] = [];
+  for (let iz = 0; iz < segZ; iz += 1) {
+    for (let ix = 0; ix < segX; ix += 1) {
+      const a = iz * nx + ix, b = a + 1, c2 = a + nx, e = c2 + 1;
+      idx.push(a, c2, b, b, c2, e);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0.0 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  mesh.name = "terrainSurface";
+  return mesh;
+}

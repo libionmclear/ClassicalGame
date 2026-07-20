@@ -18,6 +18,7 @@ import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
 import type { GameState } from "../engine/types";
 import { buildCity as buildCityV2 } from "./cityModels.js";
+import { buildTerrainSurface, elevationOf, type TileSample } from "./terrain";
 import { buildDistrict } from "./districtModels.js";
 
 // City visual tier (1..10) from population — HEGEMON-VISUALS-v2.md §1 thresholds.
@@ -1177,6 +1178,18 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   });
 
   let tileMesh: THREE.InstancedMesh | null = null;
+  // Continuous-landscape preview (docs/TERRAIN-RELIEF-SPEC.md). Behind a flag while it
+  // matures: ?terrain=relief in the URL, or window.HG_TERRAIN = "relief". When on, the
+  // hex prisms hide and one flowing displaced surface renders in their place.
+  const RELIEF = (() => {
+    try {
+      if (typeof location !== "undefined" && /(?:[?&])terrain=relief\b/.test(location.search)) return true;
+      if (typeof window !== "undefined" && (window as unknown as { HG_TERRAIN?: string }).HG_TERRAIN === "relief") return true;
+    } catch { /* headless */ }
+    return false;
+  })();
+  let terrainMesh: THREE.Mesh | null = null;
+  let terrainSig = "";
   // Discovered sea hexes live in their OWN mesh: thin, semi-transparent tints that sit
   // ON the single reflective water surface (see waterTintMat) rather than opaque slabs
   // floating above it. Land + undiscovered tiles stay in tileMesh.
@@ -1478,6 +1491,32 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // Restore the player's saved tilt preset over the default framing (once per map).
     const savedTilt = loadTilt();
     if (savedTilt != null) setTilt(savedTilt);
+  }
+
+  // Continuous-landscape surface (spec §2-3, step 1). Builds one displaced, biome-
+  // coloured mesh from the view's tiles and swaps out the hex prisms. Rebuilds only
+  // when the tile set changes. Painted biome textures blend in later via the same UVs.
+  const _tc = new THREE.Color();
+  function buildTerrain(view: BoardView): void {
+    if (!RELIEF) return;
+    const sig = view.tiles.length + ":" + (view.tiles[0] ? view.tiles[0].q + "," + view.tiles[0].r + "," + view.tiles[0].t : "");
+    if (terrainMesh && sig === terrainSig) return;
+    terrainSig = sig;
+    if (terrainMesh) { scene.remove(terrainMesh); terrainMesh.geometry.dispose(); (terrainMesh.material as THREE.Material).dispose(); terrainMesh = null; }
+
+    const byKey = new Map<string, TileView>();
+    for (const t of view.tiles) byKey.set(t.q + "," + t.r, t);
+    const tileAt = (q: number, r: number): TileSample | undefined => {
+      const tv = byKey.get(q + "," + r);
+      if (!tv) return undefined;
+      _tc.copy(colorFor(tv, view.civColors));
+      return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b };
+    };
+    terrainMesh = buildTerrainSurface(view.tiles, tileAt);
+    scene.add(terrainMesh);
+    // Hide the hex prisms + their sea tints; the reflective sea plane stays.
+    if (tileMesh) tileMesh.visible = false;
+    if (waterMesh) waterMesh.visible = false;
   }
 
   function colorFor(tv: TileView, civColors: Record<string, string>): THREE.Color {
@@ -2119,6 +2158,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       lastView = view;
       buildTiles(view);
       paintTiles(view);
+      buildTerrain(view); // continuous-landscape surface (flagged) — after paint, so colours are current
       placeSprites(view);
       placeScatter(view);
       placeDistricts(view);

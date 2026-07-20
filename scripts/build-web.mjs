@@ -99,6 +99,13 @@ if (await exists(modelsDir)) {
   await cp(modelsDir, path.join(publicDir, "assets", "models"), { recursive: true });
 }
 
+// Terrain biome textures (assets/terrain/<biome>/albedo|height|normal.png) — the
+// continuous-landscape renderer loads these; missing ones fall back to procedural.
+const terrainDir = path.join(root, "assets", "terrain");
+if (await exists(terrainDir)) {
+  await cp(terrainDir, path.join(publicDir, "assets", "terrain"), { recursive: true });
+}
+
 let manifest = {};
 if (await exists(spriteDist)) {
   await cp(spriteDist, path.join(publicDir, "assets", "sprites"), { recursive: true });
