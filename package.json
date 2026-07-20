@@ -15,7 +15,8 @@
     "serve:only": "node --no-warnings=ExperimentalWarning server/hegemon-server.mjs",
     "play:web": "npm run build:web",
     "vercel-build": "npm run build:web",
-    "push:auto": "node scripts/publish-auto.mjs"
+    "push:auto": "node scripts/publish-auto.mjs",
+    "optimize-models": "node scripts/optimize-models.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.14",

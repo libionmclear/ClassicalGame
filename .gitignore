@@ -7,5 +7,7 @@ server/*.db
 server/*.db-wal
 server/*.db-shm
 
-# Large local 3D model binaries — kept out of git; drop .glb files in assets/models/** locally, compress before shipping.
-assets/models/**/*.glb
+# 3D models: the OPTIMIZED glbs (≤~1 MB, via scripts/optimize-models) ARE committed so
+# every build/deploy has them. Only RAW multi-MB exports stay out — put those under
+# assets/models/_raw/ (gitignored) and optimize into assets/models/units|cities/.
+assets/models/_raw/
