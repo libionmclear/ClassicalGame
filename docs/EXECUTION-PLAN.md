@@ -44,8 +44,11 @@ Legend: ☐ not started · ◐ partially exists · ✔ done · 🔎 needs owner 
    time and no-ops gracefully (raid on captured/vanished city — partly handled;
    tribute no longer affordable — handled; figure whose condition flipped). One test
    per edge case.
-8. **☐ Unify the decision queue.** Fold `pendingRaid` into the same one-at-a-time slot
-   as `pendingEvent`/`pendingFigure` so modals never stack.
+8. **✔ Unify the decision queue.** `maybeFireEvent`/`maybeFireFigure` now also skip
+   while a `pendingRaid` is set (engine won't pile a new decision on an urgent raid),
+   and the client shows exactly one modal by urgency priority: **raid → figure →
+   event** (each modal hides when a higher-priority one is pending). No more stacked
+   modals on a bad turn. (Golden hashes regenerated — an intended rules change.)
 
 ## Phase 3 — Tier-1 graphics pass (Direction §6.1) — *high leverage, do early*
 

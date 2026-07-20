@@ -1166,7 +1166,8 @@
     const p = human();
     const pending = p && p.pendingEvent;
     const event = pending && engine.getEvent ? engine.getEvent(pending) : null;
-    if (!event || !isHumanTurn() || (victory && victory.winnerId)) {
+    // A raid or figure (both more urgent/rare) shows first; the Crossroads waits.
+    if (!event || !isHumanTurn() || (p && (p.pendingFigure || p.pendingRaid)) || (victory && victory.winnerId)) {
       eventModalEl.classList.add("hidden");
       return;
     }
@@ -1197,9 +1198,9 @@
     const p = human();
     const raidId = p && p.pendingRaid;
     const raid = raidId && (state.raids || []).find(function (r) { return r.id === raidId; });
-    // A visiting figure (e.g. Archimedes offering the mirrors) takes the stage first;
-    // the raid warning re-appears once that's answered.
-    if (!raid || !isHumanTurn() || (p && p.pendingFigure) || (victory && victory.winnerId)) {
+    // A raid strikes NEXT turn — it's the most urgent decision, so it takes the stage
+    // over an event/figure (those wait until it's answered). One modal at a time.
+    if (!raid || !isHumanTurn() || (victory && victory.winnerId)) {
       raidModalEl.classList.add("hidden");
       return;
     }
@@ -1281,7 +1282,8 @@
     const p = human();
     const figId = p && p.pendingFigure;
     const figure = figId && engine.getFigure ? engine.getFigure(figId) : null;
-    if (!figure || !isHumanTurn() || (victory && victory.winnerId)) {
+    // A pending raid (more urgent) shows first; the figure waits behind it.
+    if (!figure || !isHumanTurn() || (p && p.pendingRaid) || (victory && victory.winnerId)) {
       figureModalEl.classList.add("hidden");
       return;
     }

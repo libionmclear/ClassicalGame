@@ -1655,7 +1655,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
 // Deterministically hand the next player a Crossroads dilemma now and then,
 // spaced out so they don't pile up. The human sees a card; the AI auto-resolves.
 function maybeFireEvent(state: GameState, player: Player): void {
-  if (player.pendingEvent || player.pendingFigure) return; // one decision card at a time
+  if (player.pendingEvent || player.pendingFigure || player.pendingRaid) return; // one decision card at a time (incl. an urgent raid warning)
   if (player.cityIds.length === 0) return;
   const since = state.turn - (player.lastEventTurn ?? 0);
   if (state.turn < 3 || since < 5) return;
@@ -1755,7 +1755,7 @@ function figureContext(state: GameState, player: Player): FigureCtx {
 }
 
 function maybeFireFigure(state: GameState, player: Player): void {
-  if (player.pendingEvent || player.pendingFigure) return; // one decision card at a time
+  if (player.pendingEvent || player.pendingFigure || player.pendingRaid) return; // one decision card at a time (incl. an urgent raid warning)
   if (player.cityIds.length === 0) return;
   if (state.turn < FIGURE_START_TURN) return;
   if (state.turn - (player.lastFigureTurn ?? 0) < FIGURE_SPACING) return;
