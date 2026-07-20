@@ -99,8 +99,10 @@ Design detail: [HEGEMON-RAIDERS-v1.md](HEGEMON-RAIDERS-v1.md).
 
 ## 9. Cards & the collection
 
-Meta-game rule: **pay-to-enhance, never pay-to-win** — everything earnable by play,
-money only skips the grind, no card grants outright power.
+Meta-game rule (owner's formulation): **pay to get there faster; never pay for what
+time cannot earn** — every civ, Legend and Edict is earnable through play in
+reasonable time; money only compresses time. Rarity, packs and the pull stay intact;
+shards craft any card; a pity timer guarantees epic+ every 10 packs.
 
 ### 9.1 Categories
 - **Civ cards — 32** (§1): unlock a people.

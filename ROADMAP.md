@@ -1,5 +1,12 @@
 # HEGEMON — roadmap
 
+> **Current direction of record (2026-07-20):** see [docs/DIRECTION-UPDATE.md](docs/DIRECTION-UPDATE.md)
+> (owner decisions, supersedes conflicts) and [docs/EXECUTION-PLAN.md](docs/EXECUTION-PLAN.md)
+> (ordered work queue). HEGEMON is a **commercial game with authentic history as its
+> differentiator** — *"Other games make you a god. HEGEMON makes you a Roman."* The
+> old 20–40 min quick-game pillar is retired. This roadmap's older sections are kept
+> for context but the direction update governs.
+
 Vision: a historically accurate classical-age (~800 BC–AD 117) hex strategy game
 on a real 3D board. Everything should be grounded in history and, where it
 matters, unique per civilization.

@@ -18,6 +18,10 @@ technologies, real armies and real geography, over a **deterministic TypeScript
 engine** (a pure `(state, action) → state` reducer, seeded RNG, **286 unit tests**)
 so replays and lockstep multiplayer stay exact.
 
+> **Positioning:** a commercial game with authentic history as its differentiator
+> (not education-first) — *"Other games make you a god. HEGEMON makes you a Roman."*
+> The player is a person climbing through history, not an immortal abstraction.
+
 **Core loop:** found and grow cities → work the land and its resources → research a
 three-age tech tree (Villages → Kingdoms → Empires) → raise armies and fleets → wage
 war, forge diplomacy, and answer the events, raiders and figures history throws at
@@ -93,9 +97,11 @@ Two are built; they interlock. (Full design: [HEGEMON-RAIDERS-v1.md](HEGEMON-RAI
 
 ## Cards & the collection (meta-game)
 
-The between-matches collection. Founding rule: **pay-to-enhance, never pay-to-win** —
-every card is earnable by play; money only skips the grind, and no card grants
-outright power.
+The between-matches collection. Founding rule (owner's formulation): **pay to get
+there faster; never pay for what time cannot earn** — every civ, Legend and Edict is
+earnable through play in reasonable time; money only *compresses* time. Rarity
+(common/rare/epic/legendary), packs and the thrill of the pull stay; shards let you
+craft any card, and a pity timer guarantees an epic+ every 10 packs.
 
 | Category | Count | What it does |
 |---|---:|---|
