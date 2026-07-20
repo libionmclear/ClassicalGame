@@ -6,10 +6,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createInitialGameState, applyAction, LOST_AT_SEA_DIST } from "../src/engine";
+import { FIGURES } from "../src/engine/figures";
 import type { GameState, GameAction, Player, Raid } from "../src/engine/types";
 
 // A coastal city at (1,1) with a bay beside it; optional extra cities, a unit, gold.
-function figState(opts: { gold?: number; cities?: number; withUnit?: boolean } = {}): GameState {
+// The player keeps a stable id ("p1") but a civ that civ-gated figures match on.
+function figState(opts: { gold?: number; cities?: number; withUnit?: boolean; civ?: string } = {}): GameState {
   const tiles: Record<string, { terrain: "plains" | "sea"; region: string }> = {};
   for (let r = 0; r < 6; r += 1) for (let q = 0; q < 6; q += 1) tiles[`${q},${r}`] = { terrain: "plains", region: "core" };
   tiles["2,1"] = { terrain: "sea", region: "core" };
@@ -24,7 +26,7 @@ function figState(opts: { gold?: number; cities?: number; withUnit?: boolean } =
 
   return createInitialGameState({
     seed: "figures",
-    players: [{ id: "p1", civ: "Rome", gold: opts.gold ?? 100 }, { id: "p2", civ: "Carthage" }],
+    players: [{ id: "p1", civ: opts.civ ?? "Rome", gold: opts.gold ?? 100 }, { id: "p2", civ: "Carthage" }],
     map: { width: 6, height: 6, regions: ["core"], tiles, units, cities }
   });
 }
@@ -117,4 +119,33 @@ test("figures materialise over a campaign, each at most once", () => {
   }
   assert.ok(met.length > 0, "a figure called at least once");
   assert.equal(met.length, new Set(met).size, "and none appeared twice");
+});
+
+test("the roster is large and well-formed — the source of replay variety", () => {
+  assert.ok(FIGURES.length >= 20, "a deep cast so no two games meet the same faces");
+  assert.equal(FIGURES.length, new Set(FIGURES.map((f) => f.id)).size, "ids are unique");
+  for (const f of FIGURES) {
+    assert.ok(f.name && f.title && f.note, `${f.id} has flavour`);
+    assert.ok(f.options.length >= 2 && f.options.length <= 3, `${f.id} offers a real choice`);
+    for (const o of f.options) assert.ok(o.label && o.outcome && o.effects && Object.keys(o.effects).length > 0, `${f.id} option is complete`);
+  }
+});
+
+test("a people never meets another people's unique figure", () => {
+  // Egypt should never be visited by Rome/Carthage/Gaul/Kush/Britons/Parthia figures.
+  const civOnly = FIGURES.filter((f) => f.civ);
+  const foreign = new Set(civOnly.filter((f) => f.civ !== "egypt").map((f) => f.id));
+  let s = figState({ cities: 3, civ: "Egypt" });
+  const seen = new Set<string>();
+  for (let i = 0; i < 120; i += 1) {
+    s = applyAction(s, { type: "END_TURN", playerId: s.players[s.currentPlayerIndex].id } as GameAction);
+    s = applyAction(s, { type: "END_TURN", playerId: s.players[s.currentPlayerIndex].id } as GameAction);
+    (getP(s, "p1").metFigures ?? []).forEach((id) => seen.add(id));
+    const ev = getP(s, "p1").pendingEvent;
+    if (ev) s = applyAction(s, { type: "RESOLVE_EVENT", playerId: "p1", eventId: ev, optionIndex: 0 } as GameAction);
+    const fig = getP(s, "p1").pendingFigure;
+    if (fig) s = applyAction(s, { type: "RESOLVE_FIGURE", playerId: "p1", figureId: fig, optionIndex: 0 } as GameAction);
+  }
+  assert.ok(seen.size > 0, "Egypt did meet some figures over the campaign");
+  for (const id of seen) assert.ok(!foreign.has(id), `Egypt should not meet the ${id} figure`);
 });

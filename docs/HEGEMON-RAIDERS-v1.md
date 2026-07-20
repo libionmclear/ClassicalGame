@@ -97,14 +97,48 @@ haven.
 
 ### The roster (`src/engine/figures.ts`)
 
-| Figure | Arrives when… | Boons |
+26 figures — far more than any one game surfaces (you meet a handful), so campaigns
+don't repeat. Some are **unique to one people** (civ-gated), which makes each civ's
+playthrough feel distinct. Arrival conditions read the `FigureCtx` the engine
+computes: `coastal, navalThreat, atSea, atWar, cityCount, age, foundRuins, gold,
+unitCount, population`.
+
+**Universal** (open to any people):
+
+| Figure | Arrives when… | Boons (abridged) |
 |---|---|---|
-| **Archimedes of Syracuse** | coastal & (a raid threatens *or* age ≥ 2) | Burning Mirrors (destroy the raid + defence) · War Engines (production + attack) · Buoyancy (science + naval move) |
-| **Pytheas of Massalia** | a ship is out in the open-sea belt | Chart the Ocean (`seaReach` +2 + science) · Tin Route (gold + gold/turn) |
-| **Hippocrates of Kos** | age ≥ 2 | School of Medicine (heal army + healing perk) · Sanitation (food + food/turn) |
-| **Herodotus** | you've excavated a ruin | Endow the Histories (science) · Map the World (reveal + gold) |
-| **Solon of Athens** | you hold ≥ 3 cities | Enact the Reforms (stability + gold/turn) · Cancel the Debts (food + production) |
-| **Xenophon of Athens** | at war | Drill the Army (whole-army veterancy) · Long March (move perk + gold) |
+| **Archimedes of Syracuse** | coastal & (raid threatens *or* age ≥ 2) | Burning Mirrors (destroy the raid + defence) · War Engines · Buoyancy |
+| **Pytheas of Massalia** | a ship is in the open-sea belt | Chart the Ocean (`seaReach` +2) · Tin Route |
+| **Hippocrates of Kos** | age ≥ 2 | School of Medicine (heal) · Sanitation |
+| **Herodotus** | you've excavated a ruin | Endow the Histories · Map the World (reveal) |
+| **Solon of Athens** | ≥ 3 cities | Enact the Reforms · Cancel the Debts |
+| **Xenophon of Athens** | at war | Drill the Army (veterancy) · Long March |
+| **Thales of Miletus** | early (age ≤ 1) | Reason over Myth (−research cost) · Measure by the Shadow |
+| **Pythagoras of Samos** | age ≥ 2 | Harmony of Numbers · The Brotherhood |
+| **Democritus** | age ≥ 2 | The Atom (big science) · Euthymia |
+| **Eratosthenes** | age ≥ 2 | Measure the Earth (reveal) · Great Library |
+| **Euclid** | age ≥ 2 | The Elements (−research cost) · Tutor the Court |
+| **Thucydides** | at war | Set Down the Causes · Know Thy Enemy (atk+def) |
+| **Phidias** | ≥ 2 cities & at peace | Raise the Great Statue · Adorn the Temple |
+| **Demosthenes** | at war *or* naval threat | The Philippics · Man the Walls |
+| **Croesus of Lydia** | treasury ≥ 120 | The First Coinage · Offerings to Delphi |
+| **Sostratus of Cnidus** | coastal | The Great Lighthouse (naval) · Guide the Grain Fleet |
+| **Leonidas of Sparta** | at war | The Last Stand (heal + def) · Molon Labe |
+| **Ctesibius of Alexandria** | age ≥ 2 | Bronze-Spring Catapult · The Water Clock (build faster) |
+
+**Unique to one people:**
+
+| Figure | People | Arrives when… |
+|---|---|---|
+| **Cincinnatus** · **Appius Claudius Caecus** | Rome | at war · ≥ 2 cities |
+| **Hanno the Navigator** | Carthage | coastal or at sea (`seaReach`) |
+| **Imhotep** | Egypt | ≥ 1 city |
+| **Diviciacus the Aeduan** | Gaul | always |
+| **Amanirenas the Kandake** | Kush | at war |
+| **The Druids of Ynys Môn** | Britons | always |
+| **Surena** | Parthia | at war |
+
+Civ-gating is enforced in `maybeFireFigure` via `playerControlsCiv`.
 
 ### Where it lives
 

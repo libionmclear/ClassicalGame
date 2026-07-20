@@ -1261,8 +1261,16 @@
     if (fx.heal) parts.push("your army is fully healed");
     if (fx.reveal) parts.push("reveals the lands nearby");
     if (fx.seaReach) parts.push("ships sail +" + fx.seaReach + " rings before they're lost");
-    var perkLabel = { gold: "gold/turn", science: "science/turn", food: "food/turn", production: "prod/turn", stability: "stability", atkPct: "% attack", defPct: "% defence", navalMovePlus: " naval move", movePlus: " move", healPlus: " healing" };
-    if (fx.perks) for (var k in fx.perks) { if (fx.perks[k]) parts.push("+" + fx.perks[k] + (perkLabel[k] || " " + k) + " (lasting)"); }
+    var perkLabel = { gold: "gold/turn", science: "science/turn", food: "food/turn", production: "prod/turn", stability: "stability", atkPct: "% attack", defPct: "% defence", navalMovePlus: " naval move", movePlus: " move", healPlus: " healing", seaReach: " sea reach" };
+    // These perks read "cheaper/faster is good"; show the sign in plain terms.
+    var costLabel = { researchCostPct: "research cost", unitCostPct: "unit cost", upkeepPct: "upkeep" };
+    if (fx.perks) for (var k in fx.perks) {
+      var v = fx.perks[k];
+      if (!v) continue;
+      if (k === "buildFasterPct") parts.push("+" + v + "% build speed (lasting)");
+      else if (costLabel[k]) parts.push((v < 0 ? "−" : "+") + Math.abs(v) + "% " + costLabel[k] + " (lasting)");
+      else parts.push("+" + v + (perkLabel[k] || " " + k) + " (lasting)");
+    }
     return parts.join(" · ");
   }
 

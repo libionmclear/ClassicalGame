@@ -1739,6 +1739,7 @@ function figureContext(state: GameState, player: Player): FigureCtx {
     return !!u && openSeaDistance(state, u.position) > 0;
   });
   const atWar = state.players.some((o) => o.id !== player.id && isAtWar(state, player.id, o.id));
+  const population = player.cityIds.reduce((n, id) => n + (state.map.cities[id]?.population ?? 0), 0);
   return {
     coastal,
     navalThreat,
@@ -1746,7 +1747,10 @@ function figureContext(state: GameState, player: Player): FigureCtx {
     atWar,
     cityCount: player.cityIds.length,
     age: playerAge(player),
-    foundRuins: (player.codex ?? []).length > 0
+    foundRuins: (player.codex ?? []).length > 0,
+    gold: player.gold,
+    unitCount: player.unitIds.length,
+    population
   };
 }
 
@@ -1759,7 +1763,9 @@ function maybeFireFigure(state: GameState, player: Player): void {
 
   const ctx = figureContext(state, player);
   const met = new Set(player.metFigures ?? []);
-  const eligible = FIGURES.filter((f) => !met.has(f.id) && f.when(ctx));
+  const eligible = FIGURES.filter(
+    (f) => !met.has(f.id) && (!f.civ || playerControlsCiv(player, f.civ)) && f.when(ctx)
+  );
   if (eligible.length === 0) return;
 
   const pick = Math.floor(seededRandom(state.seed, `figurepick:${state.turn}:${player.id}`)() * eligible.length);
