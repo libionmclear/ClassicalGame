@@ -1653,7 +1653,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         }
       } else {
         const form = sv.form || "infantry";
-        const glb = getGLB("assets/models/units/" + form + ".glb");
+        // Prefer a model for the SPECIFIC unit type (warrior.glb, legionary.glb, …);
+        // fall back to the generic form model (infantry.glb, elephant.glb, …). Missing
+        // files are cached and cost nothing after the first 404.
+        const glb = (sv.utype ? getGLB("assets/models/units/" + sv.utype + ".glb") : null)
+          || getGLB("assets/models/units/" + form + ".glb");
         if (glb) {
           const single = form === "siege" || form === "naval";
           const base = form === "elephant" ? 2 : form === "mounted" ? 3 : form === "civilian" ? 3 : 6;

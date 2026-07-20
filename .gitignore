@@ -6,3 +6,6 @@ public/
 server/*.db
 server/*.db-wal
 server/*.db-shm
+
+# Large local 3D model binaries — kept out of git; drop .glb files in assets/models/** locally, compress before shipping.
+assets/models/**/*.glb
