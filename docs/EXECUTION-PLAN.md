@@ -8,23 +8,21 @@ Legend: ☐ not started · ◐ partially exists · ✔ done · 🔎 needs owner 
 
 ---
 
-## Phase 1 — Monetization verifications (Direction §1.2 / §8.1)
+## Phase 1 — Monetization verifications (Direction §1.2 / §8.1) — ✔ DONE
 
-1. **☐ Pack odds in the purchase UI.** *Status:* `PACK_TIERS` weights exist
-   (`game.js`), but the **store/purchase screen doesn't render them per pack before
-   purchase** (verified: only village/combat odds are surfaced today).
-   *Do:* show each pack's common/rare/epic/legendary weights on the pack itself in the
-   buy screen. *Accept:* every purchasable pack shows its odds pre-purchase (Apple
-   3.1.1 / Google Play compliance).
-2. **◐ Shards craft *every* card.** *Status:* `PACK_ECONOMY.duplicates = "shards"` is
-   **declared but not implemented** — no craft function/UI found. *Do:* implement
-   dup→shard conversion + a craft action for **all** types incl. civ cards and
-   legendaries, with steep rarity-scaled prices. *Accept:* any card (civ + legendary
-   included) is craftable from shards; pity timer intact.
-3. **☐ Launch-country flag.** *Do:* a config flag to disable pack *purchase*
-   (earn-only still works) per storefront country. *Accept:* toggling the flag removes
-   the buy button without touching earn flows. 🔎 which countries default-off is an ops
-   call.
+1. **✔ Pack odds in the purchase UI.** Every pack (Standard/Bronze/Silver/Gold) now
+   renders its per-rarity drop weights as percentages (colour-coded) on the pack tile,
+   before purchase (`packOddsHtml` in `game.js`; `.cd-odds` in `game.css`). Apple
+   3.1.1 / Google Play compliant.
+2. **✔ Shards craft *every* card.** Duplicates melt into 🔷 shards
+   (`DUPE_SHARDS`); any unowned card — **incl. civ cards and legendaries** — is
+   craftable from a shared shard pool at steep rarity-scaled prices (`CRAFT_COST`,
+   `craftCard`), surfaced as a **Craft · N 🔷** button on each locked card. Pity timer
+   unchanged.
+3. **✔ Launch-country flag.** `STORE_CONFIG.{country, purchaseDisabledCountries}` +
+   `packPurchaseAllowed()` gate `buyPack` and the buy row (earn-only daily/open still
+   work), showing a "purchases off in your region" note. Flipping the config is now an
+   ops decision. 🔎 which countries ship purchase-off is still an ops call (data only).
 
 ## Phase 2 — Engine hardening (Direction §3.1)
 

@@ -1519,6 +1519,79 @@ button:hover:not(:disabled) {
   background: #2c4a72;
 }
 
+/* Shard balance chip (dupes → shards → craft anything). */
+.cd-shards { color: #7fd0e6; }
+
+/* Packs & odds (odds shown pre-purchase — Apple 3.1.1 / Google Play). */
+.cd-packs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+.cd-pack {
+  flex: 1 1 130px;
+  min-width: 130px;
+  background: rgba(10, 20, 36, 0.5);
+  border: 1px solid #2b4a66;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cd-pack-h {
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cd-pack-cost {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cd-odds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.cd-odds span { display: inline-flex; align-items: center; gap: 4px; }
+.cd-odds .o-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.cd-odds .o-common { color: #9aa7b4; }
+.cd-odds .o-rare { color: #4a90d9; }
+.cd-odds .o-epic { color: #a25ddc; }
+.cd-odds .o-legendary { color: #f2a03d; }
+.cd-pack .cd-buybtn { width: 100%; text-align: center; }
+
+.cd-note-warn {
+  color: #e0b070;
+  font-style: normal;
+  border-left: 3px solid #7a5a2a;
+  padding-left: 10px;
+}
+
+/* Craft-from-shards button on a card you don't own yet. */
+.pcard-craft {
+  background: #163a44;
+  color: #7fd0e6;
+  border: 1px solid #2c6675;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.76rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pcard-craft:disabled { opacity: 0.45; cursor: default; }
+.pcard-craft:not(:disabled):hover { background: #1d4c58; }
+
 .cd-reveal:not(:empty) {
   margin: 12px 0;
 }

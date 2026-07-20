@@ -4265,6 +4265,48 @@
   };
   const COINS_WIN = 40;
   const COINS_LOSS = 18;
+  // Shards (deterministic acquisition path — Direction §1.2). A duplicate melts into
+  // shards of its rarity; shards CRAFT any card, so every card is earnable with no
+  // luck gate. Craft costs are steep for legendaries (~4 same-rarity dupes each) and
+  // shards pool across rarities, so you can grind toward any card you want.
+  const DUPE_SHARDS = { starter: 0, common: 2, rare: 5, epic: 12, legendary: 30 };
+  const CRAFT_COST = { common: 8, rare: 20, epic: 48, legendary: 120 }; // starter civs are free — not crafted
+  // Per-storefront-country pack-PURCHASE flag (Direction §1.2). Disabling purchase
+  // leaves earn-only packs (daily + play) fully intact — so a Belgium-style ruling is
+  // an ops toggle here, not a code change. `country` is set by the store shell at
+  // runtime (null = unknown/web); default: purchases allowed everywhere.
+  const STORE_CONFIG = { country: null, purchaseDisabledCountries: [] };
+  function packPurchaseAllowed() {
+    const c = STORE_CONFIG.country;
+    return !(c && STORE_CONFIG.purchaseDisabledCountries.indexOf(c) !== -1);
+  }
+  // Odds-in-UI (Apple 3.1.1 / Google Play — mandatory before purchase of a randomized
+  // item). Render a pack's per-rarity drop weights as percentages on the pack itself.
+  function packOddsHtml(tier) {
+    const w = PACK_TIERS[tier].weights;
+    const total = w.common + w.rare + w.epic + w.legendary;
+    const pct = function (k) { return Math.round((w[k] / total) * 1000) / 10; };
+    return '<div class="cd-odds" title="Drop odds for this pack">' +
+      ["common", "rare", "epic", "legendary"].map(function (k) {
+        return '<span class="o-' + k + '"><span class="o-dot"></span>' + pct(k) + "%</span>";
+      }).join("") + "</div>";
+  }
+  // Craft any owned-or-not card from shards (Direction §1.2 — every card, incl. civ
+  // cards and legendaries, reachable without a pull).
+  function craftCard(cardId) {
+    const card = CARDS_BY_ID[cardId];
+    if (!card) return false;
+    const cost = CRAFT_COST[card.rarity] || 0;
+    if (!cost) return false; // starter civs / uncraftable
+    const p = loadProfile();
+    if ((p.cards[cardId] || 0) > 0) return false; // already owned
+    if ((p.shards || 0) < cost) return false;
+    p.shards -= cost;
+    p.cards[cardId] = 1;
+    if (card.type === "civ" && card.playable && p.unlockedCivs.indexOf(card.civ) === -1) p.unlockedCivs.push(card.civ);
+    saveProfile(p);
+    return true;
+  }
   // The card catalogue. Civ cards unlock a people; cosmetics equip on the profile
   // (crown before the name, an emblem, a title after). No card grants power.
   // ===== Cards v2 (Legends / Edicts / Events / Civs) — data of record lives in
@@ -4431,7 +4473,9 @@
       const isNew = !p.cards[card.id];
       p.cards[card.id] = (p.cards[card.id] || 0) + 1;
       if (card.type === "civ" && card.playable && p.unlockedCivs.indexOf(card.civ) === -1) p.unlockedCivs.push(card.civ);
-      gained.push({ card: card, isNew: isNew });
+      let shards = 0;
+      if (!isNew) { shards = DUPE_SHARDS[card.rarity] || 0; p.shards = (p.shards || 0) + shards; } // dupes melt into shards
+      gained.push({ card: card, isNew: isNew, shards: shards });
     }
     saveProfile(p);
     return gained;
@@ -4453,6 +4497,7 @@
   function buyPack(tier) {
     const t = PACK_TIERS[tier];
     if (!t || t.cost <= 0) return false;
+    if (!packPurchaseAllowed()) return false; // purchases off in this region (earn-only stays)
     const p = loadProfile();
     if (p.coins < t.cost) return false;
     p.coins -= t.cost;
@@ -4625,6 +4670,9 @@
       // the cosmetics currently equipped on the profile.
       cards: p.cards || {},
       coins: typeof p.coins === "number" ? p.coins : 0,
+      // Shards: duplicate cards melt into shards; shards craft ANY card (the
+      // deterministic acquisition path — every card earnable, never luck-gated).
+      shards: typeof p.shards === "number" ? p.shards : 0,
       // Packs owned per tier. An old numeric `packs` migrates into standard.
       packs:
         typeof p.packs === "number"
@@ -4984,16 +5032,28 @@
     parts.push(
       '<div class="cd-top">' +
       '<div class="cd-coins">💰 <b>' + p.coins + "</b> coins</div>" +
+      '<div class="cd-coins cd-shards">🔷 <b>' + (p.shards || 0) + "</b> shards</div>" +
       swBadge +
       '<button id="cd-daily" class="cd-daily"' + (daily ? "" : " disabled") + ">" + (daily ? "📦 Claim daily pack" : "📦 Daily claimed") + "</button>" +
       '<div class="cd-count">' + owned + " / " + CARDS.length + " cards</div></div>"
     );
+    // Packs & odds. Every pack shows its per-rarity drop odds BEFORE purchase (Apple
+    // 3.1.1 / Google Play). Bronze/Silver/Gold are buyable; Standard is the free daily.
+    const canBuy = packPurchaseAllowed();
     parts.push(
-      '<div class="cd-buy"><span class="cd-lo-label">Buy packs</span>' +
-      ["bronze", "silver", "gold"].map(function (tier) {
+      '<div class="cd-buy"><span class="cd-lo-label">Packs &amp; odds</span><div class="cd-packs">' +
+      ["standard", "bronze", "silver", "gold"].map(function (tier) {
         const t = PACK_TIERS[tier];
-        return '<button class="cd-buybtn" data-buy="' + tier + '"' + (p.coins >= t.cost ? "" : " disabled") + ">" + t.icon + " " + t.name + " — " + t.cost + " 💰</button>";
-      }).join("") + "</div>"
+        const isStd = tier === "standard";
+        const cost = isStd ? "Free daily" : t.cost + " 💰";
+        const buy = isStd ? "" :
+          '<button class="cd-buybtn" data-buy="' + tier + '"' + (canBuy && p.coins >= t.cost ? "" : " disabled") + ">Buy — " + t.cost + " 💰</button>";
+        return '<div class="cd-pack">' +
+          '<div class="cd-pack-h">' + t.icon + " " + t.name + '<span class="cd-pack-cost">' + cost + "</span></div>" +
+          packOddsHtml(tier) + buy + "</div>";
+      }).join("") + "</div>" +
+      (canBuy ? "" : '<div class="cd-note cd-note-warn">Pack purchases are turned off in your region — you can still earn packs by playing and claiming the free daily.</div>') +
+      "</div>"
     );
     const ownedPacks = ["standard", "bronze", "silver", "gold"].filter(function (tier) { return p.packs[tier] > 0; });
     parts.push(
@@ -5007,7 +5067,7 @@
       "</div>"
     );
     parts.push('<div id="cd-reveal" class="cd-reveal"></div>');
-    parts.push('<div class="cd-note">Coins are earned by playing (win = ' + COINS_WIN + ', loss = ' + COINS_LOSS + '); spend them on Bronze/Silver/Gold packs, or claim the free daily Standard. A better tier tilts the odds toward good cards. Everything is cosmetic or a small, always-earnable edge — never pay-to-win. Click an owned cosmetic to wear it, or a Legend / Edict / Event to slot it for your next campaign.</div>');
+    parts.push('<div class="cd-note">Coins are earned by playing (win = ' + COINS_WIN + ', loss = ' + COINS_LOSS + '); spend them on Bronze/Silver/Gold packs, or claim the free daily Standard. A better tier tilts the odds toward good cards. Duplicates melt into 🔷 <b>shards</b>, which <b>craft any card</b> — so every civ, Legend and Edict is earnable by play; money only gets you there faster, never buys what time cannot earn. Click an owned cosmetic to wear it, a Legend / Edict / Event to slot it, or <b>Craft</b> a card you don\'t have with shards.</div>');
 
     // Loadout: one Legend + one Edict + one Event, brought into your next campaign.
     // (They only take effect when you play their civilization — universal cards
@@ -5040,13 +5100,16 @@
       const r = RARITY[card.rarity];
       const inLoadout = LOADOUT_SLOTS.indexOf(card.type) !== -1 && lo[card.type] === card.id;
       const equipped = (card.type === "cosmetic" && p.equipped && p.equipped[card.slot] === card.id) || inLoadout;
+      const craftCost = CRAFT_COST[card.rarity] || 0;
       const foot = inLoadout
         ? '<span class="pcard-eq">✓ in loadout</span>'
         : equipped
           ? '<span class="pcard-eq">✓ equipped</span>'
           : has
             ? '<span class="pcard-owned">Owned' + (count > 1 ? " ×" + count : "") + "</span>"
-            : '<span class="pcard-locked-tag">Locked</span>';
+            : craftCost
+              ? '<button class="pcard-craft" data-craft="' + card.id + '"' + ((p.shards || 0) >= craftCost ? "" : " disabled") + " title=\"Craft this card with shards\">Craft · " + craftCost + " 🔷</button>"
+              : '<span class="pcard-locked-tag">Locked</span>';
       parts.push(
         '<div class="pcard cd-card rar-' + card.rarity + " type-" + card.type + (has ? "" : " locked") + (equipped ? " equipped" : "") + '" data-id="' + card.id + '">' +
         cardFaceHtml(card, !has) +
@@ -5066,10 +5129,11 @@
           '<div class="cd-reveal-in">' +
           gained.map(function (g) {
             const r = RARITY[g.card.rarity];
+            const tag = g.isNew ? " · NEW" : g.shards ? " · +" + g.shards + " 🔷" : " · dupe";
             return (
               '<div class="cd-rc ' + g.card.rarity + '"><span class="cd-ico">' + g.card.icon + "</span>" +
               '<span class="cd-name">' + g.card.name + "</span>" +
-              '<span class="cd-r" style="color:' + r.color + '">' + r.name + (g.isNew ? " · NEW" : "") + "</span></div>"
+              '<span class="cd-r" style="color:' + r.color + '">' + r.name + tag + "</span></div>"
             );
           }).join("") +
           "</div>";
@@ -5084,6 +5148,12 @@
       el.addEventListener("click", function () {
         const gained = openPack(el.getAttribute("data-open"));
         if (gained) showReveal(gained);
+      });
+    });
+    cardsBodyEl.querySelectorAll("[data-craft]").forEach(function (el) {
+      el.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (craftCard(el.getAttribute("data-craft"))) { refreshCivPicker(); renderCards(); }
       });
     });
     cardsBodyEl.querySelectorAll(".cd-card").forEach(function (el) {
