@@ -4457,16 +4457,31 @@
     }
     return "common";
   }
+  // Pity timer (Direction §1.2): at least one epic+ every PITY_N packs, so a dry
+  // streak can't run forever. Pick epic vs legendary by their standard weight ratio.
+  const PITY_N = 10;
+  const isEpicPlus = (r) => r === "epic" || r === "legendary";
+  function rollEpicPlus() {
+    return Math.random() * (RARITY.epic.weight + RARITY.legendary.weight) < RARITY.epic.weight ? "epic" : "legendary";
+  }
   // Open one pack of the given tier (must own it). Rolls 3 cards on that tier's
-  // odds — a better tier tilts toward the good pulls.
+  // odds — a better tier tilts toward the good pulls; the pity timer guarantees an
+  // epic+ at least every PITY_N packs.
   function openPack(tier) {
     const t = PACK_TIERS[tier] ? tier : "standard";
     const p = loadProfile();
     if ((p.packs[t] || 0) <= 0) return null;
     p.packs[t] -= 1;
+    const rarities = [rollRarity(PACK_TIERS[t].weights), rollRarity(PACK_TIERS[t].weights), rollRarity(PACK_TIERS[t].weights)];
+    if (rarities.some(isEpicPlus)) {
+      p.pity = 0; // the streak is broken
+    } else {
+      p.pity = (p.pity || 0) + 1;
+      if (p.pity >= PITY_N) { rarities[0] = rollEpicPlus(); p.pity = 0; } // pity pays out
+    }
     const gained = [];
     for (let i = 0; i < 3; i += 1) {
-      let rarity = rollRarity(PACK_TIERS[t].weights);
+      let rarity = rarities[i];
       let pool = CARDS_BY_RARITY[rarity];
       if (!pool || !pool.length) { rarity = "common"; pool = CARDS_BY_RARITY.common || CARDS; }
       const card = pool[Math.floor(Math.random() * pool.length)];
@@ -4673,6 +4688,8 @@
       // Shards: duplicate cards melt into shards; shards craft ANY card (the
       // deterministic acquisition path — every card earnable, never luck-gated).
       shards: typeof p.shards === "number" ? p.shards : 0,
+      // Packs opened without an epic+ (pity timer; guarantees one every PITY_N).
+      pity: typeof p.pity === "number" ? p.pity : 0,
       // Packs owned per tier. An old numeric `packs` migrates into standard.
       packs:
         typeof p.packs === "number"

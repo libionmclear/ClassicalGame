@@ -17,8 +17,10 @@ Legend: ☐ not started · ◐ partially exists · ✔ done · 🔎 needs owner 
 2. **✔ Shards craft *every* card.** Duplicates melt into 🔷 shards
    (`DUPE_SHARDS`); any unowned card — **incl. civ cards and legendaries** — is
    craftable from a shared shard pool at steep rarity-scaled prices (`CRAFT_COST`,
-   `craftCard`), surfaced as a **Craft · N 🔷** button on each locked card. Pity timer
-   unchanged.
+   `craftCard`), surfaced as a **Craft · N 🔷** button on each locked card.
+2b. **✔ Pity timer.** Was declared in `PACK_ECONOMY` but not implemented — now real:
+   `openPack` guarantees an epic+ at least every `PITY_N` (10) packs (`p.pity`
+   counter, `rollEpicPlus`), so a dry streak can't run forever.
 3. **✔ Launch-country flag.** `STORE_CONFIG.{country, purchaseDisabledCountries}` +
    `packPurchaseAllowed()` gate `buyPack` and the buy row (earn-only daily/open still
    work), showing a "purchases off in your region" note. Flipping the config is now an
@@ -26,14 +28,16 @@ Legend: ☐ not started · ◐ partially exists · ✔ done · 🔎 needs owner 
 
 ## Phase 2 — Engine hardening (Direction §3.1)
 
-4. **☐ Determinism lint.** No ESLint config exists yet. Add ESLint +
-   `no-restricted-syntax` banning `Math.random` / `Date.now` (and flag unsorted
-   object-key iteration used for decisions) inside `src/engine/**`. *Accept:* a banned
-   call fails the build; wire into `npm test`/CI.
-5. **☐ Golden replay-hash test.** N seeded full games (mixed civs/maps), hash state
-   each turn, commit hashes; CI fails on any drift. First audit targets (review-named):
-   `scheduleRaid` target selection, `beltTileNear`, `figureContext` for key-order
-   dependence.
+4. **✔ Determinism lint.** `test/engine-determinism.test.ts` scans `src/engine/**` and
+   fails the build (via `npm test`) on `Math.random` / `Date.now` / `performance.now` /
+   argless `new Date()`. (Chose a zero-dep test guard over the ESLint TS toolchain —
+   the "or equivalent" the direction allows.) Engine is currently clean.
+5. **✔ Golden replay-hash test.** `test/golden-replay.test.ts` plays 3 seeded
+   AI-vs-AI games (mixed civs/sizes), hashes serialized state every seat-turn, and
+   compares to committed `test/golden-replay.json`; also asserts same-seed self-
+   consistency in-process. Any nondeterminism or unintended rules drift fails CI;
+   intended changes regenerate with `UPDATE_GOLDEN=1`. Covers the review's audit
+   targets (`scheduleRaid`/`beltTileNear`/`figureContext`) by construction.
 6. **☐ Lockstep fuzz.** Extend `test/mp-lockstep.test.ts`: random seeds, two clients
    with different `humanPlayerId`, assert byte-identical state every turn, full match.
 7. **☐ Pending-decision revalidation.** Each `applyResolve*` re-validates at resolution
