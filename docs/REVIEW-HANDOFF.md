@@ -2,8 +2,10 @@
 
 **For a reviewing model (e.g. Fable Claude).** This is a self-contained brief to
 orient you, tell you how to build and verify, and point you at what to review. For the
-player-facing feature/content reference, see [GAME-OVERVIEW.md](GAME-OVERVIEW.md); for
-the design of the newest systems, [HEGEMON-RAIDERS-v1.md](HEGEMON-RAIDERS-v1.md).
+**complete, exhaustive reference** (every civ, unit, tech, card, figure and ruin),
+see [HEGEMON-CODEX.md](HEGEMON-CODEX.md); for a shorter tour,
+[GAME-OVERVIEW.md](GAME-OVERVIEW.md); for the design of the newest systems,
+[HEGEMON-RAIDERS-v1.md](HEGEMON-RAIDERS-v1.md).
 
 ---
 
