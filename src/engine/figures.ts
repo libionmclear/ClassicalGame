@@ -1,34 +1,38 @@
 // HEGEMON — historical figures (docs/HEGEMON-RAIDERS-v1.md, "The Minds of the Age").
 //
-// Unlike a random Crossroads dilemma, a figure arrives BECAUSE OF HOW YOU PLAY — a
-// coastal power under naval threat draws Archimedes; a captain who braved the open
-// sea draws Pytheas; a warlike Parthia draws Surena. Each offers a branching,
-// historically-grounded boon, and interlocks with the other frontiers (Archimedes'
-// burning mirrors answer the off-grid corsairs; Pytheas and Hanno extend how far you
-// dare sail toward their haven). The roster is far larger than any single game will
-// surface — you meet a handful, so no two campaigns feel the same. Some figures are
-// unique to one people. Pure data + predicates so the engine stays deterministic.
+// These are DELIBERATELY NOT the kings, generals and statesmen of the Legend cards
+// (the collectible meta-game). The people you MEET mid-match are the thinkers and
+// makers of the ancient world — mathematicians, astronomers, physicians, inventors,
+// architects, naturalists, a poet, and the anonymous master-craftsmen of a people.
+// Some are household names; many are gloriously obscure. None is a ruler or a
+// commander, and none shares a name with a Legend card — the two casts are disjoint.
+//
+// A figure arrives BECAUSE OF HOW YOU PLAY (a coastal power under naval threat draws
+// Archimedes; a captain out on the deep draws Pytheas; a settled realm draws its
+// architects), and offers a branching, historically-grounded boon. The roster is far
+// larger than any one game surfaces, so no two campaigns meet the same faces. Some
+// figures are unique to one people. Pure data + predicates so the engine stays
+// deterministic.
 
 import type { Player } from "./types";
 
 /** The boon vocabulary — a superset of the Crossroads and ruin effects plus a few
- *  figure-specific powers. Applied deterministically by applyFigureEffects. */
+ *  figure-specific powers. Applied deterministically by applyFigureEffects. Sign
+ *  convention: buildFasterPct is POSITIVE-is-faster; unit/upkeep/researchCostPct are
+ *  NEGATIVE-is-cheaper. */
 export interface FigureEffects {
   gold?: number;               // to the player's treasury
   science?: number;            // to the research pool
   production?: number;         // banked at the capital
   food?: number;               // banked at every city
   spawnUnit?: string;          // a unit type mustered at the capital
-  xp?: boolean;                // every unit gains a veterancy step (drilled army)
+  xp?: boolean;                // every unit gains a veterancy step
   heal?: boolean;              // every unit fully recovers
   reveal?: boolean;            // reveal the lands around the capital
   techUnlock?: string;         // grant a tech outright
   cancelRaids?: boolean;       // the Burning Mirrors — destroy raids bearing down on you
   seaReach?: number;           // sail this many rings farther before you are lost at sea
-  /** A lasting per-turn / combat / cost bonus merged into player.perks. Note the sign
-   *  convention: buildFasterPct is POSITIVE-is-faster, while unit/upkeep/researchCostPct
-   *  are NEGATIVE-is-cheaper. */
-  perks?: NonNullable<Player["perks"]>;
+  perks?: NonNullable<Player["perks"]>; // a lasting per-turn / combat / cost bonus
 }
 
 export interface FigureOption {
@@ -64,7 +68,7 @@ export interface HistoricalFigure {
 }
 
 export const FIGURES: HistoricalFigure[] = [
-  // ---- Universal: the minds of the classical world, open to any people ----------
+  // ---- Universal: the thinkers and makers of the ancient world -------------------
   {
     id: "archimedes",
     name: "Archimedes of Syracuse",
@@ -128,66 +132,9 @@ export const FIGURES: HistoricalFigure[] = [
     ]
   },
   {
-    id: "herodotus",
-    name: "Herodotus of Halicarnassus",
-    title: "The Father of History",
-    note: "He wandered the known world gathering the tales of Greeks and Persians so they 'not be forgotten by time.'",
-    when: (c) => c.foundRuins,
-    options: [
-      {
-        label: "📜 Endow the Histories",
-        outcome: "Your scholars set down all that has been learned — a lasting fount of knowledge.",
-        effects: { science: 48 }
-      },
-      {
-        label: "🗺️ Map the Known World",
-        outcome: "His inquiries chart the lands about your heartland, and open new avenues of trade.",
-        effects: { reveal: true, gold: 24 }
-      }
-    ]
-  },
-  {
-    id: "solon",
-    name: "Solon of Athens",
-    title: "The Lawgiver",
-    note: "In 594 BC he cancelled crushing debts and gave Athens the laws that seeded her democracy.",
-    when: (c) => c.cityCount >= 3,
-    options: [
-      {
-        label: "⚖️ Enact the Reforms",
-        outcome: "A just constitution steadies your cities and quickens their commerce for good.",
-        effects: { perks: { stability: 1, gold: 2 } }
-      },
-      {
-        label: "🕊️ Cancel the Debts (Seisachtheia)",
-        outcome: "The debt-slaves are freed and the people, unburdened, throw themselves into the work.",
-        effects: { food: 5, production: 14 }
-      }
-    ]
-  },
-  {
-    id: "xenophon",
-    name: "Xenophon of Athens",
-    title: "Soldier & Strategist",
-    note: "He led the Ten Thousand — a stranded Greek army — on a fighting march home across hostile Persia (401 BC).",
-    when: (c) => c.atWar,
-    options: [
-      {
-        label: "🎖️ Drill the Army",
-        outcome: "Hard-won discipline hardens every company — your whole army gains in veterancy.",
-        effects: { xp: true }
-      },
-      {
-        label: "🥾 The Long March (Logistics)",
-        outcome: "Baggage trains and forced-march drill put your soldiers where they are needed.",
-        effects: { gold: 20, perks: { movePlus: 1 } }
-      }
-    ]
-  },
-  {
     id: "thales",
     name: "Thales of Miletus",
-    title: "The First Philosopher",
+    title: "The First Natural Philosopher",
     note: "He sought nature's causes without the gods and, they say, foretold the eclipse of 585 BC.",
     when: (c) => c.age <= 1,
     options: [
@@ -200,6 +147,25 @@ export const FIGURES: HistoricalFigure[] = [
         label: "📐 Measure by the Shadow",
         outcome: "With gnomon and geometry your surveyors chart the land and gauge the pyramids' height.",
         effects: { science: 14, reveal: true }
+      }
+    ]
+  },
+  {
+    id: "anaximander",
+    name: "Anaximander of Miletus",
+    title: "Cartographer of the Cosmos",
+    note: "Thales's pupil drew the first map of the whole world, guessed that life rose from the sea, and set Earth unsupported in space.",
+    when: (c) => c.age <= 1 || c.cityCount >= 2,
+    options: [
+      {
+        label: "🗺️ The First Map of the World",
+        outcome: "A drawn map of land and sea lays your surroundings bare and spurs your geographers.",
+        effects: { reveal: true, science: 18 }
+      },
+      {
+        label: "♾️ The Boundless (Apeiron)",
+        outcome: "A bold first principle behind all things sharpens how your philosophers reason.",
+        effects: { science: 22, perks: { researchCostPct: -6 } }
       }
     ]
   },
@@ -244,7 +210,7 @@ export const FIGURES: HistoricalFigure[] = [
   {
     id: "eratosthenes",
     name: "Eratosthenes of Cyrene",
-    title: "Chief Librarian of Alexandria",
+    title: "Geographer of Alexandria",
     note: "From two shadows and a walked distance he measured the round Earth's circumference — and very nearly got it right.",
     when: (c) => c.age >= 2,
     options: [
@@ -254,8 +220,8 @@ export const FIGURES: HistoricalFigure[] = [
         effects: { reveal: true, science: 26 }
       },
       {
-        label: "📚 The Great Library",
-        outcome: "Scrolls from every shore are copied and shelved — knowledge compounds for good.",
+        label: "📚 The Sieve of Knowledge",
+        outcome: "A polymath's method of sifting truth from scrolls compounds your learning for good.",
         effects: { science: 20, perks: { science: 2 } }
       }
     ]
@@ -280,78 +246,116 @@ export const FIGURES: HistoricalFigure[] = [
     ]
   },
   {
-    id: "thucydides",
-    name: "Thucydides of Athens",
-    title: "The Historian of War",
-    note: "Exiled general turned chronicler, he set down the war between Athens and Sparta as a 'possession for all time.'",
-    when: (c) => c.atWar,
+    id: "aristarchus",
+    name: "Aristarchus of Samos",
+    title: "The Ancient Copernican",
+    note: "Eighteen centuries before Copernicus he set the Sun at the centre and the Earth in orbit around it.",
+    when: (c) => c.age >= 2,
     options: [
       {
-        label: "✒️ Set Down the True Causes",
-        outcome: "A cold, exact record of the war teaches your court statecraft — and pays in captured intelligence.",
-        effects: { science: 24, gold: 18 }
+        label: "☀️ The Sun-Centred Cosmos",
+        outcome: "A heliocentric heresy, centuries ahead of its time, sets your astronomers ablaze with new questions.",
+        effects: { science: 42 }
       },
       {
-        label: "🔍 Know Thy Enemy",
-        outcome: "Hard study of the foe's strength and fear sharpens your armies on attack and defence alike.",
-        effects: { perks: { atkPct: 5, defPct: 5 } }
+        label: "🌒 Gauge the Sun and Moon",
+        outcome: "By geometry he weighs the distances of Sun and Moon — and maps the sky above your realm.",
+        effects: { science: 18, reveal: true }
       }
     ]
   },
   {
-    id: "phidias",
-    name: "Phidias of Athens",
-    title: "Master Sculptor",
-    note: "He wrought the gold-and-ivory Athena of the Parthenon and the Zeus at Olympia, a wonder of the world.",
-    when: (c) => c.cityCount >= 2 && !c.atWar,
+    id: "hipparchus",
+    name: "Hipparchus of Nicaea",
+    title: "Greatest of Astronomers",
+    note: "He catalogued a thousand stars, discovered the precession of the equinoxes, and founded trigonometry.",
+    when: (c) => c.age >= 2,
     options: [
       {
-        label: "🗿 Raise the Great Statue",
-        outcome: "A colossus of gold and ivory draws pilgrims and their coin to your city for good.",
-        effects: { production: 22, perks: { gold: 2 } }
+        label: "✨ The Star Catalogue",
+        outcome: "A thousand stars fixed by magnitude and place — an enduring foundation for all who study the sky.",
+        effects: { science: 24, perks: { science: 2 } }
       },
       {
-        label: "🏛️ Adorn the Temple",
-        outcome: "Beauty in stone lifts the people's spirit and the renown of your learning.",
-        effects: { science: 18, perks: { stability: 1 } }
+        label: "📐 The First Trigonometry",
+        outcome: "Chords and tables of angles give your engineers and navigators a powerful new art.",
+        effects: { science: 30, perks: { navalMovePlus: 1 } }
       }
     ]
   },
   {
-    id: "demosthenes",
-    name: "Demosthenes of Athens",
-    title: "The Great Orator",
-    note: "He mastered a stammer by declaiming over the surf and roused Athens against Philip with the Philippics.",
-    when: (c) => c.atWar || c.navalThreat,
+    id: "herophilus",
+    name: "Herophilus of Chalcedon",
+    title: "Father of Anatomy",
+    note: "In Alexandria he was the first to dissect the human body, naming the nerves, the brain's ventricles and the pulse.",
+    when: (c) => c.age >= 2,
     options: [
       {
-        label: "🗣️ The Philippics",
-        outcome: "His speeches rouse the assembly to arm and to labour against the coming danger.",
-        effects: { production: 16, perks: { stability: 1 } }
+        label: "🫀 The First Anatomy",
+        outcome: "True knowledge of the body transforms your physicians — the sick and wounded are made whole.",
+        effects: { science: 24, heal: true }
       },
       {
-        label: "🛡️ Man the Walls",
-        outcome: "The citizens are shamed into vigilance; your defences stiffen and your works quicken.",
-        effects: { production: 12, perks: { defPct: 6 } }
+        label: "💓 The Art of the Pulse",
+        outcome: "He teaches your healers to read the pulse and tend the ranks; the army recovers faster ever after.",
+        effects: { science: 14, perks: { healPlus: 2 } }
       }
     ]
   },
   {
-    id: "croesus",
-    name: "Croesus of Lydia",
-    title: "The Golden King",
-    note: "Proverbially rich, his Lydians struck the first true coins — and he learned to 'call no man happy until he is dead.'",
-    when: (c) => c.gold >= 120,
+    id: "theophrastus",
+    name: "Theophrastus of Eresos",
+    title: "Father of Botany",
+    note: "Aristotle's successor, he classed every plant of the known world and wrote 'On Stones,' the first mineralogy.",
+    when: (c) => c.age >= 2,
     options: [
       {
-        label: "🪙 The First Coinage",
-        outcome: "Standard-weight coin oils every market in your realm — trade swells now and forever after.",
-        effects: { gold: 40, perks: { gold: 2 } }
+        label: "🪨 On Stones",
+        outcome: "His survey of ores, gems and earths teaches your prospectors where the land's wealth lies.",
+        effects: { production: 18, reveal: true }
       },
       {
-        label: "🔥 Offerings to Delphi",
-        outcome: "Lavish gifts to the oracle win prestige and priestly goodwill across your cities.",
-        effects: { science: 20, perks: { stability: 1 } }
+        label: "🌿 Enquiry into Plants",
+        outcome: "Careful husbandry of crop and orchard makes your fields yield more, now and for good.",
+        effects: { food: 5, perks: { food: 1 } }
+      }
+    ]
+  },
+  {
+    id: "ctesibius",
+    name: "Ctesibius of Alexandria",
+    title: "Father of Pneumatics",
+    note: "A barber's son who invented the force-pump, the water organ and the repeating catapult.",
+    when: (c) => c.age >= 2 || c.atWar,
+    options: [
+      {
+        label: "💥 The Bronze-Spring Catapult",
+        outcome: "New engines of war roll out of your workshops — and your armies hit harder.",
+        effects: { production: 18, perks: { atkPct: 5 } }
+      },
+      {
+        label: "⏳ The Water Clock",
+        outcome: "Precision machines and pumps speed every public work you raise.",
+        effects: { science: 16, perks: { buildFasterPct: 8 } }
+      }
+    ]
+  },
+  {
+    id: "hero",
+    name: "Hero of Alexandria",
+    title: "Master of Machines",
+    note: "He built the first steam engine (the aeolipile), coin-operated automata and self-opening temple doors — toys, to his age.",
+    when: (c) => c.age >= 2,
+    options: [
+      {
+        label: "♨️ The Aeolipile",
+        outcome: "Steam and gear-work astonish the court and quicken every workshop and worksite.",
+        effects: { production: 20, perks: { buildFasterPct: 8 } }
+      },
+      {
+        label: "🎭 Automata & the Odometer",
+        outcome: "Self-moving marvels and measuring engines win renown and coin from far and wide.",
+        effects: { science: 22, gold: 22 }
       }
     ]
   },
@@ -375,121 +379,101 @@ export const FIGURES: HistoricalFigure[] = [
     ]
   },
   {
-    id: "leonidas",
-    name: "Leonidas of Sparta",
-    title: "King of the Three Hundred",
-    note: "At Thermopylae in 480 BC he and his Spartans held the pass to the last against the Persian host.",
-    when: (c) => c.atWar,
+    id: "herodotus",
+    name: "Herodotus of Halicarnassus",
+    title: "The Father of History",
+    note: "He wandered the known world gathering the tales of Greeks and Persians so they 'not be forgotten by time.'",
+    when: (c) => c.foundRuins,
     options: [
       {
-        label: "🛡️ The Last Stand",
-        outcome: "Drilled to hold ground at any cost, your soldiers dig in and steel themselves; the wounded rally.",
-        effects: { heal: true, perks: { defPct: 10 } }
+        label: "📜 Endow the Histories",
+        outcome: "Your scholars set down all that has been learned — a lasting fount of knowledge.",
+        effects: { science: 44 }
       },
       {
-        label: "⚔️ Molon Labe (Come and Take Them)",
-        outcome: "Defiance runs through the ranks — your warriors fight with grim resolve, and the cities stand firm.",
-        effects: { perks: { atkPct: 6, stability: 1 } }
+        label: "🗺️ Map the Known World",
+        outcome: "His inquiries chart the lands about your heartland, and open new avenues of trade.",
+        effects: { reveal: true, gold: 24 }
       }
     ]
   },
   {
-    id: "ctesibius",
-    name: "Ctesibius of Alexandria",
-    title: "Father of Pneumatics",
-    note: "A barber's son who invented the force-pump, the water organ and the repeating catapult.",
-    when: (c) => c.age >= 2,
+    id: "sappho",
+    name: "Sappho of Lesbos",
+    title: "The Tenth Muse",
+    note: "Plato called her the Tenth Muse; her lyric poetry of love and longing was sung across the Greek world.",
+    when: (c) => !c.atWar,
     options: [
       {
-        label: "💥 The Bronze-Spring Catapult",
-        outcome: "New engines of war roll out of your workshops — and your armies hit harder.",
-        effects: { production: 18, perks: { atkPct: 5 } }
+        label: "🎶 The Tenth Muse",
+        outcome: "Her verses give your people a shared song and refinement — a quiet, lasting civic pride.",
+        effects: { science: 16, perks: { stability: 1 } }
       },
       {
-        label: "⏳ The Water Clock",
-        outcome: "Precision machines and pumps speed every public work you raise.",
-        effects: { science: 16, perks: { buildFasterPct: 8 } }
+        label: "🏛️ Songs for the Festival",
+        outcome: "Choral festivals draw visitors and their coin, and gladden the whole city.",
+        effects: { gold: 24, perks: { stability: 1 } }
       }
     ]
   },
-  // ---- Unique to one people ------------------------------------------------------
+  // ---- Unique to one people: their master builders and craftsmen -----------------
   {
-    id: "themistocles",
-    name: "Themistocles of Athens",
-    title: "Architect of the Wooden Walls",
-    civ: "greece",
-    note: "He read the oracle's 'wooden walls' as ships, built Athens a fleet from the Laurium silver, and broke Persia at Salamis (480 BC).",
-    when: (c) => c.coastal || c.navalThreat || c.atSea,
-    options: [
-      {
-        label: "🛶 The Wooden Walls",
-        outcome: "Athens' future is staked on her fleet — swifter ships and a coast that holds against any landing.",
-        effects: { perks: { navalMovePlus: 1, defPct: 5 } }
-      },
-      {
-        label: "⛏️ The Silver of Laurium",
-        outcome: "The state silver mines are poured into the navy and the treasury, enriching you now and for good.",
-        effects: { gold: 40, perks: { gold: 1 } }
-      }
-    ]
-  },
-  {
-    id: "cincinnatus",
-    name: "Cincinnatus",
-    title: "The Dictator of the Plough",
+    id: "vitruvius",
+    name: "Vitruvius",
+    title: "Architect & Engineer",
     civ: "rome",
-    note: "Twice Rome made him dictator in her hour of need; twice he saved her and laid down absolute power to return to his farm.",
-    when: (c) => c.atWar,
-    options: [
-      {
-        label: "🏛️ Take Up the Fasces",
-        outcome: "Granted emergency command, he rallies the legions — they mend their wounds and march to war with fury.",
-        effects: { heal: true, perks: { atkPct: 6 } }
-      },
-      {
-        label: "🌾 Return to the Plough",
-        outcome: "He gives back his power and his example steadies the Republic; the fields and the people prosper.",
-        effects: { food: 5, perks: { stability: 1 } }
-      }
-    ]
-  },
-  {
-    id: "appius",
-    name: "Appius Claudius Caecus",
-    title: "Censor & Road-Builder",
-    civ: "rome",
-    note: "In 312 BC he drove the Via Appia south and raised the Aqua Appia, Rome's first great road and aqueduct.",
+    note: "The military engineer whose 'Ten Books on Architecture' laid down firmness, commodity and delight for all builders after him.",
     when: (c) => c.cityCount >= 2,
     options: [
       {
-        label: "🛣️ The Appian Way",
-        outcome: "'The Queen of Roads' knits your realm together — armies march faster and every work is raised sooner.",
-        effects: { perks: { buildFasterPct: 8, movePlus: 1 } }
+        label: "📐 The Ten Books on Architecture",
+        outcome: "A canon of sound building spreads to every site — your works rise faster and stronger.",
+        effects: { production: 14, perks: { buildFasterPct: 8 } }
       },
       {
-        label: "💧 The Aqua Appia",
-        outcome: "Clean water flows into the city by covered channel — the people multiply, now and for good.",
-        effects: { food: 5, perks: { food: 1 } }
+        label: "🏛️ Firmness, Commodity, Delight",
+        outcome: "Dressed stone, true arches and good walls make your cities both handsome and hard to storm.",
+        effects: { production: 18, perks: { defPct: 4 } }
       }
     ]
   },
   {
-    id: "hanno",
-    name: "Hanno the Navigator",
-    title: "Explorer of the African Coast",
+    id: "ictinus",
+    name: "Ictinus",
+    title: "Architect of the Parthenon",
+    civ: "greece",
+    note: "With Callicrates he raised the Parthenon, correcting its every line by eye so the marble would look perfectly true.",
+    when: (c) => c.cityCount >= 2 || !c.atWar,
+    options: [
+      {
+        label: "🏛️ Raise the Parthenon",
+        outcome: "A temple of flawless marble crowns your city and draws pilgrims and their coin for good.",
+        effects: { production: 22, perks: { gold: 2 } }
+      },
+      {
+        label: "📏 The Refinements of the Eye",
+        outcome: "Subtle curves that read as perfectly straight teach your builders a mastery that steadies the whole realm.",
+        effects: { science: 16, perks: { stability: 1 } }
+      }
+    ]
+  },
+  {
+    id: "cothon-shipwrights",
+    name: "The Shipwrights of the Cothon",
+    title: "Masters of the Naval Dockyard",
     civ: "carthage",
-    note: "Around 500 BC he led a great fleet down the west coast of Africa and recorded the Periplus of his voyage.",
+    note: "In Carthage's ringed war-harbour, shipwrights built quinqueremes from numbered, prefabricated parts — a fleet from a production line.",
     when: (c) => c.coastal || c.atSea,
     options: [
       {
-        label: "🌍 The African Periplus",
-        outcome: "His charts of the far coasts let your captains sail on where others would be lost.",
-        effects: { seaReach: 2, gold: 24 }
+        label: "🔧 The Prefabricated Fleet",
+        outcome: "Numbered, mass-cut timbers turn out warships at astonishing speed — your yards hum and your ships range farther.",
+        effects: { production: 18, perks: { navalMovePlus: 1 } }
       },
       {
-        label: "🏺 Found the Trading Posts",
-        outcome: "A chain of Carthaginian harbours along the coast pours foreign gold into your coffers for good.",
-        effects: { gold: 18, perks: { gold: 2 } }
+        label: "🧭 Chart the Deep Lanes",
+        outcome: "Seasoned crews and sturdy hulls push the sea-roads out past the reach of lesser fleets.",
+        effects: { seaReach: 2, gold: 22 }
       }
     ]
   },
@@ -498,8 +482,8 @@ export const FIGURES: HistoricalFigure[] = [
     name: "Imhotep",
     title: "Architect & Physician",
     civ: "egypt",
-    note: "Vizier to Djoser, he raised the first pyramid in stone and was worshipped a thousand years later as a healer.",
-    when: (c) => c.cityCount >= 1,
+    note: "He raised the first pyramid in dressed stone and was worshipped a thousand years later as a god of healing — never as a king.",
+    when: (c) => c.cityCount >= 2 || c.age >= 2,
     options: [
       {
         label: "🔺 The Step Pyramid",
@@ -514,82 +498,82 @@ export const FIGURES: HistoricalFigure[] = [
     ]
   },
   {
-    id: "diviciacus",
-    name: "Diviciacus the Aeduan",
-    title: "Druid & Statesman",
+    id: "latene-smiths",
+    name: "The Smiths of La Tène",
+    title: "Ironmasters of the Celts",
     civ: "gaul",
-    note: "The one druid history names — envoy, astronomer and ally, who pleaded his people's cause before the Roman Senate.",
-    when: (c) => c.cityCount >= 2 || c.age >= 2,
+    note: "The Celtic smiths forged pattern-welded blades and are credited with inventing mail armour — the finest ironwork of their age.",
+    when: (c) => c.atWar || c.cityCount >= 2,
     options: [
       {
-        label: "🌳 The Druids' Counsel",
-        outcome: "Keepers of law and lore, the druids lend your tribes learning and a steady peace.",
-        effects: { science: 20, perks: { stability: 1 } }
+        label: "🔗 The Iron Mail",
+        outcome: "Ringed iron shirts clothe your warriors — they hold the line where others would fall.",
+        effects: { production: 14, perks: { defPct: 6 } }
       },
       {
-        label: "🔥 Rally the Tribes",
-        outcome: "His oratory binds the warring clans into one host — fiercer in the charge, and richer for the union.",
+        label: "⚔️ The Long Blades of La Tène",
+        outcome: "Superb long swords arm your host and command a rich trade in fine iron.",
         effects: { gold: 20, perks: { atkPct: 5 } }
       }
     ]
   },
   {
-    id: "amanirenas",
-    name: "Amanirenas",
-    title: "Kandake of Kush",
+    id: "meroe-ironmasters",
+    name: "The Ironmasters of Meroë",
+    title: "Smelters of the Nubian South",
     civ: "kush",
-    note: "The one-eyed warrior queen who fought Augustus's Rome to a standstill (c. 24 BC) and buried a bronze head of Caesar beneath her temple steps.",
-    when: (c) => c.atWar,
+    note: "Meroë's furnaces poured out so much iron that its slag-heaps still ring the city — the 'Birmingham of ancient Africa.'",
+    when: (c) => c.cityCount >= 2 || c.age >= 2,
     options: [
       {
-        label: "🏹 The Kandake's War",
-        outcome: "The queen leads from the front; her archers harry the invader and the wounded take heart and recover.",
-        effects: { heal: true, perks: { atkPct: 6 } }
+        label: "🔥 The Furnaces of Meroë",
+        outcome: "A roaring iron industry arms your soldiers and drives your workshops.",
+        effects: { production: 20, perks: { atkPct: 4 } }
       },
       {
-        label: "👑 Bury the Bronze Head",
-        outcome: "Rome's emperor trodden underfoot at your threshold — a defiance that steadies your realm and fills the treasury from the spoils.",
-        effects: { gold: 26, perks: { stability: 1 } }
+        label: "🪙 The Iron Trade",
+        outcome: "Nubian iron and gold flow up the Nile and across the desert, enriching you now and for good.",
+        effects: { gold: 24, perks: { gold: 2 } }
       }
     ]
   },
   {
-    id: "druids-mona",
+    id: "mona-druids",
     name: "The Druids of Ynys Môn",
-    title: "Keepers of the Sacred Isle",
+    title: "Keepers of Lore & the Heavens",
     civ: "britons",
-    note: "On Anglesey stood the druids' holy groves — the heart of British resistance that Rome burned in AD 60.",
-    when: (c) => c.atWar || c.cityCount >= 2,
+    note: "On Anglesey the druids kept twenty years of memorised law, verse and star-lore — the learning of the Britons, held in no book.",
+    when: (c) => c.cityCount >= 2 || c.foundRuins,
     options: [
       {
         label: "🌲 The Sacred Grove",
-        outcome: "The isle's holy men lend your people law, memory and a fierce will to hold their ground.",
-        effects: { perks: { stability: 1, defPct: 6 } }
+        outcome: "Keepers of law and memory lend your people learning and a deep, settled calm.",
+        effects: { science: 18, perks: { stability: 1 } }
       },
       {
-        label: "🔥 The Rites of War",
-        outcome: "Ancient rites and the reading of omens send your warriors into battle unafraid — and teach the wise their lore.",
-        effects: { science: 16, perks: { atkPct: 5 } }
+        label: "🌙 Readers of the Heavens",
+        outcome: "Their reckoning of the seasons by moon and star tells your farmers just when to sow and reap.",
+        effects: { food: 5, science: 14 }
       }
     ]
   },
   {
-    id: "surena",
-    name: "Surena",
-    title: "Victor of Carrhae",
+    id: "qanat-masters",
+    name: "The Qanat Masters",
+    title: "Engineers of the Underground Rivers",
     civ: "parthia",
-    note: "The young general who destroyed Crassus's legions at Carrhae (53 BC) with horse-archers and the feigned 'Parthian shot.'",
-    when: (c) => c.atWar,
+    note: "Persian engineers cut gently-sloping tunnels for miles to carry mountain water beneath the desert — an art that made the drylands bloom.",
+    when: (c) => c.cityCount >= 2 || c.age >= 2,
     options: [
       {
-        label: "🏹 The Parthian Shot",
-        outcome: "His horse-archers wheel and loose in retreat — your armies strike harder, and Roman gold fills your saddlebags.",
-        effects: { gold: 22, perks: { atkPct: 7 } }
+        label: "💧 The Underground Rivers",
+        outcome: "Hidden channels bring cool water to your cities — they grow greener and fuller for good.",
+        effects: { food: 6, perks: { food: 1 } }
       },
       {
-        label: "🐫 The Silk Standards",
-        outcome: "A camel-train of arrows and shimmering banners steadies your host on the field, and the caravan trade pays for good.",
-        effects: { perks: { defPct: 5, gold: 2 } }
+        label: "🏜️ Green the Desert",
+        outcome: "Irrigated fields and gardens spread where there was only sand, feeding your works and coffers.",
+        effects: { production: 16, gold: 18 }
       }
     ]
   }

@@ -97,50 +97,62 @@ haven.
 
 ### The roster (`src/engine/figures.ts`)
 
-27 figures — far more than any one game surfaces (you meet a handful), so campaigns
-don't repeat. Some are **unique to one people** (civ-gated), which makes each civ's
-playthrough feel distinct — every one of the eight civs has at least one, and none
-is guaranteed from turn one (fairness). Arrival conditions read the `FigureCtx` the
-engine computes: `coastal, navalThreat, atSea, atWar, cityCount, age, foundRuins,
+26 figures — far more than any one game surfaces (you meet a handful), so campaigns
+don't repeat.
+
+**These are deliberately NOT the Legend cards.** The Legend cards (the collectible
+meta-game, `src/cards-data-v2.js`) are the era's kings, generals and statesmen —
+Caesar, Hannibal, Pericles, Alexander, Cyrus… The people you MEET are the other half
+of history: **thinkers and makers** — mathematicians, astronomers, physicians,
+inventors, architects, naturalists, a poet, and the anonymous master-craftsmen of a
+people. Some are household names; many are gloriously obscure. **No figure is a ruler
+or commander, and none shares a name with a Legend card — the two casts are disjoint.**
+
+Some figures are **unique to one people** (civ-gated) — where a civ's famous names are
+all generals and kings, its figure is the anonymous guild that actually built its
+greatness (Carthage's dockyard shipwrights, Gaul's ironsmiths, Meroë's ironmasters,
+Parthia's qanat engineers). Every one of the eight civs has one. Arrival conditions
+read the `FigureCtx`: `coastal, navalThreat, atSea, atWar, cityCount, age, foundRuins,
 gold, unitCount, population`.
 
 **Universal** (open to any people):
 
-| Figure | Arrives when… | Boons (abridged) |
+| Figure | Craft | Arrives when… |
 |---|---|---|
-| **Archimedes of Syracuse** | coastal & (raid threatens *or* age ≥ 2) | Burning Mirrors (destroy the raid + defence) · War Engines · Buoyancy |
-| **Pytheas of Massalia** | a ship is in the open-sea belt | Chart the Ocean (`seaReach` +2) · Tin Route |
-| **Hippocrates of Kos** | age ≥ 2 | School of Medicine (heal) · Sanitation |
-| **Herodotus** | you've excavated a ruin | Endow the Histories · Map the World (reveal) |
-| **Solon of Athens** | ≥ 3 cities | Enact the Reforms · Cancel the Debts |
-| **Xenophon of Athens** | at war | Drill the Army (veterancy) · Long March |
-| **Thales of Miletus** | early (age ≤ 1) | Reason over Myth (−research cost) · Measure by the Shadow |
-| **Pythagoras of Samos** | age ≥ 2 | Harmony of Numbers · The Brotherhood |
-| **Democritus** | age ≥ 2 | The Atom (big science) · Euthymia |
-| **Eratosthenes** | age ≥ 2 | Measure the Earth (reveal) · Great Library |
-| **Euclid** | age ≥ 2 | The Elements (−research cost) · Tutor the Court |
-| **Thucydides** | at war | Set Down the Causes · Know Thy Enemy (atk+def) |
-| **Phidias** | ≥ 2 cities & at peace | Raise the Great Statue · Adorn the Temple |
-| **Demosthenes** | at war *or* naval threat | The Philippics · Man the Walls |
-| **Croesus of Lydia** | treasury ≥ 120 | The First Coinage · Offerings to Delphi |
-| **Sostratus of Cnidus** | coastal | The Great Lighthouse (naval) · Guide the Grain Fleet |
-| **Leonidas of Sparta** | at war | The Last Stand (heal + def) · Molon Labe |
-| **Ctesibius of Alexandria** | age ≥ 2 | Bronze-Spring Catapult · The Water Clock (build faster) |
+| **Archimedes of Syracuse** | geometer / war-engineer | coastal & (raid threatens *or* age ≥ 2) — *the Burning Mirrors destroy the raid* |
+| **Pytheas of Massalia** | navigator | a ship is in the open-sea belt — *`seaReach` +2* |
+| **Hippocrates of Kos** | physician | age ≥ 2 |
+| **Thales of Miletus** | natural philosopher | early (age ≤ 1) |
+| **Anaximander of Miletus** | cartographer / cosmologist | age ≤ 1 or ≥ 2 cities |
+| **Pythagoras of Samos** | mathematician | age ≥ 2 |
+| **Democritus of Abdera** | atomist philosopher | age ≥ 2 |
+| **Eratosthenes of Cyrene** | geographer | age ≥ 2 |
+| **Euclid of Alexandria** | mathematician | age ≥ 2 |
+| **Aristarchus of Samos** | astronomer (heliocentric) | age ≥ 2 |
+| **Hipparchus of Nicaea** | astronomer | age ≥ 2 |
+| **Herophilus of Chalcedon** | anatomist | age ≥ 2 |
+| **Theophrastus of Eresos** | botanist / mineralogist | age ≥ 2 |
+| **Ctesibius of Alexandria** | inventor (pneumatics) | age ≥ 2 or at war |
+| **Hero of Alexandria** | inventor (steam, automata) | age ≥ 2 |
+| **Sostratus of Cnidus** | architect (the Pharos) | coastal |
+| **Herodotus of Halicarnassus** | historian | you've excavated a ruin |
+| **Sappho of Lesbos** | poet | at peace |
 
-**Unique to one people:**
+**Unique to one people** (a master builder, or the guild that made the people great):
 
-| Figure | People | Arrives when… |
-|---|---|---|
-| **Cincinnatus** · **Appius Claudius Caecus** | Rome | at war · ≥ 2 cities |
-| **Themistocles of Athens** | Greece | coastal / naval threat / at sea |
-| **Hanno the Navigator** | Carthage | coastal or at sea (`seaReach`) |
-| **Imhotep** | Egypt | ≥ 1 city |
-| **Diviciacus the Aeduan** | Gaul | ≥ 2 cities or age ≥ 2 |
-| **Amanirenas the Kandake** | Kush | at war |
-| **The Druids of Ynys Môn** | Britons | at war or ≥ 2 cities |
-| **Surena** | Parthia | at war |
+| Figure | People | Craft | Arrives when… |
+|---|---|---|---|
+| **Vitruvius** | Rome | architect / engineer | ≥ 2 cities |
+| **Ictinus** | Greece | architect of the Parthenon | ≥ 2 cities or at peace |
+| **The Shipwrights of the Cothon** | Carthage | prefab-fleet shipwrights | coastal or at sea (`seaReach`) |
+| **Imhotep** | Egypt | architect / physician | ≥ 2 cities or age ≥ 2 |
+| **The Smiths of La Tène** | Gaul | ironmasters (mail, blades) | at war or ≥ 2 cities |
+| **The Ironmasters of Meroë** | Kush | iron smelters | ≥ 2 cities or age ≥ 2 |
+| **The Druids of Ynys Môn** | Britons | keepers of lore & the heavens | ≥ 2 cities or a ruin found |
+| **The Qanat Masters** | Parthia | irrigation engineers | ≥ 2 cities or age ≥ 2 |
 
-Civ-gating is enforced in `maybeFireFigure` via `playerControlsCiv`.
+Civ-gating is enforced in `maybeFireFigure` via `playerControlsCiv`; no civ figure is
+guaranteed from turn one.
 
 ### Where it lives
 

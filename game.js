@@ -1287,7 +1287,9 @@
     }
     figureTitleEl.textContent = figure.name + " — " + figure.title;
     figureNoteEl.textContent = figure.note;
-    figureSituationEl.textContent = "The renowned " + figure.name.replace(/ of .*| the .*/, "") + " comes to offer their genius. Choose how they will serve you:";
+    // Works for individuals and for collective figures ("The Shipwrights of…") alike;
+    // the heading and note already say who has arrived.
+    figureSituationEl.textContent = "Choose how they will lend their gifts to your people:";
     figureOptionsEl.innerHTML = "";
     figure.options.forEach(function (opt, i) {
       const btn = document.createElement("button");

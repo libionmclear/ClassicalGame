@@ -88,20 +88,19 @@ test("seaReach actually keeps a ship afloat one ring farther out", () => {
   assert.ok(kept.map.units["s"], "with Pytheas's reach, it sails on");
 });
 
-test("Xenophon drills the whole army a veterancy step; Hippocrates heals it", () => {
+test("a healer figure (Herophilus / Hippocrates) makes the wounded whole", () => {
   const s = figState({ withUnit: true });
   s.map.units["u"]!.hp = 5; // wounded
-  const drilled = meet(s, "xenophon", 0);
-  assert.equal(drilled.map.units["u"]!.veterancy, "veteran", "raw recruits become veterans");
-  const healed = meet(s, "hippocrates", 0);
+  const healed = meet(s, "herophilus", 0); // The First Anatomy: science + heal
   assert.equal(healed.map.units["u"]!.hp, healed.map.units["u"]!.maxHp, "the wounded are made whole");
+  assert.ok(getP(healed, "p1").science >= 24, "and the physicians learn from it");
 });
 
 test("a figure resolves cleanly and cannot be resolved twice", () => {
   const s = figState({ gold: 50 });
-  const ns = meet(s, "solon", 1); // Cancel the Debts: food + production
+  const ns = meet(s, "euclid", 1); // Tutor the Court: +32 science
   assert.equal(getP(ns, "p1").pendingFigure, undefined, "the visit concludes");
-  assert.throws(() => applyAction(ns, { type: "RESOLVE_FIGURE", playerId: "p1", figureId: "solon", optionIndex: 0 } as GameAction),
+  assert.throws(() => applyAction(ns, { type: "RESOLVE_FIGURE", playerId: "p1", figureId: "euclid", optionIndex: 0 } as GameAction),
     /No pending figure/, "the figure has already been answered");
 });
 
