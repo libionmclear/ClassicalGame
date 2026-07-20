@@ -66,6 +66,11 @@
   const raidTitleEl = document.getElementById("raid-title");
   const raidSituationEl = document.getElementById("raid-situation");
   const raidOptionsEl = document.getElementById("raid-options");
+  const figureModalEl = document.getElementById("figure-modal");
+  const figureTitleEl = document.getElementById("figure-title");
+  const figureNoteEl = document.getElementById("figure-note");
+  const figureSituationEl = document.getElementById("figure-situation");
+  const figureOptionsEl = document.getElementById("figure-options");
   const researchBtn = document.getElementById("research-btn");
   const researchModalEl = document.getElementById("research-modal");
   const researchCloseBtn = document.getElementById("research-close-btn");
@@ -1192,7 +1197,9 @@
     const p = human();
     const raidId = p && p.pendingRaid;
     const raid = raidId && (state.raids || []).find(function (r) { return r.id === raidId; });
-    if (!raid || !isHumanTurn() || (victory && victory.winnerId)) {
+    // A visiting figure (e.g. Archimedes offering the mirrors) takes the stage first;
+    // the raid warning re-appears once that's answered.
+    if (!raid || !isHumanTurn() || (p && p.pendingFigure) || (victory && victory.winnerId)) {
       raidModalEl.classList.add("hidden");
       return;
     }
@@ -1239,6 +1246,70 @@
       raidOptionsEl.appendChild(btn);
     });
     raidModalEl.classList.remove("hidden");
+  }
+
+  // The Minds of the Age (figures.ts): a plain-language summary of a figure boon.
+  function figureEffectsSummary(fx) {
+    var parts = [];
+    if (fx.cancelRaids) parts.push("destroys the incoming raid");
+    if (fx.gold) parts.push((fx.gold > 0 ? "+" : "") + fx.gold + " gold");
+    if (fx.science) parts.push("+" + fx.science + " science");
+    if (fx.production) parts.push("+" + fx.production + " production");
+    if (fx.food) parts.push("+" + fx.food + " food/city");
+    if (fx.spawnUnit) parts.push("a " + (unitName(fx.spawnUnit) || fx.spawnUnit) + " at your capital");
+    if (fx.xp) parts.push("your whole army gains veterancy");
+    if (fx.heal) parts.push("your army is fully healed");
+    if (fx.reveal) parts.push("reveals the lands nearby");
+    if (fx.seaReach) parts.push("ships sail +" + fx.seaReach + " rings before they're lost");
+    var perkLabel = { gold: "gold/turn", science: "science/turn", food: "food/turn", production: "prod/turn", stability: "stability", atkPct: "% attack", defPct: "% defence", navalMovePlus: " naval move", movePlus: " move", healPlus: " healing" };
+    if (fx.perks) for (var k in fx.perks) { if (fx.perks[k]) parts.push("+" + fx.perks[k] + (perkLabel[k] || " " + k) + " (lasting)"); }
+    return parts.join(" · ");
+  }
+
+  // A historical figure arrives, offering a branching boon. The card only shows for
+  // the local human; the AI resolves its own in the engine.
+  function showFigureModal(victory) {
+    if (!figureModalEl) return;
+    const p = human();
+    const figId = p && p.pendingFigure;
+    const figure = figId && engine.getFigure ? engine.getFigure(figId) : null;
+    if (!figure || !isHumanTurn() || (victory && victory.winnerId)) {
+      figureModalEl.classList.add("hidden");
+      return;
+    }
+    figureTitleEl.textContent = figure.name + " — " + figure.title;
+    figureNoteEl.textContent = figure.note;
+    figureSituationEl.textContent = "The renowned " + figure.name.replace(/ of .*| the .*/, "") + " comes to offer their genius. Choose how they will serve you:";
+    figureOptionsEl.innerHTML = "";
+    figure.options.forEach(function (opt, i) {
+      const btn = document.createElement("button");
+      btn.className = "event-option";
+      btn.innerHTML =
+        '<span class="eo-label">' + opt.label + "</span>" +
+        '<span class="eo-outcome">' + opt.outcome + "</span>" +
+        '<span class="eo-effects">' + figureEffectsSummary(opt.effects) + "</span>";
+      btn.addEventListener("click", function () {
+        logAction("✦ " + figure.name + " — " + opt.label);
+        recordFigureMet(figure); // a memento for the chronicle (meta)
+        apply({ type: "RESOLVE_FIGURE", playerId: HUMAN_ID, figureId: figure.id, optionIndex: i });
+      });
+      figureOptionsEl.appendChild(btn);
+    });
+    figureModalEl.classList.remove("hidden");
+  }
+
+  // Meeting a figure leaves a mark in your personal chronicle (profile) and a toast —
+  // a lightweight collection hook (full card integration is a later slice).
+  function recordFigureMet(figure) {
+    try {
+      var p = loadProfile();
+      p.figures = p.figures || {};
+      if (!p.figures[figure.id]) {
+        p.figures[figure.id] = { name: figure.name, title: figure.title, turn: state.turn };
+        saveProfile(p);
+        showCombatToast("✦ " + figure.name + " enters your chronicle.", "gate");
+      }
+    } catch (e) { /* chronicle is a nicety; never block the boon */ }
   }
 
   // ===== Diplomacy screen (Diplomacy v1 §7) =====
@@ -1664,17 +1735,22 @@
   // outcomes. Raid reports are transient (rebuilt each world-turn) and are usually
   // set during the AI's turns, so this is called after AI resolves. A signature
   // guard keeps a given batch from toasting twice across repeated renders.
-  var lastRaidSig = "";
+  var shownRaidKeys = {};
+  var shownRaidTurn = -1;
   function surfaceRaidReports() {
     if (!state || !state.raidReports) return;
-    var mine = state.raidReports.filter(function (r) { return r.playerId === HUMAN_ID; });
-    var sig = state.turn + "|" + JSON.stringify(mine);
-    if (!mine.length || sig === lastRaidSig) return;
-    lastRaidSig = sig;
-    mine.forEach(function (r) {
+    // Per-report dedup (reset when the turn changes) so a report appended mid-turn —
+    // e.g. Archimedes burning a raid whose warning already toasted — doesn't re-toast
+    // the earlier entries in the same batch.
+    if (state.turn !== shownRaidTurn) { shownRaidKeys = {}; shownRaidTurn = state.turn; }
+    state.raidReports.forEach(function (r0) {
+      if (r0.playerId !== HUMAN_ID) return;
+      var key = r0.kind + ":" + r0.cityId + ":" + r0.strength + ":" + (r0.goldPaid || 0);
+      if (shownRaidKeys[key]) return;
+      shownRaidKeys[key] = true;
       // Prefer the client's pretty city name (e.g. "Roma") over the engine's raw id.
-      var liveCity = state.map.cities[r.cityId];
-      r = Object.assign({}, r, { cityName: liveCity ? cityDisplayName(liveCity) : r.cityName });
+      var liveCity = state.map.cities[r0.cityId];
+      var r = Object.assign({}, r0, { cityName: liveCity ? cityDisplayName(liveCity) : r0.cityName });
       if (r.kind === "warning") {
         showCombatToast("⚔️ Sails on the horizon — raiders gather off " + r.cityName + "; they strike next turn.", "gate");
         logAction("⚔️ Raiders (strength ~" + r.strength + ") gather off " + r.cityName + " — they strike next turn.");
@@ -1692,6 +1768,9 @@
       } else if (r.kind === "bought-off") {
         showCombatToast("💰 The raiders off " + r.cityName + " took your tribute and turned away.", "gate");
         logAction("💰 Paid off the raiders threatening " + r.cityName + " (−" + (r.goldPaid || 0) + " gold).");
+      } else if (r.kind === "burned") {
+        showCombatToast("🔥 Archimedes' mirrors set the raiders off " + r.cityName + " ablaze — the fleet is gone.", "win");
+        logAction("🔥 The Burning Mirrors incinerated the raid bearing down on " + r.cityName + ".");
       }
     });
   }
@@ -3236,6 +3315,7 @@
         endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
         showResultModal(victory);
         showEventModal(victory);
+        showFigureModal(victory);
         showRaidModal(victory);
         showProposalModal(victory);
       } catch (overlayErr) {
@@ -5740,10 +5820,19 @@
       state.raids = (state.raids || []).concat([raid]);
       human().pendingRaid = raid.id;
       state.raidReports = [{ kind: "warning", cityId: cap.id, cityName: cityDisplayName(cap), playerId: HUMAN_ID, strength: raid.strength, strikeTurn: raid.strikeTurn }];
-      lastRaidSig = ""; // let it toast
+      shownRaidKeys = {}; shownRaidTurn = -1; // let it toast
       surfaceRaidReports();
       render();
       return { raidId: raid.id, cityId: cap.id };
+    },
+    // The Minds of the Age: force a specific figure's card up for the modal test.
+    forceFigure: function (figureId) {
+      if (!state) return null;
+      var p = human();
+      p.pendingFigure = figureId;
+      p.metFigures = (p.metFigures || []).concat(p.metFigures && p.metFigures.indexOf(figureId) >= 0 ? [] : [figureId]);
+      render();
+      return { figureId: figureId, visible: figureModalEl && !figureModalEl.classList.contains("hidden") };
     },
     endTurn: function () { if (isHumanTurn()) apply({ type: "END_TURN", playerId: HUMAN_ID }); },
     // Camera (3D board only) — for the UI smoke's tilt/reset checks.

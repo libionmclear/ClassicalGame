@@ -57,6 +57,7 @@ import { chooseAiAction, runAiTurn } from "./ai";
 import { loadScenario, listScenarios } from "./scenarios";
 import { generateMap, MAP_SIZES, TURN_LIMITS, CIV_ROSTER, DEFAULT_PLAYERS, MAX_PLAYERS } from "./mapgen";
 import { EVENTS, getEvent } from "./events";
+import { FIGURES, getFigure } from "./figures";
 import { BRANCHES } from "./branch-data";
 import { cityTier, districtSlots, districtType, districtName, DISTRICT_TYPES, GREAT_WORKS, greatWork } from "./districts";
 import { relationBand, getRelation, getPair, pairKey, RELATION_BAND_LABELS, isAtWar, isOathbreaker, hasAgreement, playerWarWeariness, canProposeAgreement, haveMet, napBlocksDeclaration, agreementBand, bandAtLeast, alliesOf, isFullAlly, agreementHeldTurns, isVassal, vassalsOf, topOverlord, canDemandVassalage, personalityOf } from "./diplomacy";
@@ -132,6 +133,8 @@ export {
   MAX_PLAYERS,
   EVENTS,
   getEvent,
+  FIGURES,
+  getFigure,
   BRANCHES,
   cityTier,
   districtSlots,

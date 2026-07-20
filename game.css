@@ -2694,6 +2694,25 @@ details.panel-collapse > summary {
   background: linear-gradient(160deg, rgba(200, 80, 50, 0.16), transparent 60%);
 }
 
+/* The Minds of the Age (figures.ts): a visiting figure wears a scholarly violet. */
+.figure-card .event-tag {
+  color: #b79ce0;
+  border-color: #4c3d73;
+}
+
+.figure-card::before {
+  background: linear-gradient(160deg, rgba(120, 92, 190, 0.16), transparent 60%);
+}
+
+.figure-note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-style: italic;
+  line-height: 1.45;
+  margin: 0 0 10px;
+  opacity: 0.9;
+}
+
 @media (max-width: 760px) {
   .play-area {
     grid-template-columns: 1fr;

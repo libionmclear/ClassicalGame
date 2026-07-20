@@ -20,6 +20,8 @@ import { findPath, movementCost } from "./pathfinding";
 import { seededRandom } from "./rng";
 import { computeVisibility } from "./visibility";
 import { EVENTS, getEvent } from "./events";
+import { FIGURES, getFigure } from "./figures";
+import type { FigureCtx, FigureEffects } from "./figures";
 import { cityTier, districtSlots, districtType, districtName, districtForbidden, greatWork, greatWorkAllowed } from "./districts";
 import { initDiplomacy, applyRelationDrift, adjustRelation, getRelation, giftRelationGain, enterWar, isAtWar, isOathbreaker, playerWarWeariness, napBlocksDeclaration, canProposeAgreement, haveMet, addAgreement, denounce, ensurePair, expireDiplomacy, hasAgreement, NAP_TURNS, ACCEPT_RELATION, DECLINE_RELATION, TRIBUTE_MIN_TURNS, TRIBUTE_MAX_TURNS, TRADE_PACT_GOLD, canDemandVassalage, establishVassalage, releaseVassal, isVassal, topOverlord, shouldRebel, VASSAL_GOLD_SHARE, fullAlliancesHeld, ALLIANCE_VICTORY_HOLD } from "./diplomacy";
 import { scatterRuins } from "./mapgen";
@@ -27,7 +29,7 @@ import { excavateRuins } from "./discovery";
 import { scatterVillages, PEOPLE_BY_ID, unitNear, applyVillageBenefit, BEFRIEND_COST, TRIBUTE_GAIN, CONQUEST_REPUTATION_HIT, DISPOSITIONS, rollReaction, souredDisposition, pillageOnThreaten, THREATEN_RAID_GOLD, leaderReactionBonus, explorerNear, EXPLORER_ENVOY_BONUS, befriendCostFor } from "./peoples";
 import type { VillageDeed } from "./peoples";
 import type { BefriendVillageAction, DemandTributeVillageAction, ConquerVillageAction, AbsorbVillageAction } from "./types";
-import type { ResolveEventAction, ResolveRaidAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
+import type { ResolveEventAction, ResolveRaidAction, ResolveFigureAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
 import type { Raid, RaidReport } from "./types";
 import type {
   AttackCityAction,
@@ -1646,13 +1648,14 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
     }
   }
 
+  maybeFireFigure(state, nextPlayer); // a historical figure may call, given how they play
   maybeFireEvent(state, nextPlayer);
 }
 
 // Deterministically hand the next player a Crossroads dilemma now and then,
 // spaced out so they don't pile up. The human sees a card; the AI auto-resolves.
 function maybeFireEvent(state: GameState, player: Player): void {
-  if (player.pendingEvent) return;
+  if (player.pendingEvent || player.pendingFigure) return; // one decision card at a time
   if (player.cityIds.length === 0) return;
   const since = state.turn - (player.lastEventTurn ?? 0);
   if (state.turn < 3 || since < 5) return;
@@ -1716,7 +1719,156 @@ function applyResolveEvent(state: GameState, action: ResolveEventAction): void {
   player.pendingEvent = undefined;
 }
 
+// ---- The Minds of the Age (figures.ts) --------------------------------------
+// A historical figure calls on the player BECAUSE OF how they play — their arrival
+// condition reads the situation the engine has already worked out. Spaced out and
+// seeded like Crossroads; each figure appears at most once per player per game.
+export const FIGURE_START_TURN = 5;
+export const FIGURE_CHANCE = 0.22;
+export const FIGURE_SPACING = 6;
+
+/** Summarise the player's situation for a figure's arrival condition. */
+function figureContext(state: GameState, player: Player): FigureCtx {
+  const coastal = player.cityIds.some((id) => isCoastalCity(state, id));
+  const navalThreat = (state.raids ?? []).some((r) => {
+    const c = state.map.cities[r.targetCityId];
+    return !!c && c.ownerId === player.id;
+  });
+  const atSea = player.unitIds.some((id) => {
+    const u = state.map.units[id];
+    return !!u && openSeaDistance(state, u.position) > 0;
+  });
+  const atWar = state.players.some((o) => o.id !== player.id && isAtWar(state, player.id, o.id));
+  return {
+    coastal,
+    navalThreat,
+    atSea,
+    atWar,
+    cityCount: player.cityIds.length,
+    age: playerAge(player),
+    foundRuins: (player.codex ?? []).length > 0
+  };
+}
+
+function maybeFireFigure(state: GameState, player: Player): void {
+  if (player.pendingEvent || player.pendingFigure) return; // one decision card at a time
+  if (player.cityIds.length === 0) return;
+  if (state.turn < FIGURE_START_TURN) return;
+  if (state.turn - (player.lastFigureTurn ?? 0) < FIGURE_SPACING) return;
+  if (seededRandom(state.seed, `figure:${state.turn}:${player.id}`)() >= FIGURE_CHANCE) return;
+
+  const ctx = figureContext(state, player);
+  const met = new Set(player.metFigures ?? []);
+  const eligible = FIGURES.filter((f) => !met.has(f.id) && f.when(ctx));
+  if (eligible.length === 0) return;
+
+  const pick = Math.floor(seededRandom(state.seed, `figurepick:${state.turn}:${player.id}`)() * eligible.length);
+  const figure = eligible[Math.min(pick, eligible.length - 1)]!;
+  player.pendingFigure = figure.id;
+  player.metFigures = [...(player.metFigures ?? []), figure.id];
+  player.lastFigureTurn = state.turn;
+}
+
+function applyResolveFigure(state: GameState, action: ResolveFigureAction): void {
+  const player = state.playersById[action.playerId];
+  if (!player) throw new Error(`Unknown player ${action.playerId}`);
+  if (player.pendingFigure !== action.figureId) {
+    throw new Error(`No pending figure ${action.figureId} for ${action.playerId}`);
+  }
+  const figure = getFigure(action.figureId);
+  const option = figure && figure.options[action.optionIndex];
+  if (!figure || !option) throw new Error(`Invalid figure option`);
+  applyFigureEffects(state, player, option.effects);
+  player.pendingFigure = undefined;
+}
+
+const VET_STEP: Record<string, Veterancy> = { recruit: "veteran", veteran: "elite", elite: "elite" };
+
+function capitalOf(state: GameState, player: Player): City | undefined {
+  return (
+    player.cityIds.map((id) => state.map.cities[id]).find((c) => c && c.isCapital) ||
+    state.map.cities[player.cityIds[0]]
+  );
+}
+
+function applyFigureEffects(state: GameState, player: Player, fx: FigureEffects): void {
+  if (fx.gold) player.gold += fx.gold;
+  if (fx.science) player.science += fx.science;
+  const capital = capitalOf(state, player);
+  if (fx.production && capital) capital.production = (capital.production ?? 0) + fx.production;
+  if (fx.food) {
+    for (const cityId of player.cityIds) {
+      const city = state.map.cities[cityId];
+      if (city) city.food = (city.food ?? 0) + fx.food;
+    }
+  }
+  if (fx.spawnUnit && UNITS[fx.spawnUnit] && capital) {
+    const def = UNITS[fx.spawnUnit];
+    let counter = 1;
+    let unitId = `${player.id}_${fx.spawnUnit}_figure_${state.turn}_${counter}`;
+    while (state.map.units[unitId]) { counter += 1; unitId = `${player.id}_${fx.spawnUnit}_figure_${state.turn}_${counter}`; }
+    state.map.units[unitId] = {
+      id: unitId, type: fx.spawnUnit, ownerId: player.id, position: { ...capital.position },
+      hp: def.maxHp, maxHp: def.maxHp, movementRemaining: 0, veterancy: "recruit"
+    };
+    syncOwnershipIndexes(state);
+  }
+  if (fx.xp) {
+    for (const uid of player.unitIds) {
+      const u = state.map.units[uid];
+      if (u) u.veterancy = VET_STEP[u.veterancy ?? "recruit"] ?? "veteran";
+    }
+  }
+  if (fx.heal) {
+    for (const uid of player.unitIds) {
+      const u = state.map.units[uid];
+      if (u) u.hp = u.maxHp;
+    }
+  }
+  if (fx.techUnlock && TECHS[fx.techUnlock] && !player.techs.includes(fx.techUnlock)) {
+    player.techs.push(fx.techUnlock);
+  }
+  if (fx.reveal && capital) {
+    state.discovered = state.discovered ?? {};
+    const seen = new Set(state.discovered[player.id] ?? []);
+    const at = capital.position;
+    seen.add(keyOf(at));
+    for (const n of neighborsOf(at)) { seen.add(keyOf(n)); for (const nn of neighborsOf(n)) if (state.map.tiles[keyOf(nn)]) seen.add(keyOf(nn)); }
+    state.discovered[player.id] = [...seen];
+  }
+  if (fx.seaReach) {
+    player.perks = player.perks ?? {};
+    player.perks.seaReach = (player.perks.seaReach ?? 0) + fx.seaReach;
+  }
+  if (fx.perks) {
+    player.perks = player.perks ?? {};
+    for (const [key, value] of Object.entries(fx.perks)) {
+      if (typeof value === "number") {
+        const k = key as keyof NonNullable<Player["perks"]>;
+        player.perks[k] = ((player.perks[k] as number | undefined) ?? 0) + value;
+      }
+    }
+  }
+  // The Burning Mirrors: any raid bearing down on this player is destroyed on the water.
+  if (fx.cancelRaids) {
+    const before = state.raids ?? [];
+    const doomed = before.filter((r) => { const c = state.map.cities[r.targetCityId]; return !!c && c.ownerId === player.id; });
+    if (doomed.length) {
+      state.raids = before.filter((r) => !doomed.includes(r));
+      player.pendingRaid = undefined;
+      state.raidReports = [
+        ...(state.raidReports ?? []),
+        ...doomed.map((r) => {
+          const c = state.map.cities[r.targetCityId];
+          return { kind: "burned" as const, cityId: r.targetCityId, cityName: c ? cityDisplayName(c) : r.targetCityId, playerId: player.id, strength: r.strength };
+        })
+      ];
+    }
+  }
+}
+
 function applyFoundCity(state: GameState, action: FoundCityAction): void {
+  assertPlayerTurn(state, action.playerId);
   assertPlayerTurn(state, action.playerId);
   const settler = unitAt(state, action.settlerId);
   if (settler.ownerId !== action.playerId) throw new Error("Cannot use enemy settler");
@@ -1876,10 +2028,12 @@ export function openSeaDistance(state: GameState, pos: Coord): number {
 // ship, cargo and all. Reported on state.lostAtSea so the client can tell the story.
 function loseShipsAtSea(state: GameState, player: Player): void {
   state.lostAtSea = [];
+  // Pytheas's charts let a people sail farther before the deep claims them.
+  const reach = LOST_AT_SEA_DIST + (player.perks?.seaReach ?? 0);
   for (const unitId of [...player.unitIds]) {
     const unit = state.map.units[unitId];
     if (!unit) continue;
-    if (openSeaDistance(state, unit.position) < LOST_AT_SEA_DIST) continue;
+    if (openSeaDistance(state, unit.position) < reach) continue;
     delete state.map.units[unitId];
     player.unitIds = player.unitIds.filter((id) => id !== unitId);
     state.lostAtSea.push({ playerId: player.id, unitId, type: unit.type });
@@ -2709,6 +2863,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "RESOLVE_RAID":
       applyResolveRaid(state, action);
+      break;
+    case "RESOLVE_FIGURE":
+      applyResolveFigure(state, action);
       break;
     case "BUILD_BUILDING":
       applyBuildBuilding(state, action);

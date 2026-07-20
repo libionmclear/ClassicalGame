@@ -4,11 +4,11 @@ Every 4X gives you fog of war — the unknown of **space**. HEGEMON's distinguis
 hook is the *other* unknowns, revealed only through play:
 
 1. **The Sea Beyond** — raiders from off the map's edge, and the lost islands you
-   can dare to sail out and find. **(Slice 1 — this doc, DONE.)**
-2. **The Land Beneath** — natural resources that start hidden and are uncovered by
+   can dare to sail out and find. **(Slice 1 — DONE, below.)**
+2. **The Minds of the Age** — historical figures (Archimedes, Pytheas, …) who arrive
+   *because of how you play* and open the other frontiers. **(Slice 2 — DONE, below.)**
+3. **The Land Beneath** — natural resources that start hidden and are uncovered by
    exploring or settling. *(planned)*
-3. **The Minds of the Age** — historical figures (Archimedes, Pytheas, …) who arrive
-   *because of how you play* and open the other two frontiers. *(planned)*
 
 The systems interlock: a naval crisis summons Archimedes, whose burning mirrors or a
 navigator's boon let you cross the belt to hunt the raiders' isle; settling the ore
@@ -71,6 +71,67 @@ it — you can only defend, or pay them off.
 - The raid fleet as an **attackable unit** on the belt you can intercept at sea
   (needs a pirates pseudo-faction / combat null-safety).
 - **Hunting the haven**: sail past `LOST_AT_SEA_DIST` with Navigation / a figure's
-  boon to reach lost islands + the raiders' home for treasure.
+  boon to reach lost islands + the raiders' home for treasure. (Pytheas's `seaReach`
+  boon is the first step — it already lets you sail farther out.)
 - Raider **escalation** tied to your coastal wealth over a campaign; a board marker
   for the approaching fleet on the `approach` belt tile.
+
+---
+
+## Slice 2 — Historical figures ("The Minds of the Age") (DONE)
+
+Unlike a random Crossroads dilemma, a figure arrives **because of how you play** —
+their arrival condition reads your current situation — and offers a branching,
+historically-grounded boon. Each appears **at most once per player per game**, and
+meeting one leaves a mark in your personal **chronicle** (a lightweight collection
+hook; full card integration is a later slice).
+
+### The interlock
+
+This is the payoff that ties the frontiers together: **Archimedes** arrives to a
+coastal power under naval threat and offers the **Burning Mirrors**, which *destroy
+the raid bearing down on you* (a `burned` raid outcome) plus a lasting coastal ward.
+**Pytheas** arrives once you've braved the open sea and grants `seaReach` — you sail
+farther out before the deep claims you, the first step toward hunting the raiders'
+haven.
+
+### The roster (`src/engine/figures.ts`)
+
+| Figure | Arrives when… | Boons |
+|---|---|---|
+| **Archimedes of Syracuse** | coastal & (a raid threatens *or* age ≥ 2) | Burning Mirrors (destroy the raid + defence) · War Engines (production + attack) · Buoyancy (science + naval move) |
+| **Pytheas of Massalia** | a ship is out in the open-sea belt | Chart the Ocean (`seaReach` +2 + science) · Tin Route (gold + gold/turn) |
+| **Hippocrates of Kos** | age ≥ 2 | School of Medicine (heal army + healing perk) · Sanitation (food + food/turn) |
+| **Herodotus** | you've excavated a ruin | Endow the Histories (science) · Map the World (reveal + gold) |
+| **Solon of Athens** | you hold ≥ 3 cities | Enact the Reforms (stability + gold/turn) · Cancel the Debts (food + production) |
+| **Xenophon of Athens** | at war | Drill the Army (whole-army veterancy) · Long March (move perk + gold) |
+
+### Where it lives
+
+- Data: `src/engine/figures.ts` — `FIGURES`, `FigureEffects`, `FigureCtx`,
+  `getFigure`. Pure predicates + effect vocabulary, no engine internals.
+- Engine: `src/engine/index.ts` — `maybeFireFigure` (conditional, seeded, spaced,
+  once-each) beside `maybeFireEvent`; `applyResolveFigure` + `applyFigureEffects`
+  (the full boon vocabulary incl. `cancelRaids` → `burned` report, `seaReach`,
+  perks, xp, heal, reveal, spawn, tech); `figureContext` computes the arrival ctx.
+  Constants `FIGURE_START_TURN/CHANCE/SPACING`.
+- Types: `Player.pendingFigure` / `.metFigures` / `.lastFigureTurn`,
+  `perks.seaReach`, `ResolveFigureAction`, `RaidReport` kind `"burned"`.
+- AI: `src/engine/ai.ts` auto-resolves `pendingFigure` (richest boon) — same
+  lockstep-safe pattern as events; `pendingFigure` is set on the player
+  deterministically, never keyed to `humanPlayerId`.
+- Client: `game.js` — `showFigureModal`, `figureEffectsSummary`, `recordFigureMet`
+  (chronicle in the profile), the `"burned"` toast, and figure-priority over the
+  raid modal. `#figure-modal` in `game.html`, `.figure-card` in `game.css`.
+  `HGTest.forceFigure(id)` drives the modal in tests.
+- Tests: `test/figures.test.ts` (each boon type, the mirrors-vs-raid interlock,
+  `seaReach` survival, once-only arrival over a campaign). One decision card shows
+  at a time — an unresolved event/figure holds the slot, freed as soon as it's
+  answered.
+
+### Deferred
+
+- Full **card-collection** integration (figures as collectible Legend cards with
+  equip perks) — v1 only records them in the profile chronicle + a toast.
+- More figures, civ-specific figures, and figures that open **The Land Beneath**
+  (a prospector who reveals hidden deposits, once that slice exists).

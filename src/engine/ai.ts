@@ -4,6 +4,7 @@ import { districtSlots, districtForbidden } from "./districts";
 import { canProposeAgreement, aiAcceptsProposal, personalityOf, relationBand, getRelation, isVassal, canDemandVassalage, militaryStrength, isAtWar } from "./diplomacy";
 import { unitNear, explorerNear, befriendCostFor } from "./peoples";
 import { getEvent } from "./events";
+import { getFigure } from "./figures";
 import { distance, DIRECTIONS, keyOf, parseKey, neighborsOf } from "./hex";
 import { findPath, movementCost } from "./pathfinding";
 import type { City, Coord, GameAction, GameState, Player, Unit } from "./types";
@@ -773,6 +774,22 @@ export function chooseAiAction(state: GameState, playerId: string): GameAction {
         (o.effects.spawnUnit ? 25 : 0);
       const optionIndex = score(event.options[0]) >= score(event.options[1]) ? 0 : 1;
       return { type: "RESOLVE_EVENT", playerId, eventId: player.pendingEvent, optionIndex };
+    },
+    () => {
+      // Greet any visiting historical figure and take the richest boon on offer.
+      if (!player.pendingFigure) return null;
+      const figure = getFigure(player.pendingFigure);
+      if (!figure) return null;
+      const score = (o: (typeof figure.options)[number]) => {
+        const e = o.effects;
+        return (e.gold ?? 0) * 0.5 + (e.production ?? 0) + (e.science ?? 0) * 0.8 + (e.food ?? 0) * 3 +
+          (e.spawnUnit ? 25 : 0) + (e.xp ? 30 : 0) + (e.heal ? 15 : 0) + (e.cancelRaids ? 40 : 0) +
+          (e.seaReach ?? 0) * 5 + (e.reveal ? 8 : 0) +
+          Object.values(e.perks ?? {}).reduce((s: number, v) => s + (typeof v === "number" ? v * 8 : 0), 0);
+      };
+      let best = 0;
+      for (let i = 1; i < figure.options.length; i += 1) if (score(figure.options[i]!) > score(figure.options[best]!)) best = i;
+      return { type: "RESOLVE_FIGURE", playerId, figureId: player.pendingFigure, optionIndex: best };
     },
     () => attackAction(state, player),
     () => foundCityAction(state, player),

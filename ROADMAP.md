@@ -36,15 +36,18 @@ Three unknowns beyond fog-of-war, revealed only through play, that interlock:
   map's edge (the open-sea belt) and fall on a coastal city: warned a turn ahead,
   then struck (repelled / sunk by a warship / pillaged). Respond by defending or
   paying tribute. You never see their home. Fully seeded + lockstep-safe.
-- [next] **Hunt the haven.** Sail past the lost-at-sea distance (with Navigation or a
-  figure's boon) to reach the raiders' island + lost-island treasure. Raid fleet as
+- [done, slice 2] **The Minds of the Age — historical figures.** Archimedes (burning
+  mirrors that destroy a raid / siege / buoyancy), Pytheas (extends how far you sail),
+  Hippocrates, Herodotus, Solon, Xenophon — each arrives from HOW you play and offers
+  a branching boon; recorded in your chronicle. Seeded + lockstep-safe.
+- [next] **Hunt the haven.** Sail past the lost-at-sea distance (Pytheas's seaReach is
+  the first step) to reach the raiders' island + lost-island treasure. Raid fleet as
   an intercept-able unit at sea.
 - [planned] **The Land Beneath — prospecting.** Deposits start hidden (like ruins),
   uncovered by exploring/settling/a tech; rare finds (marble, silver, naphtha) unlock
-  unique options. Makes city placement a gamble.
-- [planned] **The Minds of the Age — historical figures.** Archimedes (burning
-  mirrors vs a raid fleet / siege / buoyancy), Pytheas (belt passage), a prospector
-  (reveal deposits) — arrive from how you play, drop a card into your collection.
+  unique options. Makes city placement a gamble. A prospector figure reveals them.
+- [planned] **Figures → cards.** Full card-collection integration (figures as
+  collectible Legend cards with equip perks); v1 records them in the profile only.
 
 ### Economy: strategic resources on the map
 - [done, v1] Deposits scattered on tiles (grain, fish, timber, iron, stone,

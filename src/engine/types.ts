@@ -175,6 +175,8 @@ export interface Player {
     unitCostPct?: number; upkeepPct?: number; researchCostPct?: number; buildFasterPct?: number;
     /** Flat move / heal from equipped cards (Slice 4). */
     movePlus?: number; navalMovePlus?: number; healPlus?: number;
+    /** Rings a ship may sail past the border before being lost (Pytheas's boon). */
+    seaReach?: number;
   };
   /** Turn the Oathbreaker brand lifts (Diplomacy §3); absent = not branded. */
   oathbreakerUntil?: number;
@@ -189,6 +191,12 @@ export interface Player {
   /** An off-grid corsair raid bearing down on one of this player's coastal cities,
    *  awaiting the player's response (raid id). Only the human is ever handed one. */
   pendingRaid?: string;
+  /** A historical figure awaiting the player's decision (figure id), if any. */
+  pendingFigure?: string;
+  /** Figures this player has already met this game (each appears at most once). */
+  metFigures?: string[];
+  /** Turn the player's last figure arrived, to space them out. */
+  lastFigureTurn?: number;
 }
 
 /** An off-grid corsair raid in flight — gathered beyond the map's edge, bound for a
@@ -212,7 +220,7 @@ export interface Raid {
 /** What the raiders did on the world-turn that just began — a warning raised, a
  *  strike repelled or pillaged, a fleet bought off — for the client to narrate. */
 export interface RaidReport {
-  kind: "warning" | "repelled" | "sunk" | "pillaged" | "bought-off";
+  kind: "warning" | "repelled" | "sunk" | "pillaged" | "bought-off" | "burned";
   cityId: string;
   cityName: string;
   playerId: string;
@@ -409,6 +417,14 @@ export interface ResolveRaidAction {
   choice: "brace" | "tribute";
 }
 
+// The Minds of the Age (figures.ts) — choose one of a visiting figure's boons.
+export interface ResolveFigureAction {
+  type: "RESOLVE_FIGURE";
+  playerId: string;
+  figureId: string;
+  optionIndex: number;
+}
+
 export interface BuildBuildingAction {
   type: "BUILD_BUILDING";
   playerId: string;
@@ -574,6 +590,7 @@ export type GameAction =
   | AttackCityAction
   | ResolveEventAction
   | ResolveRaidAction
+  | ResolveFigureAction
   | BuildBuildingAction
   | UnqueueProductionAction
   | RushProductionAction
