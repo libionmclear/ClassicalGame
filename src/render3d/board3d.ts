@@ -1397,13 +1397,21 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     _box.setFromObject(obj); _box.getSize(_sz);
     obj.scale.setScalar(targetH / (_sz.y || 1));
     _box.setFromObject(obj);
+    // Re-origin the figure inside a WRAPPER whose (0,0,0) is at its FEET, centred
+    // horizontally. Callers can then scale/position the wrapper freely without burying
+    // it — a squad member set to y=0 keeps its feet on the tile, not its waist (the
+    // Meshy models pivot at their centre, which used to sink them "into a swamp").
+    obj.position.x -= (_box.min.x + _box.max.x) / 2;
     obj.position.y -= _box.min.y;
+    obj.position.z -= (_box.min.z + _box.max.z) / 2;
+    const wrap = new THREE.Group();
+    wrap.add(obj);
     if (animate && entry.animations.length) {
       const mixer = new THREE.AnimationMixer(obj);
       mixer.clipAction(entry.animations[0]).play();
       mixers.push(mixer);
     }
-    return obj;
+    return wrap;
   }
 
   const raycaster = new THREE.Raycaster();
@@ -1699,13 +1707,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
           || getGLB("assets/models/units/" + form + ".glb");
         if (glb) {
           const single = form === "siege" || form === "naval";
-          const base = form === "elephant" ? 2 : form === "mounted" ? 3 : form === "civilian" ? 3 : 6;
+          // More, smaller figures so a unit reads as a formation (and leaves room for
+          // the terrain and the buildings to come). Height is the FINAL size — the
+          // feet-anchored wrapper means no extra scaling is needed.
+          const base = form === "elephant" ? 2 : form === "mounted" ? 4 : form === "civilian" ? 2 : 9;
+          const memberH = single ? 0.85 : form === "elephant" ? 0.6 : form === "mounted" ? 0.5 : 0.4;
           const count = single ? 1 : Math.max(1, Math.round(base * Math.max(0.05, Math.min(1, frac))));
           const grp = new THREE.Group();
           const pos = squadPositions(count);
           for (let i = 0; i < count; i += 1) {
-            const f = glbInstance(glb, single ? 1.0 : 0.85, true);
-            if (!single) { f.scale.multiplyScalar(0.6); f.position.set(pos[i][0], 0, pos[i][1]); f.rotation.y = (rnd(sv.q, sv.r, i) - 0.5) * 0.6; }
+            const f = glbInstance(glb, memberH, true);
+            if (!single) { f.position.set(pos[i][0], 0, pos[i][1]); f.rotation.y = (rnd(sv.q, sv.r, i) - 0.5) * 0.6; }
             grp.add(f);
           }
           model = grp; scale = 1;
