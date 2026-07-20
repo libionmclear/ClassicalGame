@@ -30,6 +30,22 @@ matters, unique per civilization.
 
 ## Next (big systems, roughly in priority order)
 
+### Frontiers of the unknown (what sets HEGEMON apart) — see docs/HEGEMON-RAIDERS-v1.md
+Three unknowns beyond fog-of-war, revealed only through play, that interlock:
+- [done, slice 1] **The Sea Beyond — off-grid corsairs.** Raiders gather beyond the
+  map's edge (the open-sea belt) and fall on a coastal city: warned a turn ahead,
+  then struck (repelled / sunk by a warship / pillaged). Respond by defending or
+  paying tribute. You never see their home. Fully seeded + lockstep-safe.
+- [next] **Hunt the haven.** Sail past the lost-at-sea distance (with Navigation or a
+  figure's boon) to reach the raiders' island + lost-island treasure. Raid fleet as
+  an intercept-able unit at sea.
+- [planned] **The Land Beneath — prospecting.** Deposits start hidden (like ruins),
+  uncovered by exploring/settling/a tech; rare finds (marble, silver, naphtha) unlock
+  unique options. Makes city placement a gamble.
+- [planned] **The Minds of the Age — historical figures.** Archimedes (burning
+  mirrors vs a raid fleet / siege / buoyancy), Pytheas (belt passage), a prospector
+  (reveal deposits) — arrive from how you play, drop a card into your collection.
+
 ### Economy: strategic resources on the map
 - [done, v1] Deposits scattered on tiles (grain, fish, timber, iron, stone,
   horses, wine, silver), placed deterministically on generated maps + scenarios,

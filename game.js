@@ -62,6 +62,10 @@
   const eventTitleEl = document.getElementById("event-title");
   const eventSituationEl = document.getElementById("event-situation");
   const eventOptionsEl = document.getElementById("event-options");
+  const raidModalEl = document.getElementById("raid-modal");
+  const raidTitleEl = document.getElementById("raid-title");
+  const raidSituationEl = document.getElementById("raid-situation");
+  const raidOptionsEl = document.getElementById("raid-options");
   const researchBtn = document.getElementById("research-btn");
   const researchModalEl = document.getElementById("research-modal");
   const researchCloseBtn = document.getElementById("research-close-btn");
@@ -1181,6 +1185,62 @@
     eventModalEl.classList.remove("hidden");
   }
 
+  // Off-grid corsairs (raiders.md): a warning card when a raid gathers off one of
+  // your coastal cities. Brace behind your defences, or pay the fleet off.
+  function showRaidModal(victory) {
+    if (!raidModalEl) return;
+    const p = human();
+    const raidId = p && p.pendingRaid;
+    const raid = raidId && (state.raids || []).find(function (r) { return r.id === raidId; });
+    if (!raid || !isHumanTurn() || (victory && victory.winnerId)) {
+      raidModalEl.classList.add("hidden");
+      return;
+    }
+    const city = state.map.cities[raid.targetCityId];
+    const cityName = city ? cityDisplayName(city) : "your coast";
+    const eraName = raid.era >= 3 ? "a great fleet of Sea Peoples" : raid.era >= 2 ? "a corsair squadron" : "a longship band";
+    raidTitleEl.textContent = "Raiders off " + cityName;
+    raidSituationEl.textContent =
+      "Sails gather beyond the horizon — " + eraName + " (raiding strength ~" + raid.strength +
+      ") bears down on " + cityName + ". They strike next turn. Your garrison and any troops or warship in port will meet them.";
+
+    const cost = engine.raidTributeCost ? engine.raidTributeCost(raid) : Math.round(raid.strength * 1.5 + 8);
+    const canPay = human().gold >= cost;
+    const opts = [
+      {
+        label: "⚔️ Stand and fight",
+        outcome: "Trust your walls and defenders to throw the raiders back.",
+        effects: "Free — the stronger your defence, the safer your city",
+        choice: "brace"
+      },
+      {
+        label: (canPay ? "💰 Pay them off" : "💰 Pay them off (not enough gold)"),
+        outcome: canPay ? "Buy the raiders off with tribute; they turn away." : "You lack the " + cost + " gold to buy them off.",
+        effects: "−" + cost + " gold",
+        choice: "tribute",
+        disabled: !canPay
+      }
+    ];
+    raidOptionsEl.innerHTML = "";
+    opts.forEach(function (opt) {
+      const btn = document.createElement("button");
+      btn.className = "event-option" + (opt.disabled ? " disabled" : "");
+      btn.innerHTML =
+        '<span class="eo-label">' + opt.label + "</span>" +
+        '<span class="eo-outcome">' + opt.outcome + "</span>" +
+        '<span class="eo-effects">' + opt.effects + "</span>";
+      if (!opt.disabled) {
+        btn.addEventListener("click", function () {
+          if (opt.choice === "tribute") logAction("💰 Paid " + cost + " gold in tribute to the raiders off " + cityName + ".");
+          else logAction("⚔️ Braced " + cityName + " against the raiders.");
+          apply({ type: "RESOLVE_RAID", playerId: HUMAN_ID, raidId: raid.id, choice: opt.choice });
+        });
+      }
+      raidOptionsEl.appendChild(btn);
+    });
+    raidModalEl.classList.remove("hidden");
+  }
+
   // ===== Diplomacy screen (Diplomacy v1 §7) =====
   function diploBandColor(band) {
     return { hostile: "#c05545", wary: "#c99a3a", neutral: "#8a97a5", cordial: "#3a9aa0", friendly: "#2f9a55" }[band] || "#8a97a5";
@@ -1600,6 +1660,42 @@
     if (env !== lastAmbience) { window.HGAudio.setAmbience(env); lastAmbience = env; }
   }
 
+  // Off-grid corsairs (raiders.md): narrate the human's warnings and strike
+  // outcomes. Raid reports are transient (rebuilt each world-turn) and are usually
+  // set during the AI's turns, so this is called after AI resolves. A signature
+  // guard keeps a given batch from toasting twice across repeated renders.
+  var lastRaidSig = "";
+  function surfaceRaidReports() {
+    if (!state || !state.raidReports) return;
+    var mine = state.raidReports.filter(function (r) { return r.playerId === HUMAN_ID; });
+    var sig = state.turn + "|" + JSON.stringify(mine);
+    if (!mine.length || sig === lastRaidSig) return;
+    lastRaidSig = sig;
+    mine.forEach(function (r) {
+      // Prefer the client's pretty city name (e.g. "Roma") over the engine's raw id.
+      var liveCity = state.map.cities[r.cityId];
+      r = Object.assign({}, r, { cityName: liveCity ? cityDisplayName(liveCity) : r.cityName });
+      if (r.kind === "warning") {
+        showCombatToast("⚔️ Sails on the horizon — raiders gather off " + r.cityName + "; they strike next turn.", "gate");
+        logAction("⚔️ Raiders (strength ~" + r.strength + ") gather off " + r.cityName + " — they strike next turn.");
+        if (window.HGAudio && window.HGAudio.alarm) window.HGAudio.alarm();
+      } else if (r.kind === "repelled") {
+        showCombatToast("🛡️ " + r.cityName + " threw back the raiders — the walls held.", "win");
+        logAction("🛡️ The raid on " + r.cityName + " was repelled.");
+      } else if (r.kind === "sunk") {
+        showCombatToast("🌊 Your fleet sank the raiders off " + r.cityName + " — +" + (r.goldGained || 0) + " gold in plunder.", "win");
+        logAction("🌊 Warships sank the raiders off " + r.cityName + " (+" + (r.goldGained || 0) + " gold).");
+      } else if (r.kind === "pillaged") {
+        var loss = "−" + (r.goldLost || 0) + " gold" + (r.popLost ? ", −" + r.popLost + " population" : "");
+        showCombatToast("🔥 Raiders sacked " + r.cityName + "! " + loss + ".", "loss");
+        logAction("🔥 " + r.cityName + " was pillaged by raiders (" + loss + ").");
+      } else if (r.kind === "bought-off") {
+        showCombatToast("💰 The raiders off " + r.cityName + " took your tribute and turned away.", "gate");
+        logAction("💰 Paid off the raiders threatening " + r.cityName + " (−" + (r.goldPaid || 0) + " gold).");
+      }
+    });
+  }
+
   function apply(action) {
     try {
       const beforeSummary = action.type === "END_TURN" && action.playerId === HUMAN_ID ? snapshotHumanState() : null;
@@ -1664,6 +1760,7 @@
       const forcesBefore = snapshotHumanForces();
       checkEliminations(); // your own capture may have just wiped a civ out
       runAiUntilHuman();
+      surfaceRaidReports(); // off-grid corsairs strike on the world-turn the AI closes
       reportEnemyCombat(forcesBefore);
       checkEliminations(); // the AI may have eliminated someone on its turn
       saveGame();
@@ -3139,6 +3236,7 @@
         endTurnBtn.disabled = !isHumanTurn() || Boolean(victory.winnerId);
         showResultModal(victory);
         showEventModal(victory);
+        showRaidModal(victory);
         showProposalModal(victory);
       } catch (overlayErr) {
         console.error("Overlay error:", overlayErr);
@@ -5632,6 +5730,21 @@
     // A selected unit shows only a small toggle by default; open the full actions
     // panel (what the unit-detail symbol does) so tests can inspect it.
     openUnitPanel: function () { unitDetailsOpen = true; render(); },
+    // Off-grid corsairs (raiders.md): force a raid warning on the human's capital
+    // so the modal/toast path can be exercised without waiting for the seeded roll.
+    forceRaid: function (strength) {
+      if (!state) return null;
+      var cap = Object.values(state.map.cities).filter(function (c) { return c.ownerId === HUMAN_ID; })[0];
+      if (!cap) return null;
+      var raid = { id: "raid_forced_" + state.turn, targetCityId: cap.id, warnTurn: state.turn, strikeTurn: state.turn + 1, strength: strength || 40, era: 1 };
+      state.raids = (state.raids || []).concat([raid]);
+      human().pendingRaid = raid.id;
+      state.raidReports = [{ kind: "warning", cityId: cap.id, cityName: cityDisplayName(cap), playerId: HUMAN_ID, strength: raid.strength, strikeTurn: raid.strikeTurn }];
+      lastRaidSig = ""; // let it toast
+      surfaceRaidReports();
+      render();
+      return { raidId: raid.id, cityId: cap.id };
+    },
     endTurn: function () { if (isHumanTurn()) apply({ type: "END_TURN", playerId: HUMAN_ID }); },
     // Camera (3D board only) — for the UI smoke's tilt/reset checks.
     camTilt: function () { return board3d && board3d.getTilt ? board3d.getTilt() : null; },

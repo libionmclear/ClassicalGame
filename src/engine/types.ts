@@ -186,6 +186,44 @@ export interface Player {
   overlordMilBaseline?: number;
   /** Codex entries unlocked by discovery (ruin ids fully excavated, §10). */
   codex?: string[];
+  /** An off-grid corsair raid bearing down on one of this player's coastal cities,
+   *  awaiting the player's response (raid id). Only the human is ever handed one. */
+  pendingRaid?: string;
+}
+
+/** An off-grid corsair raid in flight — gathered beyond the map's edge, bound for a
+ *  coastal city. It is warned a turn ahead, then strikes; you never see its home. */
+export interface Raid {
+  id: string;
+  /** The coastal city in the crosshairs. */
+  targetCityId: string;
+  /** Belt tile the fleet gathers on ("sails on the horizon" marker), if any. */
+  approach?: Coord;
+  /** World-turn the warning was raised. */
+  warnTurn: number;
+  /** World-turn the blow lands. */
+  strikeTurn: number;
+  /** Raw raiding power, checked against the city's defence when it strikes. */
+  strength: number;
+  /** Age of the raid (1..3): longboats early, organised Sea Peoples late. */
+  era: number;
+}
+
+/** What the raiders did on the world-turn that just began — a warning raised, a
+ *  strike repelled or pillaged, a fleet bought off — for the client to narrate. */
+export interface RaidReport {
+  kind: "warning" | "repelled" | "sunk" | "pillaged" | "bought-off";
+  cityId: string;
+  cityName: string;
+  playerId: string;
+  strength: number;
+  approach?: Coord;
+  strikeTurn?: number;
+  goldLost?: number;
+  popLost?: number;
+  hpLost?: number;
+  goldGained?: number;
+  goldPaid?: number;
 }
 
 export interface GameMap {
@@ -251,6 +289,11 @@ export interface GameState {
    *  (pushed too far past the map's border). The client reports these, then it's
    *  overwritten on the next end-turn. */
   lostAtSea?: Array<{ playerId: string; unitId: string; type: string }>;
+  /** Off-grid corsair raids currently in flight against coastal cities (raiders.md). */
+  raids?: Raid[];
+  /** Transient: warnings raised and strikes resolved on the world-turn that just
+   *  began, for the client to narrate. Rebuilt at the start of each world-turn. */
+  raidReports?: RaidReport[];
   /** Per-player chosen general/Legend, feeding diplomacy rolls (§10.3 / cards). Keyed by player id. */
   leaders?: Record<string, { id: string; name?: string; role: string; rarity: string }>;
   /** Civs each player has made first contact with (via an Explorer envoy or borders). Keyed by player id → met player ids. */
@@ -355,6 +398,15 @@ export interface ResolveEventAction {
   playerId: string;
   eventId: string;
   optionIndex: number;
+}
+
+// Off-grid corsairs (raiders.md) — respond to a raid warning: brace behind your
+// defences, or pay the raiders off to call the strike off entirely.
+export interface ResolveRaidAction {
+  type: "RESOLVE_RAID";
+  playerId: string;
+  raidId: string;
+  choice: "brace" | "tribute";
 }
 
 export interface BuildBuildingAction {
@@ -521,6 +573,7 @@ export type GameAction =
   | BuildUnitAction
   | AttackCityAction
   | ResolveEventAction
+  | ResolveRaidAction
   | BuildBuildingAction
   | UnqueueProductionAction
   | RushProductionAction

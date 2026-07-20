@@ -27,7 +27,8 @@ import { excavateRuins } from "./discovery";
 import { scatterVillages, PEOPLE_BY_ID, unitNear, applyVillageBenefit, BEFRIEND_COST, TRIBUTE_GAIN, CONQUEST_REPUTATION_HIT, DISPOSITIONS, rollReaction, souredDisposition, pillageOnThreaten, THREATEN_RAID_GOLD, leaderReactionBonus, explorerNear, EXPLORER_ENVOY_BONUS, befriendCostFor } from "./peoples";
 import type { VillageDeed } from "./peoples";
 import type { BefriendVillageAction, DemandTributeVillageAction, ConquerVillageAction, AbsorbVillageAction } from "./types";
-import type { ResolveEventAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
+import type { ResolveEventAction, ResolveRaidAction, BuildBuildingAction, UnqueueProductionAction, RushProductionAction, EstablishTradeRouteAction, ImproveTileAction, RenameCityAction, DisbandUnitAction, BuildDistrictAction, RepairDistrictAction, GiftGoldAction, DeclareWarAction, ProposeAgreementAction, ResolveProposalAction, OfferTributeAction, DenounceAction, ProposeVassalageAction, ReleaseVassalAction } from "./types";
+import type { Raid, RaidReport } from "./types";
 import type {
   AttackCityAction,
   ChooseForkAction,
@@ -1626,6 +1627,10 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
         enterWar(state, p.id, overlord);
       }
     }
+    // Off-grid corsairs: land any raid due this turn, then perhaps raise a fresh
+    // warning on the horizon. Once per world-turn, fully seeded (raiders.md).
+    resolveRaids(state);
+    scheduleRaid(state);
   }
 
   const nextPlayer = getCurrentPlayer(state);
@@ -1904,6 +1909,217 @@ function addOpenSeaMargin(map: GameMap): void {
     }
     frontier = next;
   }
+}
+
+// ---- Off-grid corsairs (raiders.md) -----------------------------------------
+// Raiders don't sit on the map like barbarian camps — they gather beyond the
+// world's edge, out in the open-sea belt you can't see into, and fall on a coastal
+// city. A raid is WARNED a turn ahead ("sails on the horizon"), giving you time to
+// muster, then STRIKES: its strength is checked against the city's defence. Beat it
+// and your walls hold (a warship in port sinks the fleet for plunder); lose and the
+// city is pillaged — gold and, if overwhelmed, people. You never see their home, so
+// you can't march on it; you can only defend, or pay them off. Fully seeded.
+export const RAID_START_TURN = 6;   // corsairs first appear once realms are established
+export const RAID_WARN_LEAD = 1;    // world-turns of warning before the blow lands
+export const RAID_MAX_ACTIVE = 2;   // raids in flight at once (keeps it a threat, not a flood)
+export const RAID_CHANCE = 0.28;    // per-world-turn odds a fresh raid gathers
+
+const cityDisplayName = (city: City): string => city.name || city.id;
+
+/** Gold that buys a raid off outright — scales with how big the fleet is. */
+export function raidTributeCost(raid: Raid): number {
+  return Math.round(raid.strength * 1.5 + 8);
+}
+
+/** Coastal cities a raid could target, in a deterministic order. */
+function raidableCities(state: GameState): City[] {
+  return Object.values(state.map.cities)
+    .filter((c) => isCoastalCity(state, c.id))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** The nearest off-grid ocean tile to a city — where the fleet gathers on the horizon. */
+function beltTileNear(state: GameState, city: City): Coord | undefined {
+  let best: Coord | undefined;
+  let bestKey = "";
+  let bestDist = Infinity;
+  for (const [key, tile] of Object.entries(state.map.tiles)) {
+    if (!tile.open) continue;
+    const pos = parseKey(key);
+    const d = distance(pos, city.position);
+    if (d < bestDist || (d === bestDist && key < bestKey)) {
+      bestDist = d;
+      bestKey = key;
+      best = pos;
+    }
+  }
+  return best;
+}
+
+/** How stoutly a city can meet a raid: fortifications (age + intact walls + a port)
+ *  plus the troops standing on or beside it; a warship in port counts double. */
+function raidDefense(state: GameState, city: City): { defense: number; naval: boolean } {
+  const owner = state.playersById[city.ownerId];
+  const age = playerAge(owner);
+  let defense = 8 + age * 4 + (city.hp / Math.max(1, city.maxHp)) * 6;
+  if ((city.buildings ?? []).includes("harbor")) defense += 5;
+
+  let naval = false;
+  for (const unit of Object.values(state.map.units)) {
+    if (unit.ownerId !== city.ownerId) continue;
+    const def = UNITS[unit.type];
+    if (!def) continue;
+    const dist = distance(unit.position, city.position);
+    if (dist > 1) continue;
+    const value = (def.defense ?? 0) * (unit.hp / Math.max(1, unit.maxHp)) * veterancyMultiplier(unit.veterancy);
+    if (def.domain === "naval") {
+      defense += value * 1.3; // a trireme in port meets the raiders at sea
+      naval = true;
+    } else if (def.domain === "land") {
+      defense += dist === 0 ? value : value * 0.6; // the garrison holds; nearby troops rush in
+    }
+  }
+  return { defense, naval };
+}
+
+/** Resolve every raid whose blow lands on the world-turn that just began, narrating
+ *  each outcome on state.raidReports and clearing any human's pending warning. */
+function resolveRaids(state: GameState): void {
+  state.raidReports = [];
+  const raids = state.raids ?? [];
+  const survivors: Raid[] = [];
+
+  for (const raid of raids) {
+    const city = state.map.cities[raid.targetCityId];
+    if (!city) continue; // the city fell or vanished — the raid finds nothing
+    if (raid.strikeTurn > state.turn) {
+      survivors.push(raid);
+      continue;
+    }
+
+    const owner = state.playersById[city.ownerId];
+    const { defense, naval } = raidDefense(state, city);
+    const report: RaidReport = {
+      kind: "repelled",
+      cityId: city.id,
+      cityName: cityDisplayName(city),
+      playerId: city.ownerId,
+      strength: raid.strength
+    };
+
+    if (defense >= raid.strength) {
+      // Repelled. A warship on station turns the tide into a rout — salvage + ransom.
+      if (naval) {
+        report.kind = "sunk";
+        report.goldGained = Math.round(raid.strength * 0.5);
+        if (owner) owner.gold += report.goldGained;
+      }
+    } else {
+      // The walls are breached: coin is carried off, and a badly outmatched city
+      // loses people too. The city always survives (a raid sacks, it doesn't hold).
+      report.kind = "pillaged";
+      const overrun = raid.strength - defense;
+      report.goldLost = Math.min(owner?.gold ?? 0, Math.round(overrun * 2 + 6));
+      report.hpLost = Math.min(Math.max(0, city.hp - 1), Math.round(overrun * 1.5));
+      report.popLost = raid.strength >= defense * 2 && city.population > 1 ? 1 : 0;
+      if (owner) owner.gold -= report.goldLost;
+      city.hp = Math.max(1, city.hp - (report.hpLost ?? 0));
+      city.population = Math.max(1, city.population - (report.popLost ?? 0));
+      city.lastAttackedTurn = state.turn; // a sacked city doesn't mend its walls this turn
+    }
+
+    state.raidReports.push(report);
+  }
+
+  state.raids = survivors;
+  // Clear any player's pending warning that no longer points at a live raid (it
+  // struck, was bought off, or its city vanished) — keeps the marker honest.
+  const liveIds = new Set(survivors.map((r) => r.id));
+  for (const p of state.players) {
+    if (p.pendingRaid && !liveIds.has(p.pendingRaid)) p.pendingRaid = undefined;
+  }
+}
+
+/** Once per world-turn, perhaps gather a fresh raid on the horizon and warn its target. */
+function scheduleRaid(state: GameState): void {
+  if (state.turn < RAID_START_TURN) return;
+  const active = state.raids ?? [];
+  if (active.length >= RAID_MAX_ACTIVE) return;
+
+  const targets = raidableCities(state).filter(
+    (c) => !active.some((r) => r.targetCityId === c.id)
+  );
+  if (targets.length === 0) return;
+
+  const roll = seededRandom(state.seed, `raid:${state.turn}`)();
+  if (roll >= RAID_CHANCE) return;
+
+  const pickRand = seededRandom(state.seed, `raidtarget:${state.turn}`)();
+  const city = targets[Math.min(targets.length - 1, Math.floor(pickRand * targets.length))]!;
+  const owner = state.playersById[city.ownerId];
+  const era = playerAge(owner);
+  const wealth = Math.min(16, (city.population ?? 1) * 1.5 + Math.floor((owner?.gold ?? 0) / 40));
+  const powerRand = seededRandom(state.seed, `raidpower:${state.turn}`)();
+  const strength = Math.round((12 + (era - 1) * 14 + wealth) * (0.85 + 0.4 * powerRand));
+
+  const raid: Raid = {
+    id: `raid_${state.turn}_${city.id}`,
+    targetCityId: city.id,
+    approach: beltTileNear(state, city),
+    warnTurn: state.turn,
+    strikeTurn: state.turn + RAID_WARN_LEAD,
+    strength,
+    era
+  };
+  state.raids = [...active, raid];
+  state.raidReports = [
+    ...(state.raidReports ?? []),
+    {
+      kind: "warning",
+      cityId: city.id,
+      cityName: cityDisplayName(city),
+      playerId: city.ownerId,
+      strength,
+      approach: raid.approach,
+      strikeTurn: raid.strikeTurn
+    }
+  ];
+  // Mark the target's owner as having a raid to answer — set DETERMINISTICALLY for
+  // whichever player is targeted (never keyed to humanPlayerId, which differs per
+  // client and would break lockstep). The client shows the card only for the local
+  // human; the AI just braces (never sends RESOLVE_RAID), and the strike clears it.
+  if (owner && !owner.pendingRaid) owner.pendingRaid = raid.id;
+}
+
+function applyResolveRaid(state: GameState, action: ResolveRaidAction): void {
+  const player = state.playersById[action.playerId];
+  if (!player) throw new Error(`Unknown player ${action.playerId}`);
+  const raid = (state.raids ?? []).find((r) => r.id === action.raidId);
+  if (!raid) {
+    player.pendingRaid = undefined; // already resolved (it struck, or was bought off)
+    return;
+  }
+  if (action.choice === "tribute") {
+    const cost = raidTributeCost(raid);
+    if (player.gold >= cost) {
+      player.gold -= cost;
+      state.raids = (state.raids ?? []).filter((r) => r.id !== raid.id);
+      const city = state.map.cities[raid.targetCityId];
+      state.raidReports = [
+        ...(state.raidReports ?? []),
+        {
+          kind: "bought-off",
+          cityId: raid.targetCityId,
+          cityName: city ? cityDisplayName(city) : raid.targetCityId,
+          playerId: player.id,
+          strength: raid.strength,
+          goldPaid: cost
+        }
+      ];
+    }
+    // Can't afford the tribute? The offer lapses and you must brace for the blow.
+  }
+  player.pendingRaid = undefined;
 }
 
 export function createInitialGameState(config: CreateGameConfig = {}): GameState {
@@ -2490,6 +2706,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "RESOLVE_EVENT":
       applyResolveEvent(state, action);
+      break;
+    case "RESOLVE_RAID":
+      applyResolveRaid(state, action);
       break;
     case "BUILD_BUILDING":
       applyBuildBuilding(state, action);

@@ -2673,6 +2673,27 @@ details.panel-collapse > summary {
   margin-top: 2px;
 }
 
+.event-option.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.event-option.disabled:hover {
+  border-color: var(--line);
+  filter: none;
+}
+
+/* Off-grid corsairs (raiders.md): a raid warning wears a danger red, not the
+   gold of a Crossroads dilemma. */
+.raid-card .event-tag {
+  color: #e8845a;
+  border-color: #7a3a2a;
+}
+
+.raid-card::before {
+  background: linear-gradient(160deg, rgba(200, 80, 50, 0.16), transparent 60%);
+}
+
 @media (max-width: 760px) {
   .play-area {
     grid-template-columns: 1fr;
