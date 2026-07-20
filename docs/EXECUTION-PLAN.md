@@ -26,7 +26,7 @@ Legend: ☐ not started · ◐ partially exists · ✔ done · 🔎 needs owner 
    work), showing a "purchases off in your region" note. Flipping the config is now an
    ops decision. 🔎 which countries ship purchase-off is still an ops call (data only).
 
-## Phase 2 — Engine hardening (Direction §3.1)
+## Phase 2 — Engine hardening (Direction §3.1) — ✔ DONE (items 4–8)
 
 4. **✔ Determinism lint.** `test/engine-determinism.test.ts` scans `src/engine/**` and
    fails the build (via `npm test`) on `Math.random` / `Date.now` / `performance.now` /
@@ -38,12 +38,13 @@ Legend: ☐ not started · ◐ partially exists · ✔ done · 🔎 needs owner 
    consistency in-process. Any nondeterminism or unintended rules drift fails CI;
    intended changes regenerate with `UPDATE_GOLDEN=1`. Covers the review's audit
    targets (`scheduleRaid`/`beltTileNear`/`figureContext`) by construction.
-6. **☐ Lockstep fuzz.** Extend `test/mp-lockstep.test.ts`: random seeds, two clients
-   with different `humanPlayerId`, assert byte-identical state every turn, full match.
-7. **☐ Pending-decision revalidation.** Each `applyResolve*` re-validates at resolution
-   time and no-ops gracefully (raid on captured/vanished city — partly handled;
-   tribute no longer affordable — handled; figure whose condition flipped). One test
-   per edge case.
+6. **✔ Lockstep fuzz.** `test/mp-lockstep-fuzz.test.ts` runs the two-client lockstep
+   proof across a corpus of 6 seeds / sizes / player counts, asserting byte-identical
+   state every seat-turn. Any per-seat nondeterminism surfaces on ≥1 seed.
+7. **✔ Pending-decision revalidation.** `test/pending-revalidation.test.ts` — one test
+   each: RESOLVE_RAID for a vanished raid (no-op + clear), a raid whose city was
+   captured (resolves against the new owner), an unaffordable tribute (refused
+   gracefully), a figure whose arrival condition lapsed (boon still applies).
 8. **✔ Unify the decision queue.** `maybeFireEvent`/`maybeFireFigure` now also skip
    while a `pendingRaid` is set (engine won't pile a new decision on an urgent raid),
    and the client shows exactly one modal by urgency priority: **raid → figure →
