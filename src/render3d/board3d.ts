@@ -1558,6 +1558,24 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     }
     return wrap;
   }
+  // City settlement models are wide-and-flat, so normalize by FOOTPRINT (flat-to-flat
+  // ~92% of a hex cell, §7b) not by height — height-normalizing blows the plate up to
+  // several hexes wide. Feet seated at y=0; height stays proportional (a vicus stays low,
+  // caput mundi towers). Returns the wrapper + its final world height for badge/HP offsets.
+  function glbInstanceCity(entry: GLBEntry, targetW: number): { obj: THREE.Object3D; height: number } {
+    const obj = cloneSkinned(entry.scene);
+    obj.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    _box.setFromObject(obj); _box.getSize(_sz);
+    const foot = Math.max(_sz.x, _sz.z) || 1;
+    obj.scale.setScalar(targetW / foot);
+    _box.setFromObject(obj); _box.getSize(_sz);
+    obj.position.x -= (_box.min.x + _box.max.x) / 2;
+    obj.position.y -= _box.min.y;                    // base seated on the tile
+    obj.position.z -= (_box.min.z + _box.max.z) / 2;
+    const wrap = new THREE.Group();
+    wrap.add(obj);
+    return { obj: wrap, height: _sz.y };
+  }
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -1855,11 +1873,20 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       let model: THREE.Object3D;
       let scale: number;
       if (isCity) {
-        const glb = getGLB("assets/models/cities/" + sv.civ + ".glb");
-        if (glb) { model = glbInstance(glb, 2.0, false); scale = 1; }
+        const tier = sv.tier != null ? sv.tier : cityTierForPop(sv.pop || 1);
+        // Rome-only per-level settlement models (CITY-MODELS-SPEC PART 5): the city grows
+        // vicus → oppidum → municipium → urbs → caput mundi. Tier 1..10 → level 1..5.
+        // Falls back to a per-civ town GLB, then the procedural city — so a not-yet-loaded
+        // or missing level never blanks the hex.
+        let glb: GLBEntry | null = null;
+        if (sv.civ === "rome") {
+          const lvl = Math.min(5, Math.max(1, Math.ceil(tier / 2)));
+          glb = getGLB("assets/approved/cities/rome-l" + lvl + ".glb");
+        }
+        if (!glb) glb = getGLB("assets/models/cities/" + sv.civ + ".glb");
+        if (glb) { model = glbInstanceCity(glb, 1.62).obj; scale = 1; } // fit ~one hex (§7b footprint)
         else {
           // v2 procedural city: 10 tiers, 12 styles, seeded by hex so it's stable.
-          const tier = sv.tier != null ? sv.tier : cityTierForPop(sv.pop || 1);
           const seed = (((sv.q * 73856093) ^ (sv.r * 19349663)) >>> 0) % 100000;
           model = buildCityV2(THREE, { tier, style: cityStyleFor(sv.civ), seed, accent: sv.color }) as THREE.Group;
           scale = 1.5; // read as a real settlement, not a speck on the hex

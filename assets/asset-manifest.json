@@ -13,6 +13,12 @@
     { "key": "unit/legionary",         "kind": "model",     "source": "Legionnaire",            "out": "assets/models/units/legionary.glb",          "use": "Imperial Legionary model" },
     { "key": "unit/elephant",          "kind": "model",     "source": "Carthaginian Elephant",  "out": "assets/models/units/elephant.glb",           "use": "War Elephant model" },
 
+    { "key": "city/rome-l1",           "kind": "model",     "source": "vicus_settlement",       "out": "assets/approved/cities/rome-l1.glb",         "use": "Rome city L1 — vicus (hamlet); CITY-MODELS-SPEC PART 5" },
+    { "key": "city/rome-l2",           "kind": "model",     "source": "oppidum_settlement",     "out": "assets/approved/cities/rome-l2.glb",         "use": "Rome city L2 — oppidum (fortified town)" },
+    { "key": "city/rome-l3",           "kind": "model",     "source": "municipium_settlement",  "out": "assets/approved/cities/rome-l3.glb",         "use": "Rome city L3 — municipium (chartered town)" },
+    { "key": "city/rome-l4",           "kind": "model",     "source": "urbs_settlement",        "out": "assets/approved/cities/rome-l4.glb",         "use": "Rome city L4 — urbs (great city)" },
+    { "key": "city/rome-l5",           "kind": "model",     "source": "caput_mundi",            "out": "assets/approved/cities/rome-l5.glb",         "use": "Rome city L5 — caput mundi (Rome, capital of the world)" },
+
     { "key": "scatter/olive",          "kind": "model", "source": "Gnarled_Olive",     "out": "assets/approved/props/olive.glb",          "use": "§6 Mediterranean forest/hills" },
     { "key": "scatter/cypress",        "kind": "model", "source": "Cypress_Tree",      "out": "assets/approved/props/cypress.glb",        "use": "§6 Mediterranean forest" },
     { "key": "scatter/stone-pine",     "kind": "model", "source": "Stone_Pine",        "out": "assets/approved/props/stone-pine.glb",     "use": "§6 Mediterranean forest" },

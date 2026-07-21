@@ -5954,6 +5954,15 @@
     reliefDebug: function () { return board3d && board3d.reliefDebug ? board3d.reliefDebug() : null; },
     focusTile: function (q, r) { if (board3d && board3d.focusTile) board3d.focusTile(q, r); },
     revealAll: function () { adminRevealMap = true; if (state) render(); return true; },
+    // Set the human capital's population (drives the city visual tier) — for showcasing
+    // the per-level city models on the board.
+    growCapital: function (pop) {
+      if (!state) return null;
+      var cap = Object.values(state.map.cities).filter(function (c) { return c.ownerId === HUMAN_ID; })[0];
+      if (!cap) return null;
+      cap.population = pop; render();
+      return { id: cap.id, pop: cap.population, q: cap.position.q, r: cap.position.r };
+    },
     // Like findTerrain but restricted to CURRENTLY-VISIBLE tiles (so scatter exists
     // there) — for the scatter checkpoint without a full-map reveal.
     findVisibleTerrain: function (t) {

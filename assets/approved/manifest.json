@@ -65,6 +65,41 @@
       "bytes": 513304,
       "note": "pre-approved (no raw in rawDirs)"
     },
+    "city/rome-l1": {
+      "path": "assets/approved/cities/rome-l1.glb",
+      "kind": "model",
+      "version": "v0",
+      "bytes": 964352,
+      "source": "Meshy_AI_vicus_settlement_3d_v_0721181833_image-to-3d-texture.glb"
+    },
+    "city/rome-l2": {
+      "path": "assets/approved/cities/rome-l2.glb",
+      "kind": "model",
+      "version": "v0",
+      "bytes": 1212500,
+      "source": "Meshy_AI_oppidum_settlement_3d_0721180113_image-to-3d-texture.glb"
+    },
+    "city/rome-l3": {
+      "path": "assets/approved/cities/rome-l3.glb",
+      "kind": "model",
+      "version": "v0",
+      "bytes": 1154444,
+      "source": "Meshy_AI_municipium_settlement_0721175140_image-to-3d-texture.glb"
+    },
+    "city/rome-l4": {
+      "path": "assets/approved/cities/rome-l4.glb",
+      "kind": "model",
+      "version": "v2",
+      "bytes": 1517344,
+      "source": "Meshy_AI_urbs_settlement_3d_v2_0721181739_image-to-3d-texture.glb"
+    },
+    "city/rome-l5": {
+      "path": "assets/approved/cities/rome-l5.glb",
+      "kind": "model",
+      "version": "v0",
+      "bytes": 9809912,
+      "source": "Meshy_AI_caput_mundi_settlemen_0721180218_image-to-3d-texture.glb"
+    },
     "scatter/olive": {
       "path": "assets/approved/props/olive.glb",
       "kind": "model",
