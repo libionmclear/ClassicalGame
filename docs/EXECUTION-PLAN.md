@@ -62,6 +62,45 @@ Legend: ☐ not started · ◐ partially exists · ✔ done · 🔎 needs owner 
 12. **☐ Per-civ procedural architecture kits** (the differentiation core): parameterized
     building generators per civ over the existing wood→mudbrick→stone→marble system.
 
+## Terrain, water & world rendering — status & priorities (`?terrain=relief`)
+
+The continuous-landscape upgrade (specs: [TERRAIN-RELIEF-SPEC.md](TERRAIN-RELIEF-SPEC.md),
+[WATER-SPEC.md](WATER-SPEC.md), [CITY-MODELS-SPEC.md](CITY-MODELS-SPEC.md)) runs behind
+the `?terrain=relief` flag (default OFF, renderer-only — zero engine/rules change). Art
+flows through the promotion gate: `npm run import-assets` (raw → optimised → approved +
+runtime manifest) and `npm run refresh-assets` (auto-pick new art from raw + Downloads).
+
+**✔ DONE**
+- **Heightfield surface** — one displaced, biome-coloured mesh replaces the hex prisms;
+  smooth blend across hex centres, no cliffs except mountains (`src/render3d/terrain.ts`).
+- **§2b mountains** — seeded ridged-multifractal crests; adjacent mountain hexes share one
+  field → continuous ranges, readability-clamped amplitude.
+- **All four terrain textures LIVE** — per-vertex mountainness drives the shader stack:
+  mountain-scree (gentle mountain ground) → slope-rock (any steepening) → cliff-strata
+  (steepest faces, world-height-banded strata) → alpine-snow (high gentle shelves).
+- **§2 / §4 water** — reference-anchored depth gradient + animated shoreline foam,
+  raider-belt moodier (`src/render3d/water.ts`).
+- **§6 climate-aware scatter** — 17 optimised prop GLBs instanced on the displaced
+  surface, deterministic per tile; Mediterranean/northern/arid tables + Nile signature
+  (`src/render3d/scatter.ts`, board3d `placeReliefScatter`).
+
+**☐ NEXT (priority order)**
+1. **Greyer mountain rock textures** — current slope-rock/cliff-strata/mountain-scree are
+   warm/tan, washing mountains & arid regions to sand. Re-promote greyer source art via
+   `refresh-assets` (shader is texture-agnostic — no code change).
+2. **Rivers §8 rewrite** — the flat blue ribbon is still live; implement the carved,
+   flowing, spline-smoothed channel (WATER-SPEC §8 is written, not built).
+3. **Map climate wiring (§10/§11)** — scatter hard-codes `"mediterranean"`; mapgen should
+   emit a per-region climate so northern/arid tables + beaches (§6b) engage.
+4. **Rome city models (§7b + CITY-MODELS-SPEC PART 5)** — when the `city/rome-l1…l5` GLBs
+   land; hex-base normalization, level-up fade, district cohesion.
+5. **Make relief the DEFAULT board; mobile tier** — density ~0.4 + simplified water; then
+   overlays/picking onto the surface (§7), micro-displacement (§3).
+
+**Dev hooks:** `HGTest.reliefDebug/focusTile/revealAll`, `?scatter=off` for clean terrain
+screenshots. **Pending re-export** (`manifest.pendingReexport`): birch, heather-gorse,
+wildflowers — sources are meadow/grove-scale; need single-plant re-exports.
+
 ## Phase 4 — Daily Campaign (Direction §4.1) — highest of the feature slate
 
 13. **☐ Seed-of-the-day service** (identical map/weather/raids/figures for all players).
