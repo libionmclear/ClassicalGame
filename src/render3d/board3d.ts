@@ -1862,13 +1862,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       let scale: number;
       if (isCity) {
         const glb = getGLB("assets/models/cities/" + sv.civ + ".glb");
-        if (glb) { model = glbInstance(glb, 1.4, false); scale = 1; }
+        if (glb) { model = glbInstance(glb, 2.0, false); scale = 1; }
         else {
           // v2 procedural city: 10 tiers, 12 styles, seeded by hex so it's stable.
           const tier = sv.tier != null ? sv.tier : cityTierForPop(sv.pop || 1);
           const seed = (((sv.q * 73856093) ^ (sv.r * 19349663)) >>> 0) % 100000;
           model = buildCityV2(THREE, { tier, style: cityStyleFor(sv.civ), seed, accent: sv.color }) as THREE.Group;
-          scale = 1.15; // fill the hex
+          scale = 1.5; // read as a real settlement, not a speck on the hex
         }
       } else {
         const form = sv.form || "infantry";

@@ -7,9 +7,9 @@ import { axialToWorld, SIZE } from "./terrain";
 
 // §2 colour anchors, sampled from the reference paintings.
 const WET_SAND = new THREE.Color(0xe2c179); // pale warm sand through shallow water
-const SHALLOW  = new THREE.Color(0x86ceb2); // green-turquoise shelf
-const AQUA     = new THREE.Color(0x4bb6c6); // mid aquamarine body
-const DEEP     = new THREE.Color(0x1e3f8c); // lapis / Egyptian blue (deep-sea ref)
+const SHALLOW  = new THREE.Color(0x8fd8b8); // green-turquoise shelf
+const AQUA     = new THREE.Color(0x2fb0cf); // mid aquamarine body (richer)
+const DEEP     = new THREE.Color(0x2a5bb0); // lapis / Egyptian blue — lifted so it reads blue, not black
 const FOAM     = new THREE.Color(0xeef0e6); // §4 soft WARM white — never pure #FFFFFF
 
 export interface WaterOpts {
@@ -71,8 +71,10 @@ const FRAG = /* glsl */`
     float s = clamp(vShore, 0.0, 1.0);
     // §2 CURVED depth ramp — most colour change near the coast, calm deep stays stable.
     vec3 col = mix(uWetSand, uShallow, smoothstep(0.0, 0.10, s));
-    col = mix(col, uAqua, smoothstep(0.07, 0.34, s));
-    col = mix(col, uDeep, smoothstep(0.32, 0.85, pow(s, 0.8)));
+    col = mix(col, uAqua, smoothstep(0.07, 0.36, s));
+    // Hold the turquoise body longer; only the FARTHEST water sinks to lapis (and never
+    // all the way — keeps the sea reading blue, not black).
+    col = mix(col, uDeep, 0.86 * smoothstep(0.45, 0.98, pow(s, 0.95)));
     // Raider belt: one step darker + less saturated — permanently moodier.
     vec3 moody = mix(uDeep, vec3(dot(uDeep, vec3(0.333))), 0.35) * 0.78;
     col = mix(col, moody, vOpen);
@@ -89,9 +91,10 @@ const FRAG = /* glsl */`
     float foam = clamp(band * band * pulse * broken * 1.6, 0.0, 1.0);
     col = mix(col, uFoam, foam);
 
-    // §4 DEEP-SEA WHITECAPS: sparse dabs on swell crests, more in rough weather.
-    float caps = smoothstep(0.78, 0.98, vnoise(swell * 2.2)) * smoothstep(0.32, 0.6, s);
-    caps *= (0.12 + 0.6 * uWeather) * (1.0 - vOpen * 0.4);
+    // §4 DEEP-SEA WHITECAPS: SMALL sparse dabs on swell crests — near-absent in calm,
+    // frequent only in storm. Higher-frequency noise so they're crisp flecks, not blobs.
+    float caps = smoothstep(0.88, 0.99, vnoise(swell * 6.5)) * smoothstep(0.4, 0.7, s);
+    caps *= (0.03 + 0.55 * uWeather) * (1.0 - vOpen * 0.5);
     col = mix(col, uFoam, clamp(caps, 0.0, 1.0));
 
     gl_FragColor = vec4(col, 1.0);
