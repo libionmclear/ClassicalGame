@@ -1190,6 +1190,27 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   })();
   let terrainMesh: THREE.Mesh | null = null;
   let terrainSig = "";
+  // Promoted terrain albedo, loaded once from the asset manifest (swappable via the
+  // import pipeline — no code change to change the art). Applied to the relief surface.
+  let terrainAlbedo: THREE.Texture | null = null;
+  let terrainAlbedoTried = false;
+  function ensureTerrainAlbedo(): void {
+    if (terrainAlbedoTried || typeof fetch === "undefined") return;
+    terrainAlbedoTried = true;
+    fetch("assets/approved/manifest.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m) => {
+        const rel = m && m.assets && m.assets["terrain/slope-rock"] && m.assets["terrain/slope-rock"].path;
+        if (!rel) return;
+        new THREE.TextureLoader().load(rel, (tex) => {
+          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+          tex.colorSpace = THREE.SRGBColorSpace;
+          terrainAlbedo = tex;
+          if (terrainMesh) { const mat = terrainMesh.material as THREE.MeshStandardMaterial; mat.map = tex; mat.needsUpdate = true; }
+        });
+      })
+      .catch(() => { /* manifest not present — stay procedural */ });
+  }
   // Discovered sea hexes live in their OWN mesh: thin, semi-transparent tints that sit
   // ON the single reflective water surface (see waterTintMat) rather than opaque slabs
   // floating above it. Land + undiscovered tiles stay in tileMesh.
@@ -1520,7 +1541,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       _tc.copy(colorFor(tv, view.civColors));
       return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b };
     };
-    terrainMesh = buildTerrainSurface(view.tiles, tileAt);
+    ensureTerrainAlbedo();
+    terrainMesh = buildTerrainSurface(view.tiles, tileAt, { albedo: terrainAlbedo });
     scene.add(terrainMesh);
     // Hide the hex prisms + their sea tints; the reflective sea plane stays.
     if (tileMesh) tileMesh.visible = false;

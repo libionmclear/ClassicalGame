@@ -1,0 +1,16 @@
+{
+  "_note": "PROMOTIONS — the approved art. `npm run import-assets` resolves the LATEST source version per the asset-version rule (WATER-SPEC), optimizes it, and writes the approved output + a resolved runtime manifest (approved/manifest.json). Raw assets NOT listed here are NEVER integrated. To promote a new asset, add an entry and re-run.",
+  "assetVersionRule": "When multiple versions of a source exist, always use the LATEST (highest vN filename suffix, then newest file date). Older versions are superseded; never mix elements across generations.",
+  "rawDirs": ["assets/raw"],
+  "promotions": [
+    { "key": "terrain/slope-rock",     "kind": "texture",   "source": "Slope Rock Texture",     "out": "assets/approved/terrain/slope-rock.png",     "use": "shared rock revealed on steep slopes (TERRAIN §5)" },
+    { "key": "terrain/cliff-strata",   "kind": "texture",   "source": "Cliff Strata Texture",   "out": "assets/approved/terrain/cliff-strata.png",   "use": "sedimentary cliff walls on impassable mountain faces (TERRAIN §2c)" },
+    { "key": "terrain/mountain-scree", "kind": "texture",   "source": "Mountain Scree Texture", "out": "assets/approved/terrain/mountain-scree.png", "use": "scree in gullies / lower mountain slopes (TERRAIN §2b)" },
+    { "key": "terrain/alpine-snow",    "kind": "texture",   "source": "Alpine Snow Texture",    "out": "assets/approved/terrain/alpine-snow.png",    "use": "snow above the snowline (TERRAIN §2b)" },
+    { "key": "ref/coastal-water",      "kind": "reference", "source": "Coastal Water Texture",  "out": "assets/approved/reference/coastal-water.png", "use": "color-anchor source for the water gradient/foam (WATER §2/§4) — NEVER applied as a texture" },
+    { "key": "ref/deep-sea",           "kind": "reference", "source": "Deep Sea Texture",       "out": "assets/approved/reference/deep-sea.png",      "use": "deep-water color anchor (WATER §2) — reference only" },
+    { "key": "unit/warrior",           "kind": "model",     "source": "Early Rome Warrior",     "out": "assets/models/units/warrior.glb",            "use": "Levy Warrior model" },
+    { "key": "unit/legionary",         "kind": "model",     "source": "Legionnaire",            "out": "assets/models/units/legionary.glb",          "use": "Imperial Legionary model" },
+    { "key": "unit/elephant",          "kind": "model",     "source": "Carthaginian Elephant",  "out": "assets/models/units/elephant.glb",           "use": "War Elephant model" }
+  ]
+}

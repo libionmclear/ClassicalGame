@@ -1,0 +1,69 @@
+{
+  "generatedFrom": "assets/asset-manifest.json",
+  "assetVersionRule": "When multiple versions of a source exist, always use the LATEST (highest vN filename suffix, then newest file date). Older versions are superseded; never mix elements across generations.",
+  "assets": {
+    "terrain/slope-rock": {
+      "path": "assets/approved/terrain/slope-rock.png",
+      "kind": "texture",
+      "version": "v3",
+      "bytes": 2139595,
+      "source": "Meshy_AI_Slope Rock Texture v3.png"
+    },
+    "terrain/cliff-strata": {
+      "path": "assets/approved/terrain/cliff-strata.png",
+      "kind": "texture",
+      "version": "v3",
+      "bytes": 1898009,
+      "source": "Meshy_AI_Cliff Strata Texture v3.png"
+    },
+    "terrain/mountain-scree": {
+      "path": "assets/approved/terrain/mountain-scree.png",
+      "kind": "texture",
+      "version": "v3",
+      "bytes": 2415577,
+      "source": "Meshy_AI_Mountain Scree Texture v3.png"
+    },
+    "terrain/alpine-snow": {
+      "path": "assets/approved/terrain/alpine-snow.png",
+      "kind": "texture",
+      "version": "v2",
+      "bytes": 1901294,
+      "source": "Meshy_AI_Alpine Snow Texture v2.png"
+    },
+    "ref/coastal-water": {
+      "path": "assets/approved/reference/coastal-water.png",
+      "kind": "reference",
+      "version": "v2",
+      "bytes": 2038340,
+      "source": "Meshy_AI_Coastal Water Texture v2.png"
+    },
+    "ref/deep-sea": {
+      "path": "assets/approved/reference/deep-sea.png",
+      "kind": "reference",
+      "version": "v2",
+      "bytes": 1784210,
+      "source": "Meshy_AI_Deep Sea Texture v2.png"
+    },
+    "unit/warrior": {
+      "path": "assets/models/units/warrior.glb",
+      "kind": "model",
+      "version": "(pre-approved)",
+      "bytes": 411408,
+      "note": "pre-approved (no raw in rawDirs)"
+    },
+    "unit/legionary": {
+      "path": "assets/models/units/legionary.glb",
+      "kind": "model",
+      "version": "(pre-approved)",
+      "bytes": 497880,
+      "note": "pre-approved (no raw in rawDirs)"
+    },
+    "unit/elephant": {
+      "path": "assets/models/units/elephant.glb",
+      "kind": "model",
+      "version": "(pre-approved)",
+      "bytes": 513304,
+      "note": "pre-approved (no raw in rawDirs)"
+    }
+  }
+}

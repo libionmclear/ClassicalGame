@@ -98,7 +98,7 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
 // Build the continuous ground surface: a subdivided grid over the board's world
 // bounds, displaced by the heightfield and vertex-coloured by biome. Procedural for
 // now; painted biome textures blend in later via the same UVs (biomeTexPaths).
-export interface SurfaceOpts { subdiv?: number; margin?: number; maxSeg?: number }
+export interface SurfaceOpts { subdiv?: number; margin?: number; maxSeg?: number; albedo?: THREE.Texture | null }
 export function buildTerrainSurface(
   tiles: Array<{ q: number; r: number }>,
   tileAt: TileAt,
@@ -152,6 +152,9 @@ export function buildTerrainSurface(
   geo.computeVertexNormals();
 
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0.0 });
+  // A promoted painted texture (via the asset manifest) modulates the biome vertex
+  // colour — the surface reads as gouache, not flat shading. Swappable by re-import.
+  if (opts.albedo) mat.map = opts.albedo;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.castShadow = true;

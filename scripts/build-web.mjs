@@ -106,6 +106,13 @@ if (await exists(terrainDir)) {
   await cp(terrainDir, path.join(publicDir, "assets", "terrain"), { recursive: true });
 }
 
+// Approved art + runtime manifest (assets/approved/**, via npm run import-assets) —
+// the promoted textures/references the renderer loads by manifest key (swappable).
+const approvedDir = path.join(root, "assets", "approved");
+if (await exists(approvedDir)) {
+  await cp(approvedDir, path.join(publicDir, "assets", "approved"), { recursive: true });
+}
+
 let manifest = {};
 if (await exists(spriteDist)) {
   await cp(spriteDist, path.join(publicDir, "assets", "sprites"), { recursive: true });
