@@ -5934,6 +5934,22 @@
       return { figureId: figureId, visible: figureModalEl && !figureModalEl.classList.contains("hidden") };
     },
     endTurn: function () { if (isHumanTurn()) apply({ type: "END_TURN", playerId: HUMAN_ID }); },
+    // Find a tile of a given terrain (prefers a spot with the most same-terrain
+    // neighbours — a range/cluster) and select it, for terrain screenshots.
+    findTerrain: function (t) {
+      if (!state) return null;
+      var best = null, bestN = -1;
+      var tiles = state.map.tiles;
+      for (var k in tiles) {
+        if (tiles[k].terrain !== t) continue;
+        var qr = k.split(",").map(Number), q = qr[0], r = qr[1], n = 0;
+        var nb = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
+        for (var i = 0; i < 6; i++) { var nk = (q+nb[i][0])+","+(r+nb[i][1]); if (tiles[nk] && tiles[nk].terrain === t) n++; }
+        if (n > bestN) { bestN = n; best = { q: q, r: r, neighbours: n }; }
+      }
+      if (best) { onTileClick(best.q, best.r); if (board3d && board3d.focusTile) board3d.focusTile(best.q, best.r); }
+      return best;
+    },
     // Camera (3D board only) — for the UI smoke's tilt/reset checks.
     camTilt: function () { return board3d && board3d.getTilt ? board3d.getTilt() : null; },
     nudgeTilt: function (d) { if (board3d && board3d.nudgeTilt) board3d.nudgeTilt(d); },

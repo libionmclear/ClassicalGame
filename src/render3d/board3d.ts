@@ -18,7 +18,7 @@ import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
 import type { GameState } from "../engine/types";
 import { buildCity as buildCityV2 } from "./cityModels.js";
-import { buildTerrainSurface, elevationOf, type TileSample } from "./terrain";
+import { buildTerrainSurface, elevationOf, mountainnessOf, type TileSample } from "./terrain";
 import { buildDistrict } from "./districtModels.js";
 
 // City visual tier (1..10) from population — HEGEMON-VISUALS-v2.md §1 thresholds.
@@ -121,6 +121,8 @@ export interface BoardController {
   resetCamera(): void;
   /** Current camera inclination (polar angle, radians). */
   getTilt(): number;
+  /** Move the camera to frame tile (q,r), keeping the current angle + distance. */
+  focusTile(q: number, r: number): void;
   dispose(): void;
 }
 
@@ -1190,24 +1192,32 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   })();
   let terrainMesh: THREE.Mesh | null = null;
   let terrainSig = "";
-  // Promoted terrain albedo, loaded once from the asset manifest (swappable via the
-  // import pipeline — no code change to change the art). Applied to the relief surface.
-  let terrainAlbedo: THREE.Texture | null = null;
-  let terrainAlbedoTried = false;
-  function ensureTerrainAlbedo(): void {
-    if (terrainAlbedoTried || typeof fetch === "undefined") return;
-    terrainAlbedoTried = true;
+  // Promoted terrain textures (slope-rock, alpine-snow), loaded once from the asset
+  // manifest — swappable via the import pipeline, no code change. Feed the §5 slope /
+  // §2b snow shader. Until they arrive the surface is plain biome-coloured relief.
+  let terrainRock: THREE.Texture | null = null;
+  let terrainSnow: THREE.Texture | null = null;
+  let terrainTexTried = false;
+  function ensureTerrainTextures(): void {
+    if (terrainTexTried || typeof fetch === "undefined") return;
+    terrainTexTried = true;
     fetch("assets/approved/manifest.json")
       .then((r) => (r.ok ? r.json() : null))
       .then((m) => {
-        const rel = m && m.assets && m.assets["terrain/slope-rock"] && m.assets["terrain/slope-rock"].path;
-        if (!rel) return;
-        new THREE.TextureLoader().load(rel, (tex) => {
-          tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-          tex.colorSpace = THREE.SRGBColorSpace;
-          terrainAlbedo = tex;
-          if (terrainMesh) { const mat = terrainMesh.material as THREE.MeshStandardMaterial; mat.map = tex; mat.needsUpdate = true; }
-        });
+        if (!m || !m.assets) return;
+        const load = (key: string, set: (t: THREE.Texture) => void): void => {
+          const rel = m.assets[key] && m.assets[key].path;
+          if (!rel) return;
+          new THREE.TextureLoader().load(rel, (tex) => {
+            tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+            tex.colorSpace = THREE.SRGBColorSpace;
+            set(tex);
+            terrainSig = ""; // force a rebuild with the new texture
+            if (lastView) buildTerrain(lastView);
+          });
+        };
+        load("terrain/slope-rock", (t) => (terrainRock = t));
+        load("terrain/alpine-snow", (t) => (terrainSnow = t));
       })
       .catch(() => { /* manifest not present — stay procedural */ });
   }
@@ -1539,14 +1549,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const tv = byKey.get(q + "," + r);
       if (!tv) return undefined;
       _tc.copy(colorFor(tv, view.civColors));
-      return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b };
+      return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b, mtn: mountainnessOf(tv.t) };
     };
-    ensureTerrainAlbedo();
-    terrainMesh = buildTerrainSurface(view.tiles, tileAt, { albedo: terrainAlbedo });
+    ensureTerrainTextures();
+    terrainMesh = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow });
     scene.add(terrainMesh);
-    // Hide the hex prisms + their sea tints; the reflective sea plane stays.
+    // Hide the hex prisms + their sea tints; the reflective sea plane stays. Also hide
+    // the old procedural scatter/peaks — the continuous surface IS the mountains now
+    // (scatter re-integrates onto the relief in TERRAIN §6, a later build-order step).
     if (tileMesh) tileMesh.visible = false;
     if (waterMesh) waterMesh.visible = false;
+    scatterGroup.visible = false;
   }
 
   function colorFor(tv: TileView, civColors: Record<string, string>): THREE.Color {
@@ -2252,6 +2265,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     nudgeTilt,
     resetCamera,
     getTilt,
+    // Move the camera to frame a tile, preserving the current angle + distance.
+    focusTile(q: number, r: number): void {
+      const w = axialToWorld(q, r);
+      const off = camera.position.clone().sub(controls.target);
+      controls.target.set(w.x, 0, w.z);
+      camera.position.copy(controls.target).add(off);
+      camera.lookAt(controls.target);
+      controls.update();
+    },
     dispose() { running = false; window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); renderer.dispose(); }
   };
 }
