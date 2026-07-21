@@ -17,7 +17,6 @@
     { "key": "scatter/cypress",        "kind": "model", "source": "Cypress_Tree",      "out": "assets/approved/props/cypress.glb",        "use": "§6 Mediterranean forest" },
     { "key": "scatter/stone-pine",     "kind": "model", "source": "Stone_Pine",        "out": "assets/approved/props/stone-pine.glb",     "use": "§6 Mediterranean forest" },
     { "key": "scatter/dry-grass",      "kind": "model", "source": "Dry_Grass_Clump",   "out": "assets/approved/props/dry-grass.glb",      "use": "§6 Mediterranean plains/valley" },
-    { "key": "scatter/wildflowers",    "kind": "model", "source": "Wildflower_Patch",  "out": "assets/approved/props/wildflowers.glb",    "use": "§6 plains/valley" },
     { "key": "scatter/desert-scrub",   "kind": "model", "source": "Desert_Scrub",      "out": "assets/approved/props/desert-scrub.glb",   "use": "§6 desert/hills" },
     { "key": "scatter/date-palm",      "kind": "model", "source": "Date_Palm",         "out": "assets/approved/props/date-palm.glb",      "use": "§6 oasis / Nile valley" },
     { "key": "scatter/papyrus",        "kind": "model", "source": "Papyrus_Plant",     "out": "assets/approved/props/papyrus.glb",        "use": "§6 Nile riverbank/marsh (signature)" },
@@ -29,9 +28,13 @@
     { "key": "scatter/rock-shard",     "kind": "model", "source": "Rock_Shard",        "out": "assets/approved/props/rock-shard.glb",     "use": "§6/§2b mountain lower slopes" },
     { "key": "scatter/oak",            "kind": "model", "source": "English_Oak",       "out": "assets/approved/props/oak.glb",            "use": "§6 northern forest" },
     { "key": "scatter/beech",          "kind": "model", "source": "Beech_Tree",        "out": "assets/approved/props/beech.glb",          "use": "§6 northern forest" },
-    { "key": "scatter/birch",          "kind": "model", "source": "Silver_Birch",      "out": "assets/approved/props/birch.glb",          "use": "§6 northern hills/forest" },
     { "key": "scatter/fir",            "kind": "model", "source": "Fir_Spruce",        "out": "assets/approved/props/fir.glb",            "use": "§6 northern forest" },
-    { "key": "scatter/heather-gorse",  "kind": "model", "source": "Heather_Gorse",     "out": "assets/approved/props/heather-gorse.glb",  "use": "§6 northern plains/hills" },
     { "key": "scatter/mossy-boulder",  "kind": "model", "source": "Mossy_Grey_Boulder","out": "assets/approved/props/mossy-boulder.glb",  "use": "§6 northern hills" }
+  ],
+  "_pendingReexportNote": "These sources are meadow/grove-scale (350k–760k verts even after 0.03 simplify → 14–32 MB each) and semantically wrong for a per-instance scatter prop (each is a whole field, not one plant). Excluded from shipping until re-exported as a SINGLE plant/tree. Re-add to promotions when the single-plant versions land.",
+  "pendingReexport": [
+    { "key": "scatter/wildflowers",   "source": "Wildflower_Patch", "reason": "meadow-scale, 358k verts / 14 MB — need one clump" },
+    { "key": "scatter/birch",         "source": "Silver_Birch",     "reason": "grove-scale, 638k verts / 27 MB — need one tree" },
+    { "key": "scatter/heather-gorse", "source": "Heather_Gorse",    "reason": "shrubland-scale, 759k verts / 32 MB — need one shrub" }
   ]
 }

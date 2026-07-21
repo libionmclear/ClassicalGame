@@ -21,8 +21,8 @@ export type Climate = "mediterranean" | "northern" | "arid";
 // tile draws a small, varied handful. Papyrus is applied by the Nile rule below, not here.
 type Entry = { key: string; n: number };
 const M: Record<string, Entry[]> = {
-  plains:    [{ key: "scatter/dry-grass", n: 2.6 }, { key: "scatter/wildflowers", n: 0.9 }, { key: "scatter/limestone-boulder", n: 0.25 }],
-  valley:    [{ key: "scatter/dry-grass", n: 3.2 }, { key: "scatter/wildflowers", n: 1.6 }],
+  plains:    [{ key: "scatter/dry-grass", n: 3.0 }, { key: "scatter/limestone-boulder", n: 0.3 }],
+  valley:    [{ key: "scatter/dry-grass", n: 3.6 }, { key: "scatter/olive", n: 0.4 }],
   hills:     [{ key: "scatter/rock-cluster", n: 1.0 }, { key: "scatter/olive", n: 0.8 }, { key: "scatter/desert-scrub", n: 0.7 }, { key: "scatter/limestone-boulder", n: 0.5 }],
   forest:    [{ key: "scatter/stone-pine", n: 1.6 }, { key: "scatter/cypress", n: 1.4 }, { key: "scatter/olive", n: 0.7 }, { key: "scatter/fallen-trunk", n: 0.4 }],
   highlands: [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/rock-shard", n: 0.6 }, { key: "scatter/olive", n: 0.3 }],
@@ -32,9 +32,9 @@ const M: Record<string, Entry[]> = {
   coast:     [{ key: "scatter/rock-cluster", n: 0.5 }, { key: "scatter/driftwood", n: 0.3 }]
 };
 const N: Record<string, Entry[]> = {
-  plains:    [{ key: "scatter/dry-grass", n: 3.0 }, { key: "scatter/heather-gorse", n: 1.4 }],
-  valley:    [{ key: "scatter/dry-grass", n: 3.4 }, { key: "scatter/wildflowers", n: 1.2 }],
-  hills:     [{ key: "scatter/mossy-boulder", n: 1.0 }, { key: "scatter/heather-gorse", n: 1.0 }, { key: "scatter/birch", n: 0.7 }],
+  plains:    [{ key: "scatter/dry-grass", n: 3.4 }, { key: "scatter/mossy-boulder", n: 0.4 }],
+  valley:    [{ key: "scatter/dry-grass", n: 3.8 }],
+  hills:     [{ key: "scatter/mossy-boulder", n: 1.2 }, { key: "scatter/rock-cluster", n: 0.6 }, { key: "scatter/oak", n: 0.5 }],
   forest:    [{ key: "scatter/oak", n: 1.4 }, { key: "scatter/beech", n: 1.2 }, { key: "scatter/fir", n: 1.2 }, { key: "scatter/fallen-trunk", n: 0.5 }],
   highlands: [{ key: "scatter/mossy-boulder", n: 0.9 }, { key: "scatter/rock-shard", n: 0.6 }, { key: "scatter/fir", n: 0.4 }],
   mountains: [{ key: "scatter/rock-shard", n: 1.1 }],

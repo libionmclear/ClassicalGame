@@ -125,6 +125,8 @@ export interface BoardController {
   getTilt(): number;
   /** Move the camera to frame tile (q,r), keeping the current angle + distance. */
   focusTile(q: number, r: number): void;
+  /** Dev diagnostics: relief/scatter/texture state for the checkpoint screenshots. */
+  reliefDebug(): Record<string, unknown>;
   dispose(): void;
 }
 
@@ -1192,6 +1194,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     } catch { /* headless */ }
     return false;
   })();
+  // Dev-only: ?scatter=off skips the instanced prop dressing (for clean terrain-shading
+  // checkpoints — a full-map reveal would otherwise place thousands of instances).
+  const NO_SCATTER = (() => {
+    try { return typeof location !== "undefined" && /(?:[?&])scatter=off\b/.test(location.search); } catch { return false; }
+  })();
   let terrainMesh: THREE.Mesh | null = null;
   let terrainSig = "";
   let waterSurface: THREE.Mesh | null = null;
@@ -1248,6 +1255,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   function placeReliefScatter(view: BoardView, tileAt: TileAt): void {
     reliefScatter.clear();
     reliefScatter.visible = true;
+    if (NO_SCATTER) return;
     ensurePropModels();
     if (!propModels.size) return;
     const density = 1.0; // §6 global density (mobile tier ~0.4 — a quality-tier setting later)
@@ -1281,11 +1289,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       reliefScatter.add(inst);
     }
   }
-  // Promoted terrain textures (slope-rock, alpine-snow), loaded once from the asset
-  // manifest — swappable via the import pipeline, no code change. Feed the §5 slope /
-  // §2b snow shader. Until they arrive the surface is plain biome-coloured relief.
+  // Promoted terrain textures (slope-rock, alpine-snow, cliff-strata, mountain-scree),
+  // loaded once from the asset manifest — swappable via the import pipeline, no code
+  // change. Feed the §5 slope / §2b snow+scree / §2c cliff shader. Until they arrive the
+  // surface is plain biome-coloured relief.
   let terrainRock: THREE.Texture | null = null;
   let terrainSnow: THREE.Texture | null = null;
+  let terrainCliff: THREE.Texture | null = null;
+  let terrainScree: THREE.Texture | null = null;
   let terrainTexTried = false;
   function ensureTerrainTextures(): void {
     if (terrainTexTried || typeof fetch === "undefined") return;
@@ -1307,6 +1318,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         };
         load("terrain/slope-rock", (t) => (terrainRock = t));
         load("terrain/alpine-snow", (t) => (terrainSnow = t));
+        load("terrain/cliff-strata", (t) => (terrainCliff = t));
+        load("terrain/mountain-scree", (t) => (terrainScree = t));
       })
       .catch(() => { /* manifest not present — stay procedural */ });
   }
@@ -1641,7 +1654,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b, mtn: mountainnessOf(tv.t) };
     };
     ensureTerrainTextures();
-    terrainMesh = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow });
+    terrainMesh = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow, cliff: terrainCliff, scree: terrainScree });
     scene.add(terrainMesh);
     // Hide the hex prisms + their sea tints; the reflective sea plane stays. Also hide
     // the old procedural scatter/peaks — the continuous surface IS the mountains now
@@ -2378,6 +2391,21 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       camera.position.copy(controls.target).add(off);
       camera.lookAt(controls.target);
       controls.update();
+    },
+    // Diagnostics for the relief/scatter checkpoint screenshots (dev only).
+    reliefDebug(): Record<string, unknown> {
+      let instances = 0;
+      reliefScatter.traverse((o) => { const im = o as THREE.InstancedMesh; if (im.isInstancedMesh) instances += im.count; });
+      return {
+        relief: RELIEF,
+        terrainMesh: !!terrainMesh,
+        textures: { rock: !!terrainRock, snow: !!terrainSnow, cliff: !!terrainCliff, scree: !!terrainScree },
+        propModels: propModels.size,
+        scatterMeshes: reliefScatter.children.length,
+        scatterInstances: instances,
+        camTarget: { x: +controls.target.x.toFixed(2), z: +controls.target.z.toFixed(2) },
+        camPos: { x: +camera.position.x.toFixed(2), y: +camera.position.y.toFixed(2), z: +camera.position.z.toFixed(2) }
+      };
     },
     dispose() { running = false; window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); renderer.dispose(); }
   };

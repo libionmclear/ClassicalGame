@@ -104,7 +104,7 @@ export const MOUNTAIN_AMP = 0.42; // ridged-crest amplitude on full mountains (r
 const BLEND_R = 2.8 * SIZE;               // blend radius (~1.5 hexes)
 const RING = 2;                           // axial neighbourhood scanned per sample
 const SEA_SAMPLE: TileSample = { elev: SEA_LEVEL, r: 0x2f / 255, g: 0x51 / 255, b: 0x77 / 255, mtn: 0 };
-export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number; r: number; g: number; b: number } {
+export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number; r: number; g: number; b: number; mtn: number } {
   const rf = z / (1.5 * SIZE);
   const qf = x / (SIZE * Math.sqrt(3)) - rf / 2;
   const bq = Math.round(qf), br = Math.round(rf);
@@ -125,7 +125,7 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
   }
   if (wsum <= 0) {
     const n = nearest ?? SEA_SAMPLE;
-    return { y: n.elev, r: n.r, g: n.g, b: n.b };
+    return { y: n.elev, r: n.r, g: n.g, b: n.b, mtn: n.mtn ?? 0 };
   }
   let y = ysum / wsum;
   const mtn = msum / wsum; // blended mountainness — fades at range edges so hexes MERGE
@@ -134,13 +134,19 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
     // field → a continuous range with crests and gullies, never isolated smooth cones.
     y += (ridged(x, z) - 0.42) * MOUNTAIN_AMP * mtn;
   }
-  return { y, r: rsum / wsum, g: gsum / wsum, b: bsum / wsum };
+  return { y, r: rsum / wsum, g: gsum / wsum, b: bsum / wsum, mtn };
 }
 
 // Build the continuous ground surface: a subdivided grid over the board's world
 // bounds, displaced by the heightfield and vertex-coloured by biome. Procedural for
 // now; painted biome textures blend in later via the same UVs (biomeTexPaths).
-export interface SurfaceOpts { subdiv?: number; margin?: number; maxSeg?: number; rock?: THREE.Texture | null; snow?: THREE.Texture | null }
+export interface SurfaceOpts {
+  subdiv?: number; margin?: number; maxSeg?: number;
+  rock?: THREE.Texture | null;   // slope-rock: generic rock on any steepening ground (§5)
+  snow?: THREE.Texture | null;   // alpine-snow: high gentle shelves above the snowline (§2b)
+  cliff?: THREE.Texture | null;  // cliff-strata: layered sedimentary walls on the steepest faces (§2c)
+  scree?: THREE.Texture | null;  // mountain-scree: loose debris on lower/gentler mountain ground (§2b)
+}
 export function buildTerrainSurface(
   tiles: Array<{ q: number; r: number }>,
   tileAt: TileAt,
@@ -166,6 +172,7 @@ export function buildTerrainSurface(
   const pos = new Float32Array(nx * nz * 3);
   const col = new Float32Array(nx * nz * 3);
   const uv = new Float32Array(nx * nz * 2);
+  const mtnAttr = new Float32Array(nx * nz);   // per-vertex mountainness → scree/cliff selection (§2b/§2c)
   const UV_SCALE = 0.28; // ~one texture repeat per 3–4 hexes (spec §4)
   for (let iz = 0; iz < nz; iz += 1) {
     for (let ix = 0; ix < nx; ix += 1) {
@@ -179,6 +186,7 @@ export function buildTerrainSurface(
       col[vi] = s.r * jit; col[vi + 1] = s.g * jit; col[vi + 2] = s.b * jit;
       const ui = (iz * nx + ix) * 2;
       uv[ui] = wx * UV_SCALE; uv[ui + 1] = wz * UV_SCALE;
+      mtnAttr[iz * nx + ix] = s.mtn;
     }
   }
   const idx: number[] = [];
@@ -192,6 +200,7 @@ export function buildTerrainSurface(
   geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
   geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute("aMtn", new THREE.BufferAttribute(mtnAttr, 1));
   geo.setIndex(idx);
   geo.computeVertexNormals();
 
@@ -202,32 +211,48 @@ export function buildTerrainSurface(
   // the "expensive landscape" look. Textures are the promoted, swappable assets.
   if (opts.rock) {
     const rock = opts.rock, snow = opts.snow || opts.rock;
+    const cliff = opts.cliff || opts.rock, scree = opts.scree || opts.rock;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uRock = { value: rock };
       shader.uniforms.uSnow = { value: snow };
+      shader.uniforms.uCliff = { value: cliff };
+      shader.uniforms.uScree = { value: scree };
       shader.uniforms.uRockSlope = { value: new THREE.Vector2(0.20, 0.62) }; // slope where rock starts / is full
       shader.uniforms.uSnowY = { value: new THREE.Vector2(0.92, 1.18) };     // world-height snowline band (peaks only)
       shader.vertexShader = shader.vertexShader
-        .replace("#include <common>", "#include <common>\nvarying vec3 vWN_t;\nvarying vec3 vWP_t;")
-        .replace("#include <project_vertex>", "#include <project_vertex>\nvWN_t = normalize(mat3(modelMatrix) * normal);\nvWP_t = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+        .replace("#include <common>", "#include <common>\nattribute float aMtn;\nvarying vec3 vWN_t;\nvarying vec3 vWP_t;\nvarying float vMtn_t;")
+        .replace("#include <project_vertex>", "#include <project_vertex>\nvWN_t = normalize(mat3(modelMatrix) * normal);\nvWP_t = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvMtn_t = aMtn;");
       shader.fragmentShader = shader.fragmentShader
-        .replace("#include <common>", "#include <common>\nuniform sampler2D uRock;\nuniform sampler2D uSnow;\nuniform vec2 uRockSlope;\nuniform vec2 uSnowY;\nvarying vec3 vWN_t;\nvarying vec3 vWP_t;")
+        .replace("#include <common>", "#include <common>\nuniform sampler2D uRock;\nuniform sampler2D uSnow;\nuniform sampler2D uCliff;\nuniform sampler2D uScree;\nuniform vec2 uRockSlope;\nuniform vec2 uSnowY;\nvarying vec3 vWN_t;\nvarying vec3 vWP_t;\nvarying float vMtn_t;")
         .replace("#include <color_fragment>", [
           "#include <color_fragment>",
           "{",
           "  vec2 tuv = vWP_t.xz * 0.35;",
           "  float slope = clamp(1.0 - vWN_t.y, 0.0, 1.0);",
+          // (1) mountain scree — loose debris blankets gentle-to-moderate MOUNTAIN ground
+          //     (shelves, gully floors, lower slopes); slides off the steep faces.
+          "  float scree = vMtn_t * smoothstep(0.03, 0.22, slope) * (1.0 - smoothstep(0.44, 0.72, slope));",
+          "  vec3 screeC = texture2D(uScree, tuv * 0.85).rgb;",
+          "  diffuseColor.rgb = mix(diffuseColor.rgb, screeC, scree * 0.9);",
+          // (2) generic slope rock — any biome, wherever the ground merely steepens (§5).
           "  float rk = smoothstep(uRockSlope.x, uRockSlope.y, slope);",
           "  vec3 rockC = texture2D(uRock, tuv).rgb;",
           "  diffuseColor.rgb = mix(diffuseColor.rgb, rockC, rk);",
-          "  float edge = 0.06 * (texture2D(uSnow, tuv * 0.7).r - 0.5);", // jittered snowline
+          // (3) cliff strata — the STEEPEST faces (mountain country) become layered
+          //     sedimentary walls; sample banded by WORLD HEIGHT so strata read level (§2c).
+          "  float cliff = smoothstep(0.58, 0.82, slope) * smoothstep(0.06, 0.32, vMtn_t);",
+          "  vec2 cuv = vec2(vWP_t.x * 0.28 + vWP_t.z * 0.06, vWP_t.y * 0.95);",
+          "  vec3 cliffC = texture2D(uCliff, cuv).rgb;",
+          "  diffuseColor.rgb = mix(diffuseColor.rgb, cliffC, cliff);",
+          // (4) alpine snow — settles last, on the high GENTLE shelves above the snowline.
+          "  float edge = 0.06 * (texture2D(uSnow, tuv * 0.7).r - 0.5);",
           "  float snow = smoothstep(uSnowY.x + edge, uSnowY.y + edge, vWP_t.y) * (1.0 - smoothstep(0.40, 0.66, slope));",
           "  vec3 snowC = texture2D(uSnow, tuv * 0.5).rgb * 1.06;",
           "  diffuseColor.rgb = mix(diffuseColor.rgb, snowC, snow);",
           "}"
         ].join("\n"));
     };
-    mat.customProgramCacheKey = () => "hg-terrain-slope-1";
+    mat.customProgramCacheKey = () => "hg-terrain-slope-2";
   }
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;

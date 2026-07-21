@@ -5950,6 +5950,10 @@
       if (best) { onTileClick(best.q, best.r); if (board3d && board3d.focusTile) board3d.focusTile(best.q, best.r); }
       return best;
     },
+    // Relief/scatter diagnostics for the terrain checkpoint screenshots.
+    reliefDebug: function () { return board3d && board3d.reliefDebug ? board3d.reliefDebug() : null; },
+    focusTile: function (q, r) { if (board3d && board3d.focusTile) board3d.focusTile(q, r); },
+    revealAll: function () { adminRevealMap = true; if (state) render(); return true; },
     // Camera (3D board only) — for the UI smoke's tilt/reset checks.
     camTilt: function () { return board3d && board3d.getTilt ? board3d.getTilt() : null; },
     nudgeTilt: function (d) { if (board3d && board3d.nudgeTilt) board3d.nudgeTilt(d); },

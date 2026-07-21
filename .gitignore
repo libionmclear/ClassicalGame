@@ -18,3 +18,7 @@ assets/raw/
 # asset refresh state / provenance (local)
 assets/.asset-scan.json
 assets/.asset-provenance.log
+
+# local dev screenshot scripts (hold test creds)
+_shot.mjs
+_demoshot.mjs
