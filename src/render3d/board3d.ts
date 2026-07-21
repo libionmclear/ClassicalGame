@@ -21,6 +21,7 @@ import { buildCity as buildCityV2 } from "./cityModels.js";
 import { buildTerrainSurface, sampleSurface, elevationOf, mountainnessOf, type TileSample, type TileAt } from "./terrain";
 import { buildWaterSurface } from "./water";
 import { pickScatter, type Climate } from "./scatter";
+import { normalizeGLB } from "./propnorm";
 import { buildDistrict } from "./districtModels.js";
 
 // City visual tier (1..10) from population — HEGEMON-VISUALS-v2.md §1 thresholds.
@@ -1208,6 +1209,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // The live surface sampler, set by buildTerrain — lets units/cities/improvements sit
   // ON the displaced ground instead of the old flat hex-prism tops.
   let reliefTileAt: TileAt | null = null;
+  // Prop GLBs load async; each arrival marks scatter dirty and the loop rebuilds the
+  // instanced batches ONCE next frame (coalesced) instead of a full terrain rebuild per
+  // prop — the old path rebuilt the whole heightfield 17× on load.
+  let scatterDirty = false;
+  let fpsEMA = 60; // smoothed frames/sec for the diagnostics hook
   let waterSurface: THREE.Mesh | null = null;
   let waterTick: ((t: number) => void) | null = null;
   let waterTime = 0;
@@ -1225,21 +1231,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     "scatter/driftwood": 0.28, "scatter/rock-cluster": 0.34, "scatter/limestone-boulder": 0.4,
     "scatter/mossy-boulder": 0.42, "scatter/rock-shard": 0.5
   };
-  const _pbox = new THREE.Box3(), _psz = new THREE.Vector3();
   function normalizeProp(scene0: THREE.Object3D, key: string): { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] } | null {
-    let mesh: THREE.Mesh | null = null;
-    scene0.updateMatrixWorld(true);
-    scene0.traverse((o) => { if (!mesh && (o as THREE.Mesh).isMesh) mesh = o as THREE.Mesh; });
-    if (!mesh) return null;
-    const src = mesh as THREE.Mesh;
-    const geo = src.geometry.clone();
-    geo.applyMatrix4(src.matrixWorld);          // bake the glTF transform into the geometry
-    _pbox.setFromBufferAttribute(geo.getAttribute("position") as THREE.BufferAttribute);
-    _pbox.getSize(_psz);
-    const s = (PROP_H[key] ?? 0.4) / (_psz.y || 1);
-    geo.translate(-(_pbox.min.x + _pbox.max.x) / 2, -_pbox.min.y, -(_pbox.min.z + _pbox.max.z) / 2); // centre XZ, feet to y=0
-    geo.scale(s, s, s);
-    return { geo, mat: src.material };
+    return normalizeGLB(scene0, PROP_H[key] ?? 0.4);
   }
   function ensurePropModels(): void {
     if (propsTried || typeof fetch === "undefined") return;
@@ -1251,8 +1244,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         const rel = m.assets[key].path;
         gltfLoader.load(rel, (gltf) => {
           const norm = normalizeProp(gltf.scene, key);
-          if (norm) { propModels.set(key, norm); terrainSig = ""; if (lastView) buildTerrain(lastView); }
-        }, undefined, () => { /* not yet optimized — skip */ });
+          if (norm) { propModels.set(key, norm); scatterDirty = true; } // loop rebuilds scatter once, coalesced
+        }, undefined, () => { /* load failed — leave it out entirely; no placeholder, never a thumbnail extrusion */ });
       }
     }).catch(() => {});
   }
@@ -1284,6 +1277,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const model = propModels.get(key);
       if (!model) continue;
       const inst = new THREE.InstancedMesh(model.geo, model.mat, places.length);
+      inst.name = key.replace("scatter/", "");         // one instanced batch per prop type (§6)
       inst.castShadow = true; inst.receiveShadow = true;
       for (let i = 0; i < places.length; i += 1) {
         const p = places[i];
@@ -2205,6 +2199,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       controls.target.z = Math.min(Math.max(controls.target.z, boardBounds.minZ - margin), boardBounds.maxZ + margin);
     }
     const dt = animClock.getDelta();
+    if (dt > 0.0001) fpsEMA = fpsEMA * 0.9 + (1 / dt) * 0.1;
+    // Rebuild the instanced scatter ONCE when props have arrived (coalesced across the
+    // async GLB loads), instead of a full terrain rebuild per prop.
+    if (scatterDirty && lastView && reliefTileAt) { scatterDirty = false; placeReliefScatter(lastView, reliefTileAt); }
     for (const m of mixers) m.update(dt);
     if (waterTick) { waterTime += dt; waterTick(waterTime); } // animate §2/§4 water
     // Glide moving units toward their target tile at a steady march pace, with a
@@ -2415,16 +2413,35 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // Diagnostics for the relief/scatter checkpoint screenshots (dev only).
     reliefDebug(): Record<string, unknown> {
       let instances = 0;
-      reliefScatter.traverse((o) => { const im = o as THREE.InstancedMesh; if (im.isInstancedMesh) instances += im.count; });
+      const perProp: Record<string, number> = {};
+      reliefScatter.traverse((o) => {
+        const im = o as THREE.InstancedMesh;
+        if (im.isInstancedMesh) { instances += im.count; perProp[im.name || "?"] = im.count; }
+      });
+      // Accurate scene draw-call count: renderer.info reflects only the last post-FX pass
+      // under EffectComposer, so count visible renderables directly (an InstancedMesh with
+      // N instances is ONE draw call — that's the whole point of the scatter design).
+      let sceneDrawCalls = 0;
+      scene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if ((m.isMesh || (m as unknown as THREE.Points).isPoints || (m as unknown as THREE.Line).isLine || (m as unknown as THREE.Sprite).isSprite) && o.visible) {
+          let vis = true; let p: THREE.Object3D | null = o;
+          while (p) { if (!p.visible) { vis = false; break; } p = p.parent; }
+          if (vis) sceneDrawCalls += 1;
+        }
+      });
       return {
         relief: RELIEF,
+        fps_swiftshader: Math.round(fpsEMA), // software GL — NOT representative of real-GPU fps
+        sceneDrawCalls,
         terrainMesh: !!terrainMesh,
+        terrainVerts: terrainMesh ? (terrainMesh.geometry.getAttribute("position") as THREE.BufferAttribute).count : 0,
         textures: { rock: !!terrainRock, snow: !!terrainSnow, cliff: !!terrainCliff, scree: !!terrainScree },
         propModels: propModels.size,
         scatterMeshes: reliefScatter.children.length,
         scatterInstances: instances,
-        camTarget: { x: +controls.target.x.toFixed(2), z: +controls.target.z.toFixed(2) },
-        camPos: { x: +camera.position.x.toFixed(2), y: +camera.position.y.toFixed(2), z: +camera.position.z.toFixed(2) }
+        perProp,
+        camPos: { x: +camera.position.x.toFixed(1), y: +camera.position.y.toFixed(1), z: +camera.position.z.toFixed(1) }
       };
     },
     dispose() { running = false; window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); renderer.dispose(); }

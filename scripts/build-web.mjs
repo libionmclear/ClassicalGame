@@ -81,6 +81,16 @@ await build({
   outfile: path.join(publicWebDir, "board3d.bundle.js")
 });
 
+// Isolated prop viewer (proptest.html) — dev tool to render one prop GLB alone.
+await build({
+  entryPoints: [path.join(root, "src", "render3d", "proptest.ts")],
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  outfile: path.join(publicWebDir, "proptest.bundle.js")
+});
+await copyFile(path.join(root, "proptest.html"), path.join(publicDir, "proptest.html"));
+
 // Sliced civ sprites (if any have been generated) ship as static assets, and the
 // manifest is emitted as a global so the client needs no fetch (works on file://).
 const exists = async (p) => {

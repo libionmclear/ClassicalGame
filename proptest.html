@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HEGEMON — isolated prop viewer</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #17324c; overflow: hidden; font-family: system-ui, sans-serif; }
+    #stage { position: fixed; inset: 0; display: block; }
+    #label { position: fixed; left: 12px; top: 12px; z-index: 5; color: #cfe0f2; background: rgba(10,20,36,.7); border: 1px solid #26466e; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div id="label">loading…</div>
+  <script src="web/proptest.bundle.js"></script>
+</body>
+</html>

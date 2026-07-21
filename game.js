@@ -5954,6 +5954,22 @@
     reliefDebug: function () { return board3d && board3d.reliefDebug ? board3d.reliefDebug() : null; },
     focusTile: function (q, r) { if (board3d && board3d.focusTile) board3d.focusTile(q, r); },
     revealAll: function () { adminRevealMap = true; if (state) render(); return true; },
+    // Like findTerrain but restricted to CURRENTLY-VISIBLE tiles (so scatter exists
+    // there) — for the scatter checkpoint without a full-map reveal.
+    findVisibleTerrain: function (t) {
+      if (!state) return null;
+      var vis = getHumanVisibility().visible;
+      var tiles = state.map.tiles, best = null, bestN = -1;
+      vis.forEach(function (k) {
+        if (!tiles[k] || tiles[k].terrain !== t) return;
+        var qr = k.split(",").map(Number), q = qr[0], r = qr[1], n = 0;
+        var nb = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
+        for (var i = 0; i < 6; i++) { var nk = (q+nb[i][0])+","+(r+nb[i][1]); if (vis.has(nk) && tiles[nk] && tiles[nk].terrain === t) n++; }
+        if (n > bestN) { bestN = n; best = { q: q, r: r, neighbours: n }; }
+      });
+      if (best) { onTileClick(best.q, best.r); if (board3d && board3d.focusTile) board3d.focusTile(best.q, best.r); }
+      return best;
+    },
     // Camera (3D board only) — for the UI smoke's tilt/reset checks.
     camTilt: function () { return board3d && board3d.getTilt ? board3d.getTilt() : null; },
     nudgeTilt: function (d) { if (board3d && board3d.nudgeTilt) board3d.nudgeTilt(d); },
