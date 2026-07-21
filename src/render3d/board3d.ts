@@ -18,8 +18,9 @@ import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
 import type { GameState } from "../engine/types";
 import { buildCity as buildCityV2 } from "./cityModels.js";
-import { buildTerrainSurface, elevationOf, mountainnessOf, type TileSample } from "./terrain";
+import { buildTerrainSurface, sampleSurface, elevationOf, mountainnessOf, type TileSample, type TileAt } from "./terrain";
 import { buildWaterSurface } from "./water";
+import { pickScatter, type Climate } from "./scatter";
 import { buildDistrict } from "./districtModels.js";
 
 // City visual tier (1..10) from population — HEGEMON-VISUALS-v2.md §1 thresholds.
@@ -1196,6 +1197,90 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   let waterSurface: THREE.Mesh | null = null;
   let waterTick: ((t: number) => void) | null = null;
   let waterTime = 0;
+  // §6 climate-aware scatter on the relief: promoted prop models, instanced per tile.
+  const reliefScatter = new THREE.Group();
+  scene.add(reliefScatter);
+  const propModels = new Map<string, { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] }>();
+  let propsTried = false;
+  // Target heights so a stone pine reads tall and a wildflower low (world units).
+  const PROP_H: Record<string, number> = {
+    "scatter/olive": 0.85, "scatter/cypress": 1.1, "scatter/stone-pine": 1.0, "scatter/oak": 0.95,
+    "scatter/beech": 0.95, "scatter/birch": 1.0, "scatter/fir": 1.05, "scatter/date-palm": 1.0,
+    "scatter/dry-grass": 0.26, "scatter/wildflowers": 0.24, "scatter/heather-gorse": 0.3,
+    "scatter/desert-scrub": 0.34, "scatter/reeds": 0.5, "scatter/papyrus": 0.7, "scatter/fallen-trunk": 0.3,
+    "scatter/driftwood": 0.28, "scatter/rock-cluster": 0.34, "scatter/limestone-boulder": 0.4,
+    "scatter/mossy-boulder": 0.42, "scatter/rock-shard": 0.5
+  };
+  const _pbox = new THREE.Box3(), _psz = new THREE.Vector3();
+  function normalizeProp(scene0: THREE.Object3D, key: string): { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] } | null {
+    let mesh: THREE.Mesh | null = null;
+    scene0.updateMatrixWorld(true);
+    scene0.traverse((o) => { if (!mesh && (o as THREE.Mesh).isMesh) mesh = o as THREE.Mesh; });
+    if (!mesh) return null;
+    const src = mesh as THREE.Mesh;
+    const geo = src.geometry.clone();
+    geo.applyMatrix4(src.matrixWorld);          // bake the glTF transform into the geometry
+    _pbox.setFromBufferAttribute(geo.getAttribute("position") as THREE.BufferAttribute);
+    _pbox.getSize(_psz);
+    const s = (PROP_H[key] ?? 0.4) / (_psz.y || 1);
+    geo.translate(-(_pbox.min.x + _pbox.max.x) / 2, -_pbox.min.y, -(_pbox.min.z + _pbox.max.z) / 2); // centre XZ, feet to y=0
+    geo.scale(s, s, s);
+    return { geo, mat: src.material };
+  }
+  function ensurePropModels(): void {
+    if (propsTried || typeof fetch === "undefined") return;
+    propsTried = true;
+    fetch("assets/approved/manifest.json").then((r) => (r.ok ? r.json() : null)).then((m) => {
+      if (!m || !m.assets) return;
+      const keys = Object.keys(m.assets).filter((k) => k.startsWith("scatter/"));
+      for (const key of keys) {
+        const rel = m.assets[key].path;
+        gltfLoader.load(rel, (gltf) => {
+          const norm = normalizeProp(gltf.scene, key);
+          if (norm) { propModels.set(key, norm); terrainSig = ""; if (lastView) buildTerrain(lastView); }
+        }, undefined, () => { /* not yet optimized — skip */ });
+      }
+    }).catch(() => {});
+  }
+  const _im = new THREE.Matrix4(), _iq = new THREE.Quaternion(), _iv = new THREE.Vector3(), _isc = new THREE.Vector3();
+  const _scUp = new THREE.Vector3(0, 1, 0);
+  const SCATTER_WATER = new Set(["sea", "coast"]);
+  function placeReliefScatter(view: BoardView, tileAt: TileAt): void {
+    reliefScatter.clear();
+    reliefScatter.visible = true;
+    ensurePropModels();
+    if (!propModels.size) return;
+    const density = 1.0; // §6 global density (mobile tier ~0.4 — a quality-tier setting later)
+    // Nile signature (§6): tiles touching a river carry papyrus / date-palms.
+    const riverTiles = new Set<string>();
+    for (const e of view.rivers || []) { riverTiles.add(e.q + "," + e.r); riverTiles.add(e.nq + "," + e.nr); }
+    const byKey = new Map<string, Array<{ x: number; z: number; yaw: number; scale: number }>>();
+    for (const tv of view.tiles) {
+      if (tv.v === 0 || SCATTER_WATER.has(tv.t) || tv.open) continue; // no dressing on water/fog
+      const places = pickScatter(tv.t, tv.q, tv.r, "mediterranean" as Climate, density, riverTiles.has(tv.q + "," + tv.r));
+      if (!places.length) continue;
+      const c = axialToWorld(tv.q, tv.r);
+      for (const p of places) {
+        let arr = byKey.get(p.key); if (!arr) { arr = []; byKey.set(p.key, arr); }
+        arr.push({ x: c.x + p.dx, z: c.z + p.dz, yaw: p.yaw, scale: p.scale });
+      }
+    }
+    for (const [key, places] of byKey) {
+      const model = propModels.get(key);
+      if (!model) continue;
+      const inst = new THREE.InstancedMesh(model.geo, model.mat, places.length);
+      inst.castShadow = true; inst.receiveShadow = true;
+      for (let i = 0; i < places.length; i += 1) {
+        const p = places[i];
+        const y = sampleSurface(p.x, p.z, tileAt).y; // sink to the DISPLACED surface height
+        _iq.setFromAxisAngle(_scUp, p.yaw);
+        _iv.set(p.x, y, p.z); _isc.setScalar(p.scale);
+        inst.setMatrixAt(i, _im.compose(_iv, _iq, _isc));
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      reliefScatter.add(inst);
+    }
+  }
   // Promoted terrain textures (slope-rock, alpine-snow), loaded once from the asset
   // manifest — swappable via the import pipeline, no code change. Feed the §5 slope /
   // §2b snow shader. Until they arrive the surface is plain biome-coloured relief.
@@ -1575,6 +1660,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     waterSurface = water.mesh; waterTick = water.tick;
     scene.add(waterSurface);
     if (seaMesh) seaMesh.visible = false;
+
+    // §6 climate-aware scatter, instanced on the displaced surface (replaces the old
+    // procedural scatter we hid above).
+    placeReliefScatter(view, tileAt);
   }
 
   function colorFor(tv: TileView, civColors: Record<string, string>): THREE.Color {

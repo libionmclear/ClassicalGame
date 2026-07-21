@@ -11,6 +11,27 @@
     { "key": "ref/deep-sea",           "kind": "reference", "source": "Deep Sea Texture",       "out": "assets/approved/reference/deep-sea.png",      "use": "deep-water color anchor (WATER §2) — reference only" },
     { "key": "unit/warrior",           "kind": "model",     "source": "Early Rome Warrior",     "out": "assets/models/units/warrior.glb",            "use": "Levy Warrior model" },
     { "key": "unit/legionary",         "kind": "model",     "source": "Legionnaire",            "out": "assets/models/units/legionary.glb",          "use": "Imperial Legionary model" },
-    { "key": "unit/elephant",          "kind": "model",     "source": "Carthaginian Elephant",  "out": "assets/models/units/elephant.glb",           "use": "War Elephant model" }
+    { "key": "unit/elephant",          "kind": "model",     "source": "Carthaginian Elephant",  "out": "assets/models/units/elephant.glb",           "use": "War Elephant model" },
+
+    { "key": "scatter/olive",          "kind": "model", "source": "Gnarled_Olive",     "out": "assets/approved/props/olive.glb",          "use": "§6 Mediterranean forest/hills" },
+    { "key": "scatter/cypress",        "kind": "model", "source": "Cypress_Tree",      "out": "assets/approved/props/cypress.glb",        "use": "§6 Mediterranean forest" },
+    { "key": "scatter/stone-pine",     "kind": "model", "source": "Stone_Pine",        "out": "assets/approved/props/stone-pine.glb",     "use": "§6 Mediterranean forest" },
+    { "key": "scatter/dry-grass",      "kind": "model", "source": "Dry_Grass_Clump",   "out": "assets/approved/props/dry-grass.glb",      "use": "§6 Mediterranean plains/valley" },
+    { "key": "scatter/wildflowers",    "kind": "model", "source": "Wildflower_Patch",  "out": "assets/approved/props/wildflowers.glb",    "use": "§6 plains/valley" },
+    { "key": "scatter/desert-scrub",   "kind": "model", "source": "Desert_Scrub",      "out": "assets/approved/props/desert-scrub.glb",   "use": "§6 desert/hills" },
+    { "key": "scatter/date-palm",      "kind": "model", "source": "Date_Palm",         "out": "assets/approved/props/date-palm.glb",      "use": "§6 oasis / Nile valley" },
+    { "key": "scatter/papyrus",        "kind": "model", "source": "Papyrus_Plant",     "out": "assets/approved/props/papyrus.glb",        "use": "§6 Nile riverbank/marsh (signature)" },
+    { "key": "scatter/reeds",          "kind": "model", "source": "Marsh_Reeds",       "out": "assets/approved/props/reeds.glb",          "use": "§6 marsh" },
+    { "key": "scatter/fallen-trunk",   "kind": "model", "source": "Fallen_Tree_Trunk", "out": "assets/approved/props/fallen-trunk.glb",   "use": "§6 forest" },
+    { "key": "scatter/driftwood",      "kind": "model", "source": "Driftwood_Log",     "out": "assets/approved/props/driftwood.glb",      "use": "§6 coast" },
+    { "key": "scatter/rock-cluster",   "kind": "model", "source": "Grey_Rock_Cluster", "out": "assets/approved/props/rock-cluster.glb",   "use": "§6 hills/coast (grey shingle)" },
+    { "key": "scatter/limestone-boulder","kind":"model","source": "Limestone_Boulder", "out": "assets/approved/props/limestone-boulder.glb","use": "§6 Mediterranean hills" },
+    { "key": "scatter/rock-shard",     "kind": "model", "source": "Rock_Shard",        "out": "assets/approved/props/rock-shard.glb",     "use": "§6/§2b mountain lower slopes" },
+    { "key": "scatter/oak",            "kind": "model", "source": "English_Oak",       "out": "assets/approved/props/oak.glb",            "use": "§6 northern forest" },
+    { "key": "scatter/beech",          "kind": "model", "source": "Beech_Tree",        "out": "assets/approved/props/beech.glb",          "use": "§6 northern forest" },
+    { "key": "scatter/birch",          "kind": "model", "source": "Silver_Birch",      "out": "assets/approved/props/birch.glb",          "use": "§6 northern hills/forest" },
+    { "key": "scatter/fir",            "kind": "model", "source": "Fir_Spruce",        "out": "assets/approved/props/fir.glb",            "use": "§6 northern forest" },
+    { "key": "scatter/heather-gorse",  "kind": "model", "source": "Heather_Gorse",     "out": "assets/approved/props/heather-gorse.glb",  "use": "§6 northern plains/hills" },
+    { "key": "scatter/mossy-boulder",  "kind": "model", "source": "Mossy_Grey_Boulder","out": "assets/approved/props/mossy-boulder.glb",  "use": "§6 northern hills" }
   ]
 }

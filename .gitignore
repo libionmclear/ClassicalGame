@@ -14,3 +14,7 @@ assets/models/_raw/
 
 # Raw art uploads (huge Meshy/Midjourney exports) — promoted into assets/approved via npm run import-assets
 assets/raw/
+
+# asset refresh state / provenance (local)
+assets/.asset-scan.json
+assets/.asset-provenance.log

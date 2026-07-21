@@ -69,10 +69,36 @@ must not repeat. Therefore every element is rebuilt dynamically:
   tone, foam lines wider at shores; ships visually pitch slightly more.
 - **Heat:** faint shimmer at the horizon-most zoom only (subtle; skip on mobile).
 
-## 8. Rivers & lakes
-- Rivers reuse the shallow palette (greener, fully translucent bed), faster thin
-  ripple scale, thin foam at banks per §6b riverbank treatment; Nile fertile
-  strip contrast per TERRAIN-RELIEF-SPEC §6b applies.
+## 8. Rivers & lakes (full treatment — replaces the current ribbon rendering)
+The current straight flat blue ribbon laid on top of the terrain is rejected.
+Rivers are rebuilt as carved, flowing water. Sequencing: implement after
+TERRAIN-RELIEF-SPEC §2 (terrain carving must exist to hold the channel).
+1. Carved channel first: the river path depresses the terrain mesh into a
+   shallow channel along its hex-edge route. The water surface sits INSIDE the
+   channel, slightly below bank level — never on top of the grass.
+2. Smoothed path: the route through hex edges becomes one smooth spline
+   (Catmull-Rom) with gentle seeded meanders, continuous width — no straight
+   segments, no sharp elbow joints, no gaps, no disconnected stubs. One
+   continuous mesh per river from source to mouth.
+3. Water surface = the main water shader, shallow variant: greener translucent
+   tone, channel bed visible beneath, flow-direction normal scrolling (water
+   visibly moves downstream), thin animated foam lines hugging both banks.
+4. Width & flow grammar: narrow near the source, widening downstream; scroll
+   rate slightly faster in narrow reaches.
+5. Elevation steps: where the route crosses a terrain level change, render a
+   short rapids/waterfall segment — steeper channel, white foam burst. Rivers
+   visibly flow DOWNHILL; never climb.
+6. Mouths & sources: at the sea the channel widens into a small fan blending
+   into the coastal gradient with a foam bar; at the source, emerge from a
+   spring pool or marsh patch, never from bare grass.
+7. Banks: riverbank moist-earth strip (§6b) + bank scatter (reeds; papyrus
+   along the Nile per TERRAIN-RELIEF-SPEC §6) on both sides.
+8. Crossings: fords render as visible shallow stony breaks in the channel
+   (ties to §2c ford chevron); built bridges span the channel as arcs with the
+   road ribbon continuing across.
+Acceptance: follow one river source-to-mouth at gameplay zoom — continuous
+smooth course, water inside a channel, visible downstream motion, dressed
+banks, clean blend into the sea; zero floating ribbon segments anywhere.
 
 ## 9. Quality tiers
 - Mobile/low: single normal scale, no painterly overlay, foam simplified to the

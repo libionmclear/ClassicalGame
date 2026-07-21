@@ -38,28 +38,45 @@ function walk(dir) {
   return out;
 }
 
-const rawFiles = (manifest.rawDirs || ["assets/raw"]).flatMap((d) => walk(path.join(root, d)));
+// Raw sources are searched under the manifest's rawDirs AND the user's Downloads
+// (where Meshy exports land) — the spec's designated raw + Downloads scan. Override
+// Downloads with HEGEMON_DOWNLOADS.
+const DOWNLOADS = process.env.HEGEMON_DOWNLOADS || path.join(process.env.USERPROFILE || process.env.HOME || "", "Downloads");
+export const SCAN_DIRS = [...(manifest.rawDirs || ["assets/raw"]).map((d) => path.join(root, d)), DOWNLOADS];
+const rawFiles = SCAN_DIRS.flatMap(walk);
+
+// A Windows "(1)"/"(2)" copy is a duplicate, never the canonical file.
+const isDupCopy = (name) => /\(\d+\)\.[a-z0-9]+$/i.test(name);
 
 // The ASSET VERSION RULE: among files whose name contains `source`, pick the highest
-// version suffix (v1, v2, …), then the newest modification time.
-function resolveLatest(source) {
-  const matches = rawFiles.filter((f) => path.basename(f).toLowerCase().includes(source.toLowerCase()));
+// version suffix (v1, v2, …), then the newest modification time; ignore dup copies.
+export function resolveLatest(source, files = rawFiles) {
+  const matches = files.filter((f) => path.basename(f).toLowerCase().includes(source.toLowerCase()));
   if (!matches.length) return null;
   const scored = matches.map((f) => {
-    const m = /\bv(\d+)\b/i.exec(path.basename(f));
-    return { f, ver: m ? parseInt(m[1], 10) : 0, mtime: statSync(f).mtimeMs };
+    const b = path.basename(f);
+    const m = /\bv(\d+)\b/i.exec(b);
+    return { f, ver: m ? parseInt(m[1], 10) : 0, mtime: statSync(f).mtimeMs, dup: isDupCopy(b) ? 1 : 0 };
   });
-  scored.sort((a, b) => (b.ver - a.ver) || (b.mtime - a.mtime));
+  scored.sort((a, b) => (a.dup - b.dup) || (b.ver - a.ver) || (b.mtime - a.mtime));
   return scored[0];
 }
 
 const mb = (n) => (n / 1048576).toFixed(2) + " MB";
 
 function optimizeModel(src, out) {
-  const r = spawnSync("npx", ["--yes", "@gltf-transform/cli@latest", "optimize", src, out,
-    "--compress", "quantize", "--texture-size", "512", "--texture-compress", "webp",
-    "--simplify", "true", "--simplify-ratio", "0.04", "--simplify-error", "0.01"],
+  // shell:true does NOT escape args, so paths with spaces (…/Classical Age Game/…) must
+  // be quoted or gltf-transform sees several broken args.
+  // Scatter props are drawn small in many instances → optimise HARD (256px textures,
+  // heavy decimation). Unit/city models (kept separately) can afford more detail.
+  const isScatter = out.includes("approved/props") || out.includes("approved\\props");
+  const texSize = isScatter ? "256" : "512";
+  const ratio = isScatter ? "0.03" : "0.04";
+  const r = spawnSync("npx", ["--yes", "@gltf-transform/cli@latest", "optimize", `"${src}"`, `"${out}"`,
+    "--compress", "quantize", "--texture-size", texSize, "--texture-compress", "webp",
+    "--simplify", "true", "--simplify-ratio", ratio, "--simplify-error", "0.01"],
     { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: true });
+  if (r.status !== 0 && process.env.DEBUG_IMPORT) console.error(r.stderr || r.stdout);
   return r.status === 0;
 }
 
