@@ -22,3 +22,4 @@ assets/.asset-provenance.log
 # local dev screenshot scripts (hold test creds)
 _shot.mjs
 _demoshot.mjs
+_defshot.mjs

@@ -1189,10 +1189,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // hex prisms hide and one flowing displaced surface renders in their place.
   const RELIEF = (() => {
     try {
-      if (typeof location !== "undefined" && /(?:[?&])terrain=relief\b/.test(location.search)) return true;
-      if (typeof window !== "undefined" && (window as unknown as { HG_TERRAIN?: string }).HG_TERRAIN === "relief") return true;
-    } catch { /* headless */ }
-    return false;
+      // Continuous-landscape relief is the DEFAULT board now. Opt OUT with
+      // ?terrain=flat (or classic/off/prisms), or window.HG_TERRAIN = "flat".
+      const off = /(?:[?&])terrain=(flat|classic|off|prisms)\b/;
+      if (typeof location !== "undefined" && off.test(location.search)) return false;
+      const hg = typeof window !== "undefined" ? (window as unknown as { HG_TERRAIN?: string }).HG_TERRAIN : undefined;
+      if (hg === "flat" || hg === "classic" || hg === "off") return false;
+    } catch { /* headless → default on */ }
+    return true;
   })();
   // Dev-only: ?scatter=off skips the instanced prop dressing (for clean terrain-shading
   // checkpoints — a full-map reveal would otherwise place thousands of instances).
@@ -1201,6 +1205,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   })();
   let terrainMesh: THREE.Mesh | null = null;
   let terrainSig = "";
+  // The live surface sampler, set by buildTerrain — lets units/cities/improvements sit
+  // ON the displaced ground instead of the old flat hex-prism tops.
+  let reliefTileAt: TileAt | null = null;
   let waterSurface: THREE.Mesh | null = null;
   let waterTick: ((t: number) => void) | null = null;
   let waterTime = 0;
@@ -1359,7 +1366,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     districtGroup.clear();
     for (const d of view.districts ?? []) {
       const w = axialToWorld(d.q, d.r);
-      const top = topOf(d.t || "plains");
+      const top = groundY(d.t || "plains", w.x, w.z);
       // Attach the district to its city: shift it onto the city-facing edge of its
       // hex and lay a short paved path back toward the centre so the two read as one
       // growing settlement, not an isolated build.
@@ -1402,7 +1409,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     for (const tv of view.tiles) {
       if (!tv.ruin && !tv.village) continue;
       const w = axialToWorld(tv.q, tv.r);
-      const top = topOf(tv.t);
+      const top = groundY(tv.t, w.x, w.z);
       let model: THREE.Group;
       if (tv.ruin) {
         model = buildRuinModel();
@@ -1421,51 +1428,62 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     }
   }
 
+  // Surface height for anything that sits ON the ground (units, cities, improvements,
+  // flavour props). In relief mode this samples the displaced heightfield; otherwise
+  // it's the flat hex-prism top.
+  function groundY(t: string, wx: number, wz: number): number {
+    return RELIEF && reliefTileAt ? sampleSurface(wx, wz, reliefTileAt).y : topOf(t);
+  }
+
   // Trees on forests, rocks on hills/mountains, denser on timber/ore deposits —
   // only on fully-visible tiles (bounded by vision) and not where a unit/city sits.
+  // In relief mode the decorative NATURE scatter (peaks/trees/rocks) is replaced by the
+  // climate-aware relief scatter (placeReliefScatter); improvements + resource-flavour
+  // props still render here, seated on the displaced surface.
   function placeScatter(view: BoardView): void {
     scatterGroup.clear();
     const occupied = new Set(view.sprites.map((s) => s.q + "," + s.r));
     for (const tv of view.tiles) {
+      const w = axialToWorld(tv.q, tv.r);
+      const top = groundY(tv.t, w.x, w.z);
       // Improvements are ground works — show them on any discovered tile, even
       // under a unit, so a farm/mine/vineyard is always visible.
       if (tv.imp && tv.imp !== "road" && tv.v >= 1) {
-        const wp = axialToWorld(tv.q, tv.r);
         const im = buildImprovement(tv.imp);
-        im.position.set(wp.x, topOf(tv.t) + 0.01, wp.z);
+        im.position.set(w.x, top + 0.01, w.z);
         scatterGroup.add(im);
       }
       if (tv.v !== 2 || occupied.has(tv.q + "," + tv.r)) continue;
-      const w = axialToWorld(tv.q, tv.r);
-      const top = topOf(tv.t);
-      // A mountain wears a snow-capped twin-spike peak instead of loose rocks.
-      if (tv.t === "mountains") {
-        const pk = buildPeak();
-        pk.scale.setScalar(0.85 + rnd(tv.q, tv.r, 5) * 0.4);
-        pk.rotation.y = rnd(tv.q, tv.r, 7) * Math.PI * 2;
-        pk.position.set(w.x, top, w.z);
-        scatterGroup.add(pk);
-      }
-      let trees = tv.t === "forest" ? 3 : 0;
-      let rocks = tv.t === "highlands" ? 2 : tv.t === "hills" ? 1 : 0;
-      if (tv.res === "timber") trees = Math.max(trees, 4);
-      else if (tv.res === "iron" || tv.res === "stone" || tv.res === "silver") rocks = Math.max(rocks, 3);
-      for (let i = 0; i < trees; i += 1) {
-        const a = rnd(tv.q, tv.r, i) * Math.PI * 2;
-        const d = 0.2 + rnd(tv.q, tv.r, i + 10) * 0.5;
-        const t = buildTree();
-        t.scale.setScalar(0.7 + rnd(tv.q, tv.r, i + 20) * 0.5);
-        t.position.set(w.x + Math.cos(a) * d, top, w.z + Math.sin(a) * d);
-        scatterGroup.add(t);
-      }
-      for (let i = 0; i < rocks; i += 1) {
-        const a = rnd(tv.q, tv.r, i + 30) * Math.PI * 2;
-        const d = 0.15 + rnd(tv.q, tv.r, i + 40) * 0.5;
-        const s = 0.6 + rnd(tv.q, tv.r, i + 50) * 0.7;
-        const rk = buildRock();
-        rk.scale.setScalar(s);
-        rk.position.set(w.x + Math.cos(a) * d, top + 0.04 * s, w.z + Math.sin(a) * d);
-        scatterGroup.add(rk);
+      if (!RELIEF) {
+        // A mountain wears a snow-capped twin-spike peak instead of loose rocks.
+        if (tv.t === "mountains") {
+          const pk = buildPeak();
+          pk.scale.setScalar(0.85 + rnd(tv.q, tv.r, 5) * 0.4);
+          pk.rotation.y = rnd(tv.q, tv.r, 7) * Math.PI * 2;
+          pk.position.set(w.x, top, w.z);
+          scatterGroup.add(pk);
+        }
+        let trees = tv.t === "forest" ? 3 : 0;
+        let rocks = tv.t === "highlands" ? 2 : tv.t === "hills" ? 1 : 0;
+        if (tv.res === "timber") trees = Math.max(trees, 4);
+        else if (tv.res === "iron" || tv.res === "stone" || tv.res === "silver") rocks = Math.max(rocks, 3);
+        for (let i = 0; i < trees; i += 1) {
+          const a = rnd(tv.q, tv.r, i) * Math.PI * 2;
+          const d = 0.2 + rnd(tv.q, tv.r, i + 10) * 0.5;
+          const t = buildTree();
+          t.scale.setScalar(0.7 + rnd(tv.q, tv.r, i + 20) * 0.5);
+          t.position.set(w.x + Math.cos(a) * d, top, w.z + Math.sin(a) * d);
+          scatterGroup.add(t);
+        }
+        for (let i = 0; i < rocks; i += 1) {
+          const a = rnd(tv.q, tv.r, i + 30) * Math.PI * 2;
+          const d = 0.15 + rnd(tv.q, tv.r, i + 40) * 0.5;
+          const s = 0.6 + rnd(tv.q, tv.r, i + 50) * 0.7;
+          const rk = buildRock();
+          rk.scale.setScalar(s);
+          rk.position.set(w.x + Math.cos(a) * d, top + 0.04 * s, w.z + Math.sin(a) * d);
+          scatterGroup.add(rk);
+        }
       }
       // Resource-specific props: grain sheaves, grazing animals, vine bushes,
       // leaping fish. Plus a little terrain flavour (reeds on coast, desert scrub).
@@ -1653,15 +1671,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       _tc.copy(colorFor(tv, view.civColors));
       return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b, mtn: mountainnessOf(tv.t) };
     };
+    reliefTileAt = tileAt; // units/cities/improvements now sample this for their height
     ensureTerrainTextures();
     terrainMesh = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow, cliff: terrainCliff, scree: terrainScree });
     scene.add(terrainMesh);
-    // Hide the hex prisms + their sea tints; the reflective sea plane stays. Also hide
-    // the old procedural scatter/peaks — the continuous surface IS the mountains now
-    // (scatter re-integrates onto the relief in TERRAIN §6, a later build-order step).
+    // Hide the hex prisms + their sea tints; the reflective sea plane stays. scatterGroup
+    // stays VISIBLE — in relief it now holds only improvements + resource-flavour props
+    // (seated on the displaced surface via groundY); its decorative nature scatter is
+    // skipped in placeScatter and replaced by the climate-aware relief scatter.
     if (tileMesh) tileMesh.visible = false;
     if (waterMesh) waterMesh.visible = false;
-    scatterGroup.visible = false;
+    scatterGroup.visible = true;
 
     // Water per WATER-SPEC (§2 depth gradient + §4 foam): replace the reflective sea
     // plane with the reference-driven shader surface over the terrain's flat sea.
@@ -1821,7 +1841,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     const tileUnitOrd: Record<string, number> = {};
     for (const sv of view.sprites) {
       const w = axialToWorld(sv.q, sv.r);
-      const top = topOf(sv.t || "plains"); // the tile's real surface height
+      const top = groundY(sv.t || "plains", w.x, w.z); // seat on the (displaced) surface
       const color = sv.color || "#cccccc";
       const isCity = sv.kind === "city";
       const frac = sv.hpFrac == null ? 1 : sv.hpFrac;
@@ -1944,9 +1964,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   interface Strike { objs: THREE.Object3D[]; mats: THREE.MeshBasicMaterial[]; t: number; dur: number; }
   let strikes: Strike[] = [];
   function strike(q: number, r: number): void {
-    let top = 0.1;
-    if (lastView) { const tv = lastView.tiles.find((t) => t.q === q && t.r === r); if (tv) top = topOf(tv.t); }
     const w = axialToWorld(q, r);
+    let top = 0.1;
+    if (lastView) { const tv = lastView.tiles.find((t) => t.q === q && t.r === r); if (tv) top = groundY(tv.t, w.x, w.z); }
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xffc247, transparent: true, opacity: 0.95, depthWrite: false, depthTest: false });
     const ring = new THREE.Mesh(strikeRingGeo, ringMat); ring.rotation.x = -Math.PI / 2; ring.position.set(w.x, top + 0.45, w.z); ring.scale.setScalar(0.4); ring.renderOrder = 998;
     const coreMat = new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 1, depthWrite: false, depthTest: false });
@@ -2053,7 +2073,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   function drawWaterways(view: BoardView): void {
     const terrainByKey: Record<string, string> = {};
     for (const tv of view.tiles) terrainByKey[tv.q + "," + tv.r] = tv.t;
-    const heightOf = (q: number, r: number): number => topOf(terrainByKey[q + "," + r] || "plains");
+    const heightOf = (q: number, r: number): number => { const t = terrainByKey[q + "," + r] || "plains"; const w = axialToWorld(q, r); return groundY(t, w.x, w.z); };
     roadMesh = drawEdges(view.roads, roadGeo, roadMat, 0.05, true, heightOf, roadMesh);
     // Rivers flow ALONG the path (centre to centre) like roads, so consecutive
     // segments join into one continuous waterway instead of disjoint edge-bars.
