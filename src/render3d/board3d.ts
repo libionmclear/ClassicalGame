@@ -19,6 +19,7 @@ import { loadScenario } from "../engine/scenarios";
 import type { GameState } from "../engine/types";
 import { buildCity as buildCityV2 } from "./cityModels.js";
 import { buildTerrainSurface, elevationOf, mountainnessOf, type TileSample } from "./terrain";
+import { buildWaterSurface } from "./water";
 import { buildDistrict } from "./districtModels.js";
 
 // City visual tier (1..10) from population — HEGEMON-VISUALS-v2.md §1 thresholds.
@@ -1192,6 +1193,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   })();
   let terrainMesh: THREE.Mesh | null = null;
   let terrainSig = "";
+  let waterSurface: THREE.Mesh | null = null;
+  let waterTick: ((t: number) => void) | null = null;
+  let waterTime = 0;
   // Promoted terrain textures (slope-rock, alpine-snow), loaded once from the asset
   // manifest — swappable via the import pipeline, no code change. Feed the §5 slope /
   // §2b snow shader. Until they arrive the surface is plain biome-coloured relief.
@@ -1560,6 +1564,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (tileMesh) tileMesh.visible = false;
     if (waterMesh) waterMesh.visible = false;
     scatterGroup.visible = false;
+
+    // Water per WATER-SPEC (§2 depth gradient + §4 foam): replace the reflective sea
+    // plane with the reference-driven shader surface over the terrain's flat sea.
+    if (waterSurface) { scene.remove(waterSurface); waterSurface.geometry.dispose(); (waterSurface.material as THREE.Material).dispose(); }
+    const landAt = (q: number, r: number): boolean => { const tv = byKey.get(q + "," + r); return !!tv && tv.t !== "sea" && tv.t !== "coast" && !tv.open; };
+    const openAt = (q: number, r: number): number => { const tv = byKey.get(q + "," + r); return tv && tv.open ? tv.open : 0; };
+    const wx = view.weather === "storm" ? 1 : view.weather === "rain" ? 0.5 : view.weather === "fog" ? 0.2 : 0;
+    const water = buildWaterSurface({ tiles: view.tiles, landAt, openAt, seaLevel: SEA_TOP + 0.006, weather: wx });
+    waterSurface = water.mesh; waterTick = water.tick;
+    scene.add(waterSurface);
+    if (seaMesh) seaMesh.visible = false;
   }
 
   function colorFor(tv: TileView, civColors: Record<string, string>): THREE.Color {
@@ -2069,6 +2084,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     }
     const dt = animClock.getDelta();
     for (const m of mixers) m.update(dt);
+    if (waterTick) { waterTime += dt; waterTick(waterTime); } // animate §2/§4 water
     // Glide moving units toward their target tile at a steady march pace, with a
     // little up-down bounce. Chasing a persistent target (not a one-shot tween)
     // means the glide survives the double render() that a turn triggers.
