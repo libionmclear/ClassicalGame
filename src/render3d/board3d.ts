@@ -1225,6 +1225,39 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // §6 climate-aware scatter on the relief: promoted prop models, instanced per tile.
   const reliefScatter = new THREE.Group();
   scene.add(reliefScatter);
+  // §7 hex-grid overlay — thin dashed tessera lines draped on the terrain surface, low
+  // opacity so it reads as a subtle grid, never a chessboard. Rebuilt + distance-culled
+  // with the scatter (follows the camera).
+  const hexGrid = new THREE.Group();
+  scene.add(hexGrid);
+  const GRID_OPACITY = 0.18;
+  const hexGridMat = new THREE.LineDashedMaterial({ color: 0x141008, transparent: true, opacity: GRID_OPACITY, dashSize: 0.13, gapSize: 0.09, depthWrite: false });
+  const _hexCorners: Array<[number, number]> = [];
+  for (let k = 0; k < 6; k += 1) { const a = ((30 + 60 * k) * Math.PI) / 180; _hexCorners.push([Math.cos(a) * SIZE, Math.sin(a) * SIZE]); }
+  function placeHexGrid(view: BoardView, camX: number, camZ: number, cull2: number): void {
+    hexGrid.clear();
+    if (!RELIEF || GRID_OPACITY <= 0) return;
+    const gy = (x: number, z: number): number => (terrainHeightAt ? terrainHeightAt(x, z) : 0) + 0.03; // lift off the surface
+    const pts: number[] = [];
+    for (const tv of view.tiles) {
+      if (tv.v === 0) continue; // only where discovered
+      const c = axialToWorld(tv.q, tv.r);
+      if ((c.x - camX) * (c.x - camX) + (c.z - camZ) * (c.z - camZ) > cull2) continue;
+      for (let k = 0; k < 6; k += 1) {
+        const a = _hexCorners[k], b = _hexCorners[(k + 1) % 6];
+        const x1 = c.x + a[0], z1 = c.z + a[1], x2 = c.x + b[0], z2 = c.z + b[1];
+        const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2; // one mid-point so the line drapes over slopes
+        pts.push(x1, gy(x1, z1), z1, mx, gy(mx, mz), mz, mx, gy(mx, mz), mz, x2, gy(x2, z2), z2);
+      }
+    }
+    if (!pts.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    const line = new THREE.LineSegments(geo, hexGridMat);
+    line.computeLineDistances(); // required for the dashes
+    line.renderOrder = 2;
+    hexGrid.add(line);
+  }
   const propModels = new Map<string, { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] }>();
   let propsTried = false;
   // Target heights so a stone pine reads tall and a wildflower low (world units).
@@ -2329,6 +2362,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (scatterDirty && lastView && reliefTileAt) {
       scatterDirty = false; lastScatterX = controls.target.x; lastScatterZ = controls.target.z;
       placeReliefScatter(lastView, reliefTileAt);
+      placeHexGrid(lastView, controls.target.x, controls.target.z, 46 * 46);
     }
     for (const m of mixers) m.update(dt);
     if (waterTick) { waterTime += dt; waterTick(waterTime); } // animate §2/§4 water
