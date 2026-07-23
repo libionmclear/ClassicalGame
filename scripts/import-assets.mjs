@@ -71,10 +71,14 @@ function optimizeModel(src, out) {
   // heavy decimation). Unit/city models (kept separately) can afford more detail.
   const isScatter = out.includes("approved/props") || out.includes("approved\\props");
   const texSize = isScatter ? "256" : "512";
-  const ratio = isScatter ? "0.03" : "0.04";
+  // Scatter props are drawn tiny in many instances → decimate HARD (~10k verts). Gate 1:
+  // 0.03 left them at ~27k verts, heavy for dense forests; 0.012 → ~11k with no visible
+  // loss at scatter scale. simplify-error loosened so the ratio is actually reached.
+  const ratio = isScatter ? "0.012" : "0.04";
+  const simpErr = isScatter ? "0.02" : "0.01";
   const r = spawnSync("npx", ["--yes", "@gltf-transform/cli@latest", "optimize", `"${src}"`, `"${out}"`,
     "--compress", "quantize", "--texture-size", texSize, "--texture-compress", "webp",
-    "--simplify", "true", "--simplify-ratio", ratio, "--simplify-error", "0.01"],
+    "--simplify", "true", "--simplify-ratio", ratio, "--simplify-error", simpErr],
     { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: true });
   if (r.status !== 0 && process.env.DEBUG_IMPORT) console.error(r.stderr || r.stdout);
   return r.status === 0;

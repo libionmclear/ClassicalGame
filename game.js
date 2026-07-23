@@ -2529,6 +2529,7 @@
       const region = capTile ? capTile.region : (state.map.regions && state.map.regions[0]);
       skyWx = (region && state.weather.current[region]) || "clear";
     }
+    if (window.__forceWeather) skyWx = window.__forceWeather; // dev: pin the sky for grade screenshots
     updateSoundscape(skyWx, tiles);
     const view = { tiles: tiles, sprites: sprites, borders: borders, districts: districts, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx, turn: state.turn };
     if (pendingRecenter) {
@@ -5954,6 +5955,7 @@
     reliefDebug: function () { return board3d && board3d.reliefDebug ? board3d.reliefDebug() : null; },
     focusTile: function (q, r) { if (board3d && board3d.focusTile) board3d.focusTile(q, r); },
     revealAll: function () { adminRevealMap = true; if (state) render(); return true; },
+    setWeather: function (w) { window.__forceWeather = w; if (state) render(); return w; },
     // Set the human capital's population (drives the city visual tier) — for showcasing
     // the per-level city models on the board.
     growCapital: function (pop) {

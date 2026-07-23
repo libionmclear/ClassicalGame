@@ -104,119 +104,119 @@
       "path": "assets/approved/props/olive.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 803720,
+      "bytes": 382892,
       "source": "Meshy_AI_Gnarled_Olive_Tree_3D_0720213521_image-to-3d-texture.glb"
     },
     "scatter/cypress": {
       "path": "assets/approved/props/cypress.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 118564,
+      "bytes": 59744,
       "source": "Meshy_AI_Cypress_Tree_3D_0720214043_image-to-3d-texture.glb"
     },
     "scatter/stone-pine": {
       "path": "assets/approved/props/stone-pine.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 722252,
+      "bytes": 371444,
       "source": "Meshy_AI_Umbrella_Stone_Pine_3_0720214636_image-to-3d-texture.glb"
     },
     "scatter/dry-grass": {
       "path": "assets/approved/props/dry-grass.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 643296,
+      "bytes": 298056,
       "source": "Meshy_AI_Dry_Grass_Clump_3D_0720205742_image-to-3d-texture.glb"
     },
     "scatter/desert-scrub": {
       "path": "assets/approved/props/desert-scrub.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 517800,
+      "bytes": 252248,
       "source": "Meshy_AI_Desert_Scrub_Bush_3D_0720215030_image-to-3d-texture.glb"
     },
     "scatter/date-palm": {
       "path": "assets/approved/props/date-palm.glb",
       "kind": "model",
       "version": "v2",
-      "bytes": 524084,
+      "bytes": 256544,
       "source": "Meshy_AI_Date_Palm_Tree_3D_v2_0720221317_image-to-3d-texture.glb"
     },
     "scatter/papyrus": {
       "path": "assets/approved/props/papyrus.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 1072368,
+      "bytes": 1067920,
       "source": "Meshy_AI_Papyrus_Plant_Clump_3_0721001409_image-to-3d-texture.glb"
     },
     "scatter/reeds": {
       "path": "assets/approved/props/reeds.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 294004,
+      "bytes": 140800,
       "source": "Meshy_AI_Marsh_Reeds_Cluster_3_0720215551_image-to-3d-texture.glb"
     },
     "scatter/fallen-trunk": {
       "path": "assets/approved/props/fallen-trunk.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 178120,
+      "bytes": 81732,
       "source": "Meshy_AI_Fallen_Tree_Trunk_3D_0720222533_image-to-3d-texture.glb"
     },
     "scatter/driftwood": {
       "path": "assets/approved/props/driftwood.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 179028,
+      "bytes": 88628,
       "source": "Meshy_AI_Driftwood_Log_3D_0721001433_image-to-3d-texture.glb"
     },
     "scatter/rock-cluster": {
       "path": "assets/approved/props/rock-cluster.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 139004,
+      "bytes": 65380,
       "source": "Meshy_AI_Grey_Rock_Cluster_3D_0720211243_image-to-3d-texture.glb"
     },
     "scatter/limestone-boulder": {
       "path": "assets/approved/props/limestone-boulder.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 147784,
+      "bytes": 69696,
       "source": "Meshy_AI_Limestone_Boulder_3D_0720210809_image-to-3d-texture.glb"
     },
     "scatter/rock-shard": {
       "path": "assets/approved/props/rock-shard.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 149888,
+      "bytes": 69172,
       "source": "Meshy_AI_Mountain_Rock_Shard_3_0720222552_image-to-3d-texture.glb"
     },
     "scatter/oak": {
       "path": "assets/approved/props/oak.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 298352,
+      "bytes": 135884,
       "source": "Meshy_AI_English_Oak_Tree_3D_0720223059_image-to-3d-texture.glb"
     },
     "scatter/beech": {
       "path": "assets/approved/props/beech.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 532244,
+      "bytes": 253904,
       "source": "Meshy_AI_Beech_Tree_3D_0720223900_image-to-3d-texture.glb"
     },
     "scatter/fir": {
       "path": "assets/approved/props/fir.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 500264,
+      "bytes": 234792,
       "source": "Meshy_AI_Fir_Spruce_Tree_3D_0720225740_image-to-3d-texture.glb"
     },
     "scatter/mossy-boulder": {
       "path": "assets/approved/props/mossy-boulder.glb",
       "kind": "model",
       "version": "v0",
-      "bytes": 277688,
+      "bytes": 122656,
       "source": "Meshy_AI_Mossy_Grey_Boulder_3D_0720231006_image-to-3d-texture.glb"
     }
   }

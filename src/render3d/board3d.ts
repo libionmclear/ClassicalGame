@@ -10,6 +10,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
@@ -892,7 +893,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // Filmic tone mapping for richer, less-flat colour (applied by the OutputPass
   // at the end of the post-processing chain).
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 0.92; // Gate 2: down from 1.05 so highlights (foliage) don't clip white
 
   // Graphics quality (localStorage "hegemon_gfx": "high" default | "low"). HIGH runs
   // the full pipeline (ambient occlusion + antialiasing + env reflections + procedural
@@ -1096,8 +1097,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // coast tint then lifts the shallows above it. Rain/storm/fog darken/grey it further.
   interface SkyMood { top: number; bottom: number; fog: number; fogNear: number; fogFar: number; sun: number; sunI: number; ambI: number; hemiI: number; sea: number; disc: number; cloud: number; }
   const WEATHER_SKY: Record<string, SkyMood> = {
-    clear: { top: 0x9ad2f5, bottom: 0x0a1626, fog: 0xaed4ee, fogNear: 160, fogFar: 470, sun: 0xfff3dc, sunI: 1.65, ambI: 0.78, hemiI: 0.62, sea: 0x224d78, disc: 0.95, cloud: 0.0 },
-    heat:  { top: 0xd6c294, bottom: 0x2a2415, fog: 0xe0d0a4, fogNear: 130, fogFar: 400, sun: 0xffe6b6, sunI: 1.7, ambI: 0.82, hemiI: 0.56, sea: 0x235069, disc: 0.85, cloud: 0.10 },
+    clear: { top: 0x9ad2f5, bottom: 0x0a1626, fog: 0xaed4ee, fogNear: 160, fogFar: 470, sun: 0xffeecf, sunI: 1.18, ambI: 0.80, hemiI: 0.60, sea: 0x224d78, disc: 0.95, cloud: 0.0 },
+    heat:  { top: 0xd6c294, bottom: 0x2a2415, fog: 0xe0d0a4, fogNear: 130, fogFar: 400, sun: 0xffe6b6, sunI: 1.24, ambI: 0.84, hemiI: 0.56, sea: 0x235069, disc: 0.85, cloud: 0.10 },
     fog:   { top: 0xaeb8bd, bottom: 0x4b535a, fog: 0xb4bdc2, fogNear: 40, fogFar: 190, sun: 0xd6dce0, sunI: 0.65, ambI: 0.78, hemiI: 0.6, sea: 0x46545e, disc: 0.0, cloud: 0.55 },
     rain:  { top: 0x5c6b79, bottom: 0x272f38, fog: 0x59636e, fogNear: 90, fogFar: 300, sun: 0xb9c4cf, sunI: 0.5, ambI: 0.55, hemiI: 0.5, sea: 0x2c4150, disc: 0.0, cloud: 0.85 },
     storm: { top: 0x3d4650, bottom: 0x1a1f26, fog: 0x39424c, fogNear: 70, fogFar: 250, sun: 0x9aa6b2, sunI: 0.34, ambI: 0.46, hemiI: 0.42, sea: 0x233040, disc: 0.0, cloud: 1.0 }
@@ -1232,6 +1233,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     "scatter/driftwood": 0.28, "scatter/rock-cluster": 0.34, "scatter/limestone-boulder": 0.4,
     "scatter/mossy-boulder": 0.42, "scatter/rock-shard": 0.5
   };
+  // Gate 2 material tints (multiply the baked map). The Meshy olive bakes a near-white
+  // canopy; pull it to the silver-green of the approved 2D olive.
+  const PROP_TINT: Record<string, number> = { "scatter/olive": 0xb9c692 };
   function normalizeProp(scene0: THREE.Object3D, key: string): { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] } | null {
     return normalizeGLB(scene0, PROP_H[key] ?? 0.4);
   }
@@ -1245,7 +1249,16 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         const rel = m.assets[key].path;
         gltfLoader.load(rel, (gltf) => {
           const norm = normalizeProp(gltf.scene, key);
-          if (norm) { propModels.set(key, norm); scatterDirty = true; } // loop rebuilds scatter once, coalesced
+          if (norm) {
+            // Gate 2: some Meshy foliage bakes a near-WHITE canopy; tint the material toward
+            // the true silver-green of the approved 2D reference (the map multiplies by color).
+            const tint = PROP_TINT[key];
+            if (tint !== undefined) {
+              const mats = Array.isArray(norm.mat) ? norm.mat : [norm.mat];
+              for (const mm of mats) { const sm = mm as THREE.MeshStandardMaterial; if (sm.color) sm.color.multiply(new THREE.Color(tint)); }
+            }
+            propModels.set(key, norm); scatterDirty = true; // loop rebuilds scatter once, coalesced
+          }
         }, undefined, () => { /* load failed — leave it out entirely; no placeholder, never a thumbnail extrusion */ });
       }
     }).catch(() => {});
@@ -2207,10 +2220,34 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     gtao.camera = aoCam; // default layers = layer 0 only (no atmosphere)
     composer.addPass(gtao);
   }
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.32, 0.6, 0.85);
+  // Gate 2: gentler bloom + higher threshold so lit foliage keeps its silver-green instead
+  // of blooming to white; only genuine speculars/sun bloom now.
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.16, 0.55, 0.9);
   composer.addPass(bloom);
   if (HIGH) composer.addPass(new SMAAPass());
   composer.addPass(new OutputPass());
+  // Gate 2: classical colour grade (aged-fresco) applied LAST on the tone-mapped image —
+  // warm terracotta/ochre bias in the mids, gentle shadow lift (no black pits), and tame
+  // the neon water blues toward a calmer Mediterranean sea.
+  const ClassicalGrade = {
+    uniforms: { tDiffuse: { value: null }, uWarm: { value: 0.55 }, uBlueTame: { value: 0.5 }, uShadowLift: { value: 0.45 } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: [
+      "uniform sampler2D tDiffuse; uniform float uWarm, uBlueTame, uShadowLift; varying vec2 vUv;",
+      "void main(){",
+      "  vec3 c = texture2D(tDiffuse, vUv).rgb;",
+      "  float l = dot(c, vec3(0.299, 0.587, 0.114));",
+      "  c = mix(c, sqrt(c) * 0.5 + c * 0.5, uShadowLift * (1.0 - smoothstep(0.0, 0.35, l)));", // lift shadows off black
+      "  vec3 warm = c * vec3(1.07, 1.01, 0.90);",                                                // terracotta/ochre bias
+      "  c = mix(c, warm, uWarm);",
+      "  float blueDom = clamp(c.b - max(c.r, c.g), 0.0, 1.0);",                                  // strongly-blue pixels (water/sky)
+      "  c = mix(c, vec3(l), blueDom * uBlueTame * 0.45);",                                       // desaturate the neon
+      "  c.b *= (1.0 - blueDom * uBlueTame * 0.22);",
+      "  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);",
+      "}"
+    ].join("\n")
+  };
+  composer.addPass(new ShaderPass(ClassicalGrade));
 
   function resize(): void {
     const w = canvas.clientWidth || 800;
