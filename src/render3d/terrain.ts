@@ -150,11 +150,16 @@ export interface SurfaceOpts {
   cliff?: THREE.Texture | null;  // cliff-strata: layered sedimentary walls on the steepest faces (§2c)
   scree?: THREE.Texture | null;  // mountain-scree: loose debris on lower/gentler mountain ground (§2b)
 }
+// The surface mesh PLUS a sampler that returns the mesh's OWN height at any (x,z) — a
+// bilinear lookup of the vertex grid, so it matches what the tessellated triangles actually
+// render (the continuous sampleSurface has sub-grid ridges the mesh can't, which is why
+// props seated on the analytic height float above mountain crests).
+export interface TerrainSurface { mesh: THREE.Mesh; heightAt(x: number, z: number): number }
 export function buildTerrainSurface(
   tiles: Array<{ q: number; r: number }>,
   tileAt: TileAt,
   opts: SurfaceOpts = {}
-): THREE.Mesh {
+): TerrainSurface {
   const subdiv = opts.subdiv ?? 3.9;      // grid vertices per world unit (finer = sharper ridges)
   const margin = opts.margin ?? 2.0;
   const maxSeg = opts.maxSeg ?? 400;      // per-axis cap (perf / quality tier)
@@ -261,5 +266,17 @@ export function buildTerrainSurface(
   mesh.receiveShadow = true;
   mesh.castShadow = true;
   mesh.name = "terrainSurface";
-  return mesh;
+  // Bilinear height lookup on the vertex grid (heights live in pos[..*3+1]). Matches the
+  // rendered surface; used to seat scatter/props/units so nothing floats or sinks.
+  const heightAt = (x: number, z: number): number => {
+    const fx = ((x - minX) / w) * (nx - 1), fz = ((z - minZ) / d) * (nz - 1);
+    const ix = Math.max(0, Math.min(nx - 2, Math.floor(fx)));
+    const iz = Math.max(0, Math.min(nz - 2, Math.floor(fz)));
+    const tx = Math.max(0, Math.min(1, fx - ix)), tz = Math.max(0, Math.min(1, fz - iz));
+    const h = (r0: number, c0: number): number => pos[((r0 * nx) + c0) * 3 + 1];
+    const top = h(iz, ix) * (1 - tx) + h(iz, ix + 1) * tx;
+    const bot = h(iz + 1, ix) * (1 - tx) + h(iz + 1, ix + 1) * tx;
+    return top * (1 - tz) + bot * tz;
+  };
+  return { mesh, heightAt };
 }

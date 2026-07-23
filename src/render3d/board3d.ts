@@ -1210,6 +1210,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // The live surface sampler, set by buildTerrain — lets units/cities/improvements sit
   // ON the displaced ground instead of the old flat hex-prism tops.
   let reliefTileAt: TileAt | null = null;
+  // Bilinear sampler of the terrain MESH's own height (matches the rendered triangles) —
+  // seats props/units exactly on the surface so nothing floats above ridges.
+  let terrainHeightAt: ((x: number, z: number) => number) | null = null;
   // Prop GLBs load async; each arrival marks scatter dirty and the loop rebuilds the
   // instanced batches ONCE next frame (coalesced) instead of a full terrain rebuild per
   // prop — the old path rebuilt the whole heightfield 17× on load.
@@ -1319,9 +1322,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       // Gate 1: scatter does NOT cast/receive real shadows — 60 props × 27k verts would
       // dominate the shadow pass. GTAO (post-FX) supplies contact darkening instead.
       inst.castShadow = false; inst.receiveShadow = false;
+      const propH = (PROP_H[key] ?? 0.4);
       for (let i = 0; i < places.length; i += 1) {
         const p = places[i];
-        const y = sampleSurface(p.x, p.z, tileAt).y; // sink to the DISPLACED surface height
+        // Item 1: seat on the MESH height (not the analytic surface, which has sub-grid
+        // ridges the mesh lacks → floating), then embed ~4% of the prop's height so feet
+        // bite into the ground instead of hovering.
+        const surfY = terrainHeightAt ? terrainHeightAt(p.x, p.z) : sampleSurface(p.x, p.z, tileAt).y;
+        const y = surfY - propH * p.scale * 0.04;
         _iq.setFromAxisAngle(_scUp, p.yaw);
         _iv.set(p.x, y, p.z); _isc.setScalar(p.scale);
         inst.setMatrixAt(i, _im.compose(_iv, _iq, _isc));
@@ -1470,7 +1478,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // flavour props). In relief mode this samples the displaced heightfield; otherwise
   // it's the flat hex-prism top.
   function groundY(t: string, wx: number, wz: number): number {
-    return RELIEF && reliefTileAt ? sampleSurface(wx, wz, reliefTileAt).y : topOf(t);
+    if (!RELIEF) return topOf(t);
+    if (terrainHeightAt) return terrainHeightAt(wx, wz);      // exact mesh height (no float)
+    return reliefTileAt ? sampleSurface(wx, wz, reliefTileAt).y : topOf(t);
   }
 
   // Trees on forests, rocks on hills/mountains, denser on timber/ore deposits —
@@ -1733,9 +1743,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       _tc.copy(colorFor(tv, view.civColors));
       return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b, mtn: mountainnessOf(tv.t) };
     };
-    reliefTileAt = tileAt; // units/cities/improvements now sample this for their height
+    reliefTileAt = tileAt; // units/cities/improvements now sample this for their height (analytic fallback)
     ensureTerrainTextures();
-    terrainMesh = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow, cliff: terrainCliff, scree: terrainScree });
+    { const surf = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow, cliff: terrainCliff, scree: terrainScree }); terrainMesh = surf.mesh; terrainHeightAt = surf.heightAt; }
     scene.add(terrainMesh);
     // Hide the hex prisms + their sea tints; the reflective sea plane stays. scatterGroup
     // stays VISIBLE — in relief it now holds only improvements + resource-flavour props
