@@ -893,7 +893,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // Filmic tone mapping for richer, less-flat colour (applied by the OutputPass
   // at the end of the post-processing chain).
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92; // Gate 2: down from 1.05 so highlights (foliage) don't clip white
+  renderer.toneMappingExposure = 0.88; // Gate 2/item 8: highlights (foliage) don't clip white
 
   // Graphics quality (localStorage "hegemon_gfx": "high" default | "low"). HIGH runs
   // the full pipeline (ambient occlusion + antialiasing + env reflections + procedural
@@ -1097,8 +1097,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // coast tint then lifts the shallows above it. Rain/storm/fog darken/grey it further.
   interface SkyMood { top: number; bottom: number; fog: number; fogNear: number; fogFar: number; sun: number; sunI: number; ambI: number; hemiI: number; sea: number; disc: number; cloud: number; }
   const WEATHER_SKY: Record<string, SkyMood> = {
-    clear: { top: 0x9ad2f5, bottom: 0x0a1626, fog: 0xaed4ee, fogNear: 160, fogFar: 470, sun: 0xffeecf, sunI: 1.18, ambI: 0.80, hemiI: 0.60, sea: 0x224d78, disc: 0.95, cloud: 0.0 },
-    heat:  { top: 0xd6c294, bottom: 0x2a2415, fog: 0xe0d0a4, fogNear: 130, fogFar: 400, sun: 0xffe6b6, sunI: 1.24, ambI: 0.84, hemiI: 0.56, sea: 0x235069, disc: 0.85, cloud: 0.10 },
+    clear: { top: 0x9ad2f5, bottom: 0x0a1626, fog: 0xaed4ee, fogNear: 160, fogFar: 470, sun: 0xffeecf, sunI: 1.08, ambI: 0.82, hemiI: 0.62, sea: 0x224d78, disc: 0.95, cloud: 0.0 },
+    heat:  { top: 0xd6c294, bottom: 0x2a2415, fog: 0xe0d0a4, fogNear: 130, fogFar: 400, sun: 0xffe6b6, sunI: 1.14, ambI: 0.86, hemiI: 0.58, sea: 0x235069, disc: 0.85, cloud: 0.10 },
     fog:   { top: 0xaeb8bd, bottom: 0x4b535a, fog: 0xb4bdc2, fogNear: 40, fogFar: 190, sun: 0xd6dce0, sunI: 0.65, ambI: 0.78, hemiI: 0.6, sea: 0x46545e, disc: 0.0, cloud: 0.55 },
     rain:  { top: 0x5c6b79, bottom: 0x272f38, fog: 0x59636e, fogNear: 90, fogFar: 300, sun: 0xb9c4cf, sunI: 0.5, ambI: 0.55, hemiI: 0.5, sea: 0x2c4150, disc: 0.0, cloud: 0.85 },
     storm: { top: 0x3d4650, bottom: 0x1a1f26, fog: 0x39424c, fogNear: 70, fogFar: 250, sun: 0x9aa6b2, sunI: 0.34, ambI: 0.46, hemiI: 0.42, sea: 0x233040, disc: 0.0, cloud: 1.0 }
@@ -2283,7 +2283,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
   // Gate 2: gentler bloom + higher threshold so lit foliage keeps its silver-green instead
   // of blooming to white; only genuine speculars/sun bloom now.
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.16, 0.55, 0.9);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.10, 0.55, 0.93);
   composer.addPass(bloom);
   if (HIGH) composer.addPass(new SMAAPass());
   composer.addPass(new OutputPass());
