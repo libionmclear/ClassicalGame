@@ -97,7 +97,13 @@ const FRAG = /* glsl */`
     caps *= (0.03 + 0.55 * uWeather) * (1.0 - vOpen * 0.5);
     col = mix(col, uFoam, clamp(caps, 0.0, 1.0));
 
-    gl_FragColor = vec4(col, 1.0);
+    // §5 SHORE TRANSPARENCY: the water is translucent over the beach band so the wet sand
+    // shows through and the coastline reads as a soft gradient, not a hard opaque line —
+    // ramping to fully opaque by the time it's genuinely deep. Foam stays opaque so the
+    // wave line still reads.
+    float alpha = mix(0.30, 1.0, smoothstep(0.0, 0.24, s));
+    alpha = max(alpha, foam);
+    gl_FragColor = vec4(col, alpha);
   }
 `;
 
@@ -150,6 +156,8 @@ export function buildWaterSurface(opts: WaterOpts): { mesh: THREE.Mesh; tick: (t
     vertexShader: VERT,
     fragmentShader: FRAG,
     toneMapped: false, // author the painted colours directly; skip the scene tone-map
+    transparent: true, // §5 shore transparency — blend over the wet-sand terrain near shore
+    depthWrite: false, // don't occlude; the terrain beneath (beach) shows through the shallows
     uniforms: {
       uTime: { value: 0 },
       uWeather: { value: opts.weather ?? 0 },
