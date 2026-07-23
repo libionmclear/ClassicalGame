@@ -1002,7 +1002,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const sun = new THREE.DirectionalLight(0xfff0d4, 1.15);
   sun.position.set(-26, 44, 20);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(HIGH ? 4096 : 2048, HIGH ? 4096 : 2048); // sharper on HIGH
+  sun.shadow.mapSize.set(HIGH ? 2048 : 1024, HIGH ? 2048 : 1024); // capped for perf (Gate 1)
   Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 1, far: 220 });
   // Soften the PCF shadow edge and lift the acne/peter-panning off contact points.
   sun.shadow.radius = HIGH ? 3.5 : 2;
@@ -1213,6 +1213,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // instanced batches ONCE next frame (coalesced) instead of a full terrain rebuild per
   // prop — the old path rebuilt the whole heightfield 17× on load.
   let scatterDirty = false;
+  let lastScatterX = 1e9, lastScatterZ = 1e9; // camera focus at last scatter build (pan → rebuild)
   let fpsEMA = 60; // smoothed frames/sec for the diagnostics hook
   let waterSurface: THREE.Mesh | null = null;
   let waterTick: ((t: number) => void) | null = null;
@@ -1262,15 +1263,28 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // Nile signature (§6): tiles touching a river carry papyrus / date-palms.
     const riverTiles = new Set<string>();
     for (const e of view.rivers || []) { riverTiles.add(e.q + "," + e.r); riverTiles.add(e.nq + "," + e.nr); }
+    // Gate 1: distance cull + density falloff around the camera focus — full density near,
+    // thinning out, nothing past R_CULL. Keeps the instance/vertex load bounded regardless
+    // of how much map is revealed; rebuilt as the camera pans (loop watches the target).
+    const camX = controls.target.x, camZ = controls.target.z;
+    const R_FULL = 20, R_CULL = 40, SPAN = R_CULL - R_FULL;
+    const R_FULL2 = R_FULL * R_FULL, R_CULL2 = R_CULL * R_CULL;
+    const HARD_CAP = 1000; // safety backstop on total instances (bounds the revealed-map case)
+    let total = 0;
     const byKey = new Map<string, Array<{ x: number; z: number; yaw: number; scale: number }>>();
     for (const tv of view.tiles) {
       if (tv.v === 0 || SCATTER_WATER.has(tv.t) || tv.open) continue; // no dressing on water/fog
-      const places = pickScatter(tv.t, tv.q, tv.r, "mediterranean" as Climate, density, riverTiles.has(tv.q + "," + tv.r));
-      if (!places.length) continue;
       const c = axialToWorld(tv.q, tv.r);
+      const dd = (c.x - camX) * (c.x - camX) + (c.z - camZ) * (c.z - camZ);
+      if (dd > R_CULL2) continue;                       // beyond the far ring: no props
+      let dens = density;
+      if (dd > R_FULL2) dens = density * (1 - 0.7 * ((Math.sqrt(dd) - R_FULL) / SPAN)); // thin with distance
+      const places = pickScatter(tv.t, tv.q, tv.r, "mediterranean" as Climate, dens, riverTiles.has(tv.q + "," + tv.r));
+      if (!places.length) continue;
       for (const p of places) {
+        if (total >= HARD_CAP) break;
         let arr = byKey.get(p.key); if (!arr) { arr = []; byKey.set(p.key, arr); }
-        arr.push({ x: c.x + p.dx, z: c.z + p.dz, yaw: p.yaw, scale: p.scale });
+        arr.push({ x: c.x + p.dx, z: c.z + p.dz, yaw: p.yaw, scale: p.scale }); total += 1;
       }
     }
     for (const [key, places] of byKey) {
@@ -1278,7 +1292,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       if (!model) continue;
       const inst = new THREE.InstancedMesh(model.geo, model.mat, places.length);
       inst.name = key.replace("scatter/", "");         // one instanced batch per prop type (§6)
-      inst.castShadow = true; inst.receiveShadow = true;
+      // Gate 1: scatter does NOT cast/receive real shadows — 60 props × 27k verts would
+      // dominate the shadow pass. GTAO (post-FX) supplies contact darkening instead.
+      inst.castShadow = false; inst.receiveShadow = false;
       for (let i = 0; i < places.length; i += 1) {
         const p = places[i];
         const y = sampleSurface(p.x, p.z, tileAt).y; // sink to the DISPLACED surface height
@@ -1400,9 +1416,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       if (m.isMesh && m.material) { const mm = m.material as THREE.Material | THREE.Material[]; if (Array.isArray(mm)) mm.forEach((x) => x.dispose()); else mm.dispose(); }
     });
     markerGroup.clear();
+    // Gate 1: markers are un-instanced models; distance-cull them around the camera focus
+    // so a fully-revealed map doesn't place every ruin/village at once.
+    const mcx = controls.target.x, mcz = controls.target.z, MARK_CULL2 = 46 * 46;
     for (const tv of view.tiles) {
       if (!tv.ruin && !tv.village) continue;
       const w = axialToWorld(tv.q, tv.r);
+      if ((w.x - mcx) * (w.x - mcx) + (w.z - mcz) * (w.z - mcz) > MARK_CULL2) continue;
       const top = groundY(tv.t, w.x, w.z);
       let model: THREE.Group;
       if (tv.ruin) {
@@ -1479,21 +1499,25 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
           scatterGroup.add(rk);
         }
       }
-      // Resource-specific props: grain sheaves, grazing animals, vine bushes,
-      // leaping fish. Plus a little terrain flavour (reeds on coast, desert scrub).
-      let props: THREE.Object3D[] = [];
-      if (tv.res === "grain") props = [buildTuft(0xd9c05a, 0.5), buildTuft(0xd9c05a, 0.45), buildTuft(0xcdb44a, 0.5)];
-      else if (tv.res === "horses") props = [buildAnimal(0x8a6a44), buildAnimal(0x6b4a2b)];
-      else if (tv.res === "wine") props = [buildTuft(0x3f6b3a, 0.4), buildTuft(0x315a2e, 0.4)];
-      else if (tv.res === "fish") props = [buildFish(0x9fb8c8), buildFish(0x8fa8bc), buildFish(0x9fb8c8)];
-      if (tv.t === "coast" && rnd(tv.q, tv.r, 3) < 0.5) props.push(buildTuft(0x5f8f4a, 0.85, 0.16), buildTuft(0x568345, 0.7, 0.16));
-      else if (tv.t === "desert" && rnd(tv.q, tv.r, 3) < 0.4) props.push(buildTuft(0x9a8a4a, 0.35, 0.4));
-      for (let i = 0; i < props.length; i += 1) {
-        const a = rnd(tv.q, tv.r, i + 60) * Math.PI * 2;
-        const d = 0.18 + rnd(tv.q, tv.r, i + 70) * 0.45;
-        props[i].position.set(w.x + Math.cos(a) * d, top, w.z + Math.sin(a) * d);
-        props[i].rotation.y = rnd(tv.q, tv.r, i + 80) * Math.PI * 2;
-        scatterGroup.add(props[i]);
+      // Resource-specific / terrain-flavour props (grain, animals, vines, fish, reeds).
+      // Gate 1: these are UN-INSTANCED individual meshes — one per resource tile — so on a
+      // revealed map they alone were ~250 draw calls. In relief mode the climate-aware
+      // instanced scatter already dresses tiles, so skip them here (flat mode keeps them).
+      if (!RELIEF) {
+        let props: THREE.Object3D[] = [];
+        if (tv.res === "grain") props = [buildTuft(0xd9c05a, 0.5), buildTuft(0xd9c05a, 0.45), buildTuft(0xcdb44a, 0.5)];
+        else if (tv.res === "horses") props = [buildAnimal(0x8a6a44), buildAnimal(0x6b4a2b)];
+        else if (tv.res === "wine") props = [buildTuft(0x3f6b3a, 0.4), buildTuft(0x315a2e, 0.4)];
+        else if (tv.res === "fish") props = [buildFish(0x9fb8c8), buildFish(0x8fa8bc), buildFish(0x9fb8c8)];
+        if (tv.t === "coast" && rnd(tv.q, tv.r, 3) < 0.5) props.push(buildTuft(0x5f8f4a, 0.85, 0.16), buildTuft(0x568345, 0.7, 0.16));
+        else if (tv.t === "desert" && rnd(tv.q, tv.r, 3) < 0.4) props.push(buildTuft(0x9a8a4a, 0.35, 0.4));
+        for (let i = 0; i < props.length; i += 1) {
+          const a = rnd(tv.q, tv.r, i + 60) * Math.PI * 2;
+          const d = 0.18 + rnd(tv.q, tv.r, i + 70) * 0.45;
+          props[i].position.set(w.x + Math.cos(a) * d, top, w.z + Math.sin(a) * d);
+          props[i].rotation.y = rnd(tv.q, tv.r, i + 80) * Math.PI * 2;
+          scatterGroup.add(props[i]);
+        }
       }
     }
   }
@@ -1538,7 +1562,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // scale/orientation; plays its first animation clip if asked.
   function glbInstance(entry: GLBEntry, targetH: number, animate: boolean): THREE.Object3D {
     const obj = cloneSkinned(entry.scene);
-    obj.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+    // Gate 1: unit figures do NOT cast real shadows — each unit already has a cheap blob
+    // shadow decal, and a formation is many high-poly clones. Cities keep real shadows.
+    obj.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = false; });
     _box.setFromObject(obj); _box.getSize(_sz);
     obj.scale.setScalar(targetH / (_sz.y || 1));
     _box.setFromObject(obj);
@@ -1707,8 +1733,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (seaMesh) seaMesh.visible = false;
 
     // §6 climate-aware scatter, instanced on the displaced surface (replaces the old
-    // procedural scatter we hid above).
-    placeReliefScatter(view, tileAt);
+    // procedural scatter we hid above). Rebuilt via the loop's dirty flag so it always
+    // dresses around the CURRENT camera focus (one build path, distance-culled).
+    scatterDirty = true; lastScatterX = 1e9;
   }
 
   function colorFor(tv: TileView, civColors: Record<string, string>): THREE.Color {
@@ -2227,9 +2254,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     }
     const dt = animClock.getDelta();
     if (dt > 0.0001) fpsEMA = fpsEMA * 0.9 + (1 / dt) * 0.1;
-    // Rebuild the instanced scatter ONCE when props have arrived (coalesced across the
-    // async GLB loads), instead of a full terrain rebuild per prop.
-    if (scatterDirty && lastView && reliefTileAt) { scatterDirty = false; placeReliefScatter(lastView, reliefTileAt); }
+    // Re-dress scatter around the new focus when the camera has panned far enough (the
+    // distance-cull ring follows the camera). Coalesced with the prop-load dirty flag so
+    // it rebuilds at most once per frame.
+    if (RELIEF && lastView && reliefTileAt) {
+      const dx = controls.target.x - lastScatterX, dz = controls.target.z - lastScatterZ;
+      if (dx * dx + dz * dz > 100) scatterDirty = true; // moved >10 units
+    }
+    if (scatterDirty && lastView && reliefTileAt) {
+      scatterDirty = false; lastScatterX = controls.target.x; lastScatterZ = controls.target.z;
+      placeReliefScatter(lastView, reliefTileAt);
+    }
     for (const m of mixers) m.update(dt);
     if (waterTick) { waterTime += dt; waterTick(waterTime); } // animate §2/§4 water
     // Glide moving units toward their target tile at a steady march pace, with a
@@ -2448,19 +2483,27 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       // Accurate scene draw-call count: renderer.info reflects only the last post-FX pass
       // under EffectComposer, so count visible renderables directly (an InstancedMesh with
       // N instances is ONE draw call — that's the whole point of the scatter design).
-      let sceneDrawCalls = 0;
+      let sceneDrawCalls = 0, shadowCasters = 0;
+      const drawBy: Record<string, number> = { scatter: 0, sprites: 0, terrainWater: 0, other: 0 };
+      const groupOf = (o: THREE.Object3D): string => {
+        let p: THREE.Object3D | null = o;
+        while (p) { if (p === reliefScatter) return "scatter"; if (p === spriteGroup) return "sprites"; if (p === terrainMesh || p === waterSurface) return "terrainWater"; p = p.parent; }
+        return "other";
+      };
       scene.traverse((o) => {
         const m = o as THREE.Mesh;
         if ((m.isMesh || (m as unknown as THREE.Points).isPoints || (m as unknown as THREE.Line).isLine || (m as unknown as THREE.Sprite).isSprite) && o.visible) {
           let vis = true; let p: THREE.Object3D | null = o;
           while (p) { if (!p.visible) { vis = false; break; } p = p.parent; }
-          if (vis) sceneDrawCalls += 1;
+          if (vis) { sceneDrawCalls += 1; drawBy[groupOf(o)] += 1; if ((m as THREE.Mesh).castShadow) shadowCasters += 1; }
         }
       });
       return {
         relief: RELIEF,
         fps_swiftshader: Math.round(fpsEMA), // software GL — NOT representative of real-GPU fps
         sceneDrawCalls,
+        drawBy,
+        shadowCasters,
         terrainMesh: !!terrainMesh,
         terrainVerts: terrainMesh ? (terrainMesh.geometry.getAttribute("position") as THREE.BufferAttribute).count : 0,
         textures: { rock: !!terrainRock, snow: !!terrainSnow, cliff: !!terrainCliff, scree: !!terrainScree },
