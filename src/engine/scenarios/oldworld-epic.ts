@@ -191,14 +191,32 @@ export function oldWorldEpic(seed = "old-world"): CreateGameConfig {
     units[`${s.id}_explorer`] = { id: `${s.id}_explorer`, type: "explorer", ownerId: s.id, position: ep };
   });
 
-  // NOTE: region-locked ruins/villages at historical seats (Giza, Troy, Knossos, Stonehenge,
-  // Ur, …) are a follow-up — CreateGameConfig.map carries no ruins/villages field yet, so
-  // authored placement needs a small engine hook (else they're scattered at game creation).
+  // Region-locked RUINS at their historical seats (ids from discovery.ts), snapped to the
+  // nearest land and away from capitals. Authored here, so the engine won't scatter them.
+  const RUIN_SITES: Array<[number, number, string]> = [
+    [58, 47, "giza"], [86, 45, "ur"], [88, 42, "ashurbanipal"], [72, 30, "hattusa"],
+    [74, 34, "gobekli"], [58, 40, "knossos"], [56, 38, "mycenae"], [63, 33, "troy"],
+    [60, 60, "kerma"], [30, 34, "nuraghe"], [40, 30, "terramare"], [45, 12, "nebra"],
+    [35, 24, "hallstatt"], [19, 12, "stonehenge"], [14, 34, "tartessos"]
+  ];
+  const isLand = (c: number, r: number): boolean => { const t = tiles[keyOf(offsetToAxial(c, r))]; return !!t && t.terrain !== "sea" && t.terrain !== "coast" && t.terrain !== "great-river"; };
+  const snap = (c0: number, r0: number): Coord | null => {
+    for (let rad = 0; rad < 6; rad += 1) for (let dr = -rad; dr <= rad; dr += 1) for (let dc = -rad; dc <= rad; dc += 1) {
+      if (isLand(c0 + dc, r0 + dr)) { const p = offsetToAxial(c0 + dc, r0 + dr); if (!occupied.has(keyOf(p))) return p; }
+    }
+    return null;
+  };
+  const ruins: Record<string, { ruinId: string; excavated?: boolean }> = {};
+  for (const [c, r, id] of RUIN_SITES) {
+    const p = snap(c, r); if (!p) continue;
+    const k = keyOf(p); if (ruins[k]) continue;
+    ruins[k] = { ruinId: id, excavated: false }; occupied.add(k);
+  }
 
   return {
     seed,
     turnLimit: 160,
     players,
-    map: { width: W, height: H, regions: Array.from(usedRegions), rivers: {}, tiles, cities, units }
+    map: { width: W, height: H, regions: Array.from(usedRegions), rivers: {}, tiles, cities, units, ruins }
   };
 }

@@ -146,7 +146,11 @@ function normalizeMap(configMap: NonNullable<CreateGameConfig["map"]> | undefine
         }
       ])
     ),
-    units
+    units,
+    // Authored discovery sites pass straight through (scenario maps); createInitialGameState
+    // only scatters when these are absent.
+    ...(configMap?.ruins ? { ruins: configMap.ruins } : {}),
+    ...(configMap?.villages ? { villages: configMap.villages } : {})
   };
 }
 

@@ -659,5 +659,9 @@ export interface CreateGameConfig {
       Partial<City> & Pick<City, "id" | "ownerId" | "position" | "population">
     >;
     units?: Record<string, Partial<Unit> & Pick<Unit, "id" | "type" | "ownerId" | "position">>;
+    /** Authored discovery sites (hand-placed on scenario maps) — if present, the engine
+     *  uses these instead of scattering ruins/villages at random. Keyed by tile "q,r". */
+    ruins?: Record<string, { ruinId: string; excavated?: boolean; by?: string; full?: boolean }>;
+    villages?: Record<string, { peopleId: string; disposition: "open" | "wary" | "hostile"; befriendedBy?: string; contacted?: boolean; attempts?: number }>;
   };
 }
