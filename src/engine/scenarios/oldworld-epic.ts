@@ -69,73 +69,73 @@ export function oldWorldEpic(seed = "old-world"): CreateGameConfig {
     }
   };
 
-  // ---- LAND FIRST, then carve the seas back out — gives clean coastlines. ----
-  // (A) The northern continent: Europe from Iberia to the Steppe, y 8..60.
-  box(8, 10, 96, 60, "plains", "temperate");
-  box(18, 26, 34, 50, "forest", "Gaul");             // wooded Gaul
-  box(34, 14, 54, 40, "forest", "Germania");         // the Hercynian forest (denser)
-  ellipse(13, 56, 7, 11, "hills", "Iberia"); ellipse(13, 56, 5, 9, "plains", "Iberia"); // Iberian plateau
-  box(48, 42, 62, 58, "hills", "Balkans"); box(64, 30, 96, 46, "plains", "Steppe");
-  box(60, 50, 96, 62, "plains", "Anatolia"); box(64, 52, 94, 60, "hills", "Anatolia");
-  // (B) The eastern lands reaching south of the sea line.
-  box(68, 62, 78, 78, "plains", "Levant"); box(74, 60, 90, 80, "hills", "Mesopotamia");
-  box(84, 50, 96, 82, "hills", "Persia"); box(87, 54, 96, 76, "highlands", "Persia");
-  // (C) The African south: coastal strip fading into the Sahara.
-  box(10, 70, 74, 78, "plains", "Africa"); box(10, 78, 78, 100, "desert", "Africa");
-  box(60, 74, 72, 92, "desert", "Egypt"); box(63, 92, 72, 100, "desert", "Kush");
+  // ---- LATITUDE SKELETON: EUROPE (north) | a wide central MED sea | AFRICA (south). ----
+  // (A) EUROPE — one landmass, y 8..54; its Mediterranean coast is sculpted by Italy/Greece
+  // jutting down and the sea band below. The y54..71 gap is left as the Mediterranean.
+  box(8, 8, 96, 54, "plains", "temperate");
+  box(18, 22, 34, 50, "forest", "Gaul");             // wooded Gaul
+  box(34, 12, 55, 40, "forest", "Germania");         // the Hercynian forest
+  box(46, 40, 62, 52, "hills", "Balkans");
+  box(64, 26, 96, 46, "plains", "Steppe");           // Pontic-Caspian steppe
+  box(60, 46, 96, 60, "plains", "Anatolia"); box(64, 48, 92, 58, "hills", "Anatolia"); // Anatolia dips just below the sea line
+  box(8, 44, 22, 66, "hills", "Iberia"); box(9, 46, 20, 63, "plains", "Iberia");       // Iberian squarish peninsula reaching south
+  // (B) AFRICA — southern landmass, y 71..100; north coast fades into the Sahara.
+  box(8, 71, 80, 77, "plains", "Africa"); box(8, 77, 82, 100, "desert", "Africa");
+  box(60, 72, 72, 92, "desert", "Egypt"); box(63, 92, 72, 100, "desert", "Kush");
+  ellipse(38, 71, 5, 3, "plains", "Africa");         // the Carthaginian bulge (Tunisia) reaching for Sicily
+  // (C) EASTERN lands south of the sea line: Levant, Mesopotamia, Persia.
+  box(68, 60, 80, 78, "plains", "Levant"); box(74, 58, 90, 80, "hills", "Mesopotamia");
+  box(84, 48, 96, 82, "hills", "Persia"); box(87, 52, 96, 76, "highlands", "Persia");
 
-  // ---- Carve the MEDITERRANEAN: one connected sea, wide W & E basins, narrow at Sicily,
-  // splitting Europe from Africa. This is the map's signature — get it reading first. ----
-  ellipse(26, 67, 17, 6, "sea", "Mediterranean");    // western basin
-  ellipse(61, 66, 17, 6, "sea", "Mediterranean");    // eastern basin
-  box(43, 63, 48, 70, "sea", "Mediterranean");       // Sicilian narrows connect the basins
-
-  // Other seas.
-  box(0, 0, 7, 100, "sea", "Atlantic");              // Atlantic west edge
-  ellipse(25, 13, 8, 8, "sea", "North Sea");         // North Sea (frees Britain)
-  ellipse(48, 58, 3, 8, "sea", "Adriatic");          // Adriatic (splits Italy from Illyria)
-  ellipse(58, 62, 3, 4, "sea", "Aegean");            // Aegean
-  ellipse(70, 48, 9, 5, "sea", "Black Sea");         // Black Sea
-  ellipse(88, 42, 5, 7, "sea", "Caspian");           // Caspian (landlocked)
+  // ---- SEAS carved into the land ----
+  // The MEDITERRANEAN — carve one clear central sea (Europe above it, Africa below), wide W &
+  // E basins narrowing at Sicily; Italy/Greece/islands are painted back into it afterwards.
+  box(20, 58, 42, 70, "sea", "Mediterranean");       // western basin
+  box(50, 57, 78, 70, "sea", "Mediterranean");       // eastern basin
+  box(42, 62, 50, 68, "sea", "Mediterranean");       // the Sicilian narrows join them
+  box(0, 0, 6, 100, "sea", "Atlantic");              // Atlantic west edge
+  ellipse(26, 12, 8, 7, "sea", "North Sea");         // North Sea (frees Britain)
+  ellipse(70, 50, 9, 4, "sea", "Black Sea");         // Black Sea, north of Anatolia
+  ellipse(89, 42, 4, 6, "sea", "Caspian");           // Caspian (landlocked)
   box(66, 84, 70, 100, "sea", "Red Sea");            // Red Sea inlet east of Egypt
   box(82, 78, 88, 86, "sea", "Persian Gulf");
+  ellipse(48, 60, 2.5, 7, "sea", "Adriatic");        // Adriatic splits Italy from the Balkans
+  ellipse(60, 64, 3, 4, "sea", "Aegean");            // Aegean, east of Greece
 
-  // ---- Paint the signature lands BACK INTO the sea (islands + the boot) ----
-  // Britain + Ireland (islands off the NW), Caledonian highlands to the north.
-  ellipse(18, 16, 4, 8, "plains", "Britain"); box(15, 5, 21, 12, "highlands", "Caledonia");
-  ellipse(10, 16, 2.5, 4, "plains", "Hibernia");
-  // ITALY — the boot: a peninsula reaching south from the north shore toward Sicily.
-  box(38, 50, 44, 58, "hills", "Italia");            // Po plain + upper boot
-  path([[41, 57], [42, 62], [43, 66], [45, 69]], "hills", 1, "Italia"); // the leg + toe
-  setPct(41, 56, "plains", "Italia");                // Latium (Rome)
-  ellipse(47, 71, 2.5, 2, "hills", "Sicily");        // Sicily off the toe
-  ellipse(35, 63, 2, 2.5, "hills", "Sardinia"); ellipse(36, 58, 1.5, 2, "hills", "Corsica");
-  // Greek peninsulas jut into the Aegean/E Med.
-  path([[55, 60], [56, 64], [57, 67]], "hills", 1, "Greece"); ellipse(56, 62, 3, 3, "hills", "Greece");
-  ellipse(38, 71, 4, 3, "plains", "Africa");         // Carthaginian bulge (Tunisia) toward Sicily
+  // ---- Signature lands painted BACK into the sea (islands + the boot) ----
+  ellipse(17, 15, 4, 7, "plains", "Britain"); box(15, 4, 21, 11, "highlands", "Caledonia"); // Britain
+  ellipse(9, 15, 2, 4, "plains", "Hibernia");        // Ireland
+  // ITALY — the boot: hangs from Europe (y52) down through the Med toward Sicily.
+  box(38, 50, 44, 55, "hills", "Italia");            // Po plain + top of the boot (attached to Europe)
+  path([[41, 55], [42, 60], [43, 64], [45, 68]], "hills", 1, "Italia"); // the leg down to the toe
+  setPct(41, 56, "plains", "Italia");                // Latium (Rome), west coast
+  ellipse(47, 70, 2.5, 2, "hills", "Sicily");        // Sicily off the toe (Messina narrows kept 1 hex)
+  ellipse(35, 62, 2, 2.5, "hills", "Sardinia"); ellipse(36, 57, 1.5, 2, "hills", "Corsica");
+  // GREECE — peninsulas + Peloponnese jutting into the E Med.
+  box(53, 55, 60, 61, "hills", "Greece"); path([[56, 60], [57, 64], [58, 67]], "hills", 1, "Greece");
 
   // ---- MOUNTAIN SPINES (§2b) — the great ranges as ridge paths ----
-  path([[15, 49], [19, 48], [23, 48]], "mountains", 0, "Pyrenees");         // Pyrenees seal Iberia
+  path([[15, 47], [19, 47], [23, 47]], "mountains", 0, "Pyrenees");         // Pyrenees seal Iberia
   path([[36, 45], [40, 44], [44, 45], [47, 47]], "mountains", 1, "Alps");   // Alps arc (Hannibal country)
-  path([[40, 51], [42, 57], [44, 63]], "mountains", 0, "Apennines");        // Apennine spine of Italy
-  path([[62, 58], [66, 59], [72, 58]], "mountains", 0, "Taurus");           // Taurus (south Anatolia)
-  path([[84, 54], [87, 62], [88, 70]], "mountains", 0, "Zagros");           // Zagros wall of Mesopotamia
+  path([[41, 52], [42, 58], [44, 64]], "mountains", 0, "Apennines");        // Apennine spine of Italy
+  path([[62, 56], [66, 57], [72, 56]], "mountains", 0, "Taurus");           // Taurus (south Anatolia)
+  path([[84, 52], [87, 60], [88, 68]], "mountains", 0, "Zagros");           // Zagros wall of Mesopotamia
   path([[76, 44], [80, 44], [84, 45]], "mountains", 0, "Caucasus");         // Caucasus (Black↔Caspian)
   path([[13, 74], [18, 75], [23, 75]], "mountains", 0, "Atlas");            // Atlas (NW Africa)
   path([[50, 40], [55, 41], [61, 42]], "mountains", 0, "Carpathians");      // Carpathians (N of Danube)
 
   // Straits — exactly 1 hex of water between two lands (naval chokepoints).
-  setPct(11, 69, "sea", "Gibraltar"); setPct(62, 54, "sea", "Bosporus"); setPct(22, 24, "sea", "Channel");
+  setPct(11, 68, "sea", "Gibraltar"); setPct(62, 52, "sea", "Bosporus"); setPct(22, 22, "sea", "Channel");
 
   // ---- 3 + rivers: RIVERS. Great rivers become great-river TILES; minors = edge rivers. ----
-  // Nile: south edge → delta → Med, with the Kush cataract narrows.
-  const nile: Array<[number, number]> = [[67, 97], [67, 92], [66, 86], [66, 82], [65, 78], [66, 76]];
+  // Nile: south edge (Kush) → the valley → a delta fan at the Mediterranean's south shore.
+  const nile: Array<[number, number]> = [[67, 98], [67, 90], [66, 82], [66, 76], [65, 72], [64, 70]];
   path(nile, "great-river", 0, "Egypt");
-  box(64, 74, 68, 76, "great-river", "Egypt");        // delta fan (2 hexes wide)
-  // Lower Danube: Iron Gates → Black Sea.
-  path([[52, 44], [58, 46], [62, 47], [66, 48]], "great-river", 0, "Danube");
+  box(61, 70, 67, 72, "great-river", "Egypt");        // delta fan into the Med (2 hexes wide)
+  // Lower Danube: the Balkans → the Black Sea.
+  path([[50, 44], [56, 46], [62, 48], [66, 49]], "great-river", 0, "Danube");
   // Lower Rhine: delta stretch to the North Sea.
-  path([[32, 32], [31, 26], [30, 22]], "great-river", 0, "Rhine");
+  path([[32, 34], [31, 26], [29, 18], [28, 15]], "great-river", 0, "Rhine");
   // Tigris & Euphrates → Persian Gulf.
   path([[76, 64], [78, 70], [80, 76], [81, 80]], "great-river", 0, "Mesopotamia"); // Euphrates
   path([[80, 64], [82, 70], [83, 76], [82, 80]], "great-river", 0, "Mesopotamia"); // Tigris

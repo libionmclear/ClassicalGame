@@ -2634,7 +2634,7 @@ export function initDemo(canvas: HTMLCanvasElement, which: string): void {
   const manifest = ((globalThis as { HEGEMON_SPRITES?: Record<string, { unit?: string[]; city?: string[] }> }).HEGEMON_SPRITES) || {};
   const roster: Record<string, string> = { rome: "#c0392b", carthage: "#8e44ad", greece: "#2e86de", egypt: "#d4ac0d", gaul: "#27ae60", parthia: "#e67e22" };
   let state: GameState;
-  if (["oikoumene", "italia", "hellas", "oldworld"].includes(which)) {
+  if (["oikoumene", "italia", "hellas", "oldworld", "oldworld-epic"].includes(which)) {
     state = createInitialGameState(loadScenario(which as never).config);
   } else {
     state = createInitialGameState(generateMap({ size: (which as never) || "large", seed: "board3d-demo", playerCount: 4 }));
