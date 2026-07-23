@@ -95,7 +95,7 @@ export type TileAt = (q: number, r: number) => TileSample | undefined;
 export function mountainnessOf(terrain: string): number {
   return terrain === "mountains" ? 1 : terrain === "highlands" ? 0.55 : terrain === "hills" ? 0.15 : 0;
 }
-export const MOUNTAIN_AMP = 0.72; // ridged-crest amplitude on full mountains (dramatic peaks; mountains are impassable so units never stand on the crest)
+export const MOUNTAIN_AMP = 0.86; // ridged-crest amplitude on full mountains — taller so ranges tower under the softer Gate 2 light (mountains are impassable; units never stand on the crest)
 
 // The heightfield: a smooth, distance-weighted blend of the surrounding hex centres'
 // elevations, so the surface flows between hexes with no cliffs (spec §2). Colour is
@@ -221,7 +221,7 @@ export function buildTerrainSurface(
       shader.uniforms.uCliff = { value: cliff };
       shader.uniforms.uScree = { value: scree };
       shader.uniforms.uRockSlope = { value: new THREE.Vector2(0.24, 0.68) }; // slope where rock starts / is full
-      shader.uniforms.uSnowY = { value: new THREE.Vector2(1.55, 1.98) };     // world-height snowline band (summits only — rock faces show below)
+      shader.uniforms.uSnowY = { value: new THREE.Vector2(1.80, 2.28) };     // world-height snowline band (summits only — rock faces show below; raised for taller peaks)
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", "#include <common>\nattribute float aMtn;\nvarying vec3 vWN_t;\nvarying vec3 vWP_t;\nvarying float vMtn_t;")
         .replace("#include <project_vertex>", "#include <project_vertex>\nvWN_t = normalize(mat3(modelMatrix) * normal);\nvWP_t = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvMtn_t = aMtn;");
