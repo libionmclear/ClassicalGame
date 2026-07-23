@@ -12,6 +12,13 @@
 //   tradeRouteGold, special  — special = named hook implemented in engine
 //
 // NOT PAY-TO-WIN: legendary cards are distinct, some carry drawbacks.
+//
+// HISTORY DECK DESIGN RULE (Event cards): the mechanic must BE the historical event's actual
+// trick — never a themed stat bonus. Hannibal's card crosses impassable mountains; Fabius'
+// refuses battle; Cincinnatus raises an emergency levy. Rarity logic: Common = logistics,
+// Rare = clever operations, Epic = audacious impossibilities. Rulers/generals may appear in
+// events (they are also Legends) so long as the card NAME doesn't collide with a Legend or a
+// Figure. Each Event ships with a `flavor` line and a `codex` note.
 
 export const RARITY = ["common", "rare", "epic", "legendary"];
 
@@ -320,6 +327,60 @@ export const EVENT_CARDS = [
   { id:"event-rubicon",   name:"Crossing the Rubicon", rarity:"legendary", civ:"rome",     effect:{ instant:"+25atk-3turns, -2stability" } },
   { id:"event-oath",      name:"Oath of Hamilcar",     rarity:"legendary", civ:"carthage", effect:{ instant:"pick-enemy-civ, +15pct-vs-them-permanent" } },
   { id:"event-horses",    name:"Heavenly Horses",      rarity:"legendary", civ:"han",      effect:{ instant:"spawn-2-horsemen-capital" } },
+
+  // ── THE HISTORY DECK — every mechanic is the event's actual trick (see header rule) ──
+  { id:"event-caesars-bridge", name:"Caesar's Bridge", rarity:"epic", civ:null, requiresTech:"engineering",
+    effect:{ instant:"bridge-adjacent-river-2-turns" },
+    flavor:"In ten days the Rhine was bridged. In eighteen, Caesar had crossed, burned, and returned — and tore his bridge down behind him, because Rome crosses when it pleases.",
+    codex:"55 BC: rather than ferry his army across the Rhine, Caesar's engineers drove paired timber piles into the riverbed and trestled a bridge some 400 m long in ten days — then dismantled it on the way home, a message to the Germans that Rome could come and go at will." },
+  { id:"event-hannibal-alps", name:"Hannibal Crosses the Alps", rarity:"epic", civ:null,
+    effect:{ instant:"cross-mountains-attrition" },
+    flavor:"218 BC. They said the Alps were Italy's wall. He brought elephants.",
+    codex:"Hannibal led ~50,000 men, cavalry and war elephants over the Alps in fifteen days of early winter, losing nearly half to cold, rockfall and ambush — and descended into Italy where no army was thought able to arrive." },
+  { id:"event-thermopylae", name:"Thermopylae's Stand", rarity:"epic", civ:null,
+    effect:{ instant:"pass-defense-immunity-2-turns" },
+    flavor:"The pass was wide enough for a cart. It was enough.",
+    codex:"480 BC: at the Hot Gates, a few thousand Greeks under Leonidas held the Persian host for three days. In the narrows numbers could not be brought to bear — the choke point, not the courage alone, was the weapon." },
+  { id:"event-fabian", name:"The Fabian Strategy", rarity:"rare", civ:null,
+    effect:{ instant:"withdraw-before-combat-3-turns" },
+    flavor:"Rome learned to win by not fighting. Hannibal never lost a battle — and lost the war.",
+    codex:"Fabius Maximus 'Cunctator' (the Delayer) shadowed Hannibal for years, refusing pitched battle, cutting his foragers and starving his campaign of the decisive victory it needed. Attrition beat the unbeaten." },
+  { id:"event-sacred-geese", name:"The Sacred Geese", rarity:"rare", civ:null,
+    effect:{ instant:"cancel-ambush-reveal-adjacent" },
+    flavor:"390 BC. The dogs slept. The geese of Juno did not.",
+    codex:"When the Gauls scaled the Capitol by night, the watchdogs stayed silent but the geese sacred to Juno raised the alarm, rousing Marcus Manlius in time to throw the climbers back — vigilance where none was expected." },
+  { id:"event-cincinnatus", name:"Cincinnatus Called from the Plow", rarity:"rare", civ:null,
+    effect:{ instant:"spawn-militia-capital-level" },
+    flavor:"They found him at his plow. Sixteen days later, Rome was saved, and he went back to it.",
+    codex:"458 BC: with a Roman army trapped, the Senate named Cincinnatus dictator. He raised the levy, broke the siege, resigned his absolute power after sixteen days and returned to his farm — the model of the citizen-soldier." },
+  { id:"event-ten-thousand", name:"The March of the Ten Thousand", rarity:"epic", civ:null,
+    effect:{ instant:"retreat-army-to-nearest-city" },
+    flavor:"Thálatta! Thálatta! — The sea! The sea!",
+    codex:"401 BC: stranded deep in Persia after their employer died in battle, ten thousand Greek mercenaries fought their way home over a thousand miles of hostile land and mountain to the Black Sea — Xenophon's Anabasis." },
+  { id:"event-circumvallation", name:"Circumvallation", rarity:"rare", civ:null, requiresTech:"siegecraft",
+    effect:{ instant:"siege-lines" },
+    flavor:"Caesar besieged the besiegers' rescuers. Both walls held.",
+    codex:"52 BC at Alesia, Caesar ringed Vercingetorix's fortress with an inner wall (contravallation) and himself with an outer wall (circumvallation) against the relief army — and won trapped between the two." },
+  { id:"event-scorched-earth", name:"Scorched Earth", rarity:"rare", civ:null,
+    effect:{ instant:"self-pillage-region-attrition" },
+    flavor:"Darius marched into Scythia and found nothing. Then winter found him.",
+    codex:"The Scythians answered Darius' invasion (~513 BC) by burning their own grass and wells and retreating endlessly, giving the vast Persian army nothing to eat, seize, or fight — and let the land defeat it." },
+  { id:"event-evocatio", name:"Evocatio", rarity:"epic", civ:null,
+    effect:{ instant:"besieged-city-loyalty-defense-down" },
+    flavor:"Queen Juno, leave this city. Come to Rome, where you are wanted.",
+    codex:"Before storming a city the Romans performed the evocatio — formally inviting its patron gods to abandon it for Rome, where a new temple awaited them. Attested at the fall of Veii, 396 BC: take the gods, and the walls follow." },
+  { id:"event-marius-mules", name:"Marius' Mules", rarity:"common", civ:null,
+    effect:{ instant:"infantry+1move-3-turns" },
+    flavor:"Each man his own mule: gear, rations, stakes, and Rome on his back.",
+    codex:"Marius' reforms (~107 BC) had legionaries carry their own kit, rations and palisade stakes, cutting the baggage train that slowed an army — 'Marius' mules' marched faster and freer for it." },
+  { id:"event-ver-sacrum", name:"Ver Sacrum", rarity:"rare", civ:null,
+    effect:{ instant:"free-settler-4hex" },
+    flavor:"The children of the spring were vowed to the god — and to the road.",
+    codex:"The 'Sacred Spring': in crisis the Italic peoples vowed a year's births to the gods; grown, that generation was sent out to found a new community elsewhere — colonisation as ritual." },
+  { id:"event-xerxes-pontoon", name:"Xerxes' Pontoon", rarity:"epic", civ:null, requiresTech:"engineering",
+    effect:{ instant:"bridge-sea-strait-2-turns" },
+    flavor:"He whipped the sea for breaking his bridge. Then he built a better one.",
+    codex:"480 BC: Xerxes bridged the Hellespont by lashing hundreds of ships side to side and decking them into a road for his army. The first bridges were destroyed by a storm; he had the strait lashed 300 times, and built again." },
 ];
 
 export const PACK_ECONOMY = {

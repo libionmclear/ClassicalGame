@@ -3178,7 +3178,19 @@
         .join("");
   }
 
+  // Remove temporary bridges (Caesar's Bridge) once their turn has passed.
+  function pruneTempBridges() {
+    if (!state || !state.tempBridges || !state.tempBridges.length) return;
+    const keep = [];
+    for (const b of state.tempBridges) {
+      if (state.turn >= b.expire) { const t = state.map.tiles[b.key]; if (t && t.improvement === "bridge") delete t.improvement; }
+      else keep.push(b);
+    }
+    state.tempBridges = keep;
+  }
+
   function render() {
+    pruneTempBridges();
     const current = state.players[state.currentPlayerIndex];
     const victory = engine.getVictoryStatus(state);
 
@@ -4422,7 +4434,7 @@
     CARDS.push({ id: e.id, type: "edict", civ: e.civ || null, rarity: e.rarity, name: e.name, icon: "📜", effect: e.effect, benefit: effectSummary(e.effect), flags: effectFlags(e.effect) });
   }
   for (const e of V2.EVENT_CARDS) {
-    CARDS.push({ id: e.id, type: "event", civ: e.civ || null, rarity: e.rarity, name: e.name, icon: "✨", effect: e.effect, benefit: effectSummary(e.effect), flags: effectFlags(e.effect) });
+    CARDS.push({ id: e.id, type: "event", civ: e.civ || null, rarity: e.rarity, name: e.name, icon: "✨", effect: e.effect, benefit: effectSummary(e.effect), flags: effectFlags(e.effect), requiresTech: e.requiresTech || null, flavor: e.flavor || null, codex: e.codex || null });
   }
   // Great Works (Cities v3 §4): a card kind of their own — built (🗿) or heritage
   // (🏛️, restore an ancient monument). civ:null are universal heritage, claimable by
@@ -4623,6 +4635,9 @@
     if (!card || card.type !== "event") return;
     if (!civCardOk(card, HUMAN_ID)) { showCombatToast("✗ " + card.name + " only works for its own civilization.", "loss"); return; }
     const me = human();
+    if (card.requiresTech && (!me.techs || me.techs.indexOf(card.requiresTech) === -1)) {
+      showCombatToast("✗ " + card.name + " needs " + card.requiresTech.replace(/-/g, " ") + " researched.", "loss"); return;
+    }
     const eff = (card.effect && card.effect.instant) || "";
     let msg = "";
     if (eff === "capital+10food") {
@@ -4632,6 +4647,23 @@
     } else if (eff === "+15science") {
       me.science += 15;
       msg = "📜 " + card.name + " — +15 science.";
+    } else if (eff === "bridge-adjacent-river-2-turns") {
+      // Caesar's Bridge: span a great river beside your army with a temporary bridge —
+      // land units cross freely (engine reads tile.improvement="bridge"); pruned after 2 turns.
+      const HEX_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+      const myUnits = Object.values(state.map.units).filter((u) => u.ownerId === HUMAN_ID);
+      let placed = null;
+      for (const u of myUnits) {
+        for (const d of HEX_DIRS) {
+          const tk = (u.position.q + d[0]) + "," + (u.position.r + d[1]); const t = state.map.tiles[tk];
+          if (t && t.terrain === "great-river" && t.improvement !== "bridge") { t.improvement = "bridge"; placed = tk; break; }
+        }
+        if (placed) break;
+      }
+      if (!placed) { showCombatToast("✗ " + card.name + " needs one of your armies beside a great river.", "loss"); return; }
+      state.tempBridges = state.tempBridges || [];
+      state.tempBridges.push({ key: placed, expire: state.turn + 2 });
+      msg = "🌉 " + card.name + " — a bridge spans the river; your armies cross freely for two turns.";
     } else {
       // Needs an engine hook that doesn't exist yet — flag and DON'T consume.
       showCombatToast("⚑ " + card.name + " isn't wired to the engine yet — flagged (" + eff + ").", "");
