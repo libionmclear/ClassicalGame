@@ -105,6 +105,10 @@ export interface GenerateMapOptions {
   humanCiv?: string;
   /** Exact seat order of civ ids (overrides humanCiv); used to measure balance. */
   civOrder?: string[];
+  /** The "Great River Valley" archetype: let long/merged rivers upgrade their lower
+   *  course to navigable great-river TILES. Off by default (normal maps get only minor
+   *  edge rivers). */
+  greatRivers?: boolean;
 }
 
 export interface CivInfo {
@@ -257,14 +261,20 @@ function buildTerrain(seed: string, spec: SizeSpec): TerrainField {
 
 // Carve rivers by tracing downhill from high, wet interior tiles to the sea.
 // Each step marks the crossed edge; the renderer draws them as flowing lines.
+// Flow at/above this cumulative value upgrades a river tile to a navigable great-river
+// (the lower course + everything below a major confluence). Config.
+const GREAT_RIVER_FLOW = 7;
+
 function carveRivers(
   tiles: Record<string, { terrain: TerrainType; region: string }>,
   elevation: Record<string, number>,
   spec: SizeSpec,
-  count: number
+  count: number,
+  greatRivers = false
 ): Record<string, boolean> {
   const rivers: Record<string, boolean> = {};
   const inBounds = (c: Coord) => tiles[keyOf(c)] !== undefined;
+  const committedPaths: string[][] = []; // ordered source→sea tile keys, per committed river
 
   // Sources: the highest land tiles, greedily spaced apart.
   const sources = Object.keys(tiles)
@@ -283,6 +293,7 @@ function carveRivers(
     const visited = new Set<string>([currentKey]);
     const maxSteps = spec.width + spec.height;
     const segments: string[] = []; // this river's edges, committed only if it reaches the sea
+    const pathTiles: string[] = [currentKey]; // ordered source→sea tiles (for flow/great-river)
     let reachedSea = false;
     for (let step = 0; step < maxSteps; step += 1) {
       const current = parseKey(currentKey);
@@ -307,10 +318,30 @@ function carveRivers(
       currentKey = bestKey;
       const t = tiles[bestKey].terrain;
       if (t === "sea" || t === "coast") { reachedSea = true; break; } // reached the coast
+      pathTiles.push(bestKey);
     }
     // Commit only a river that actually found the sea — better no river than a
     // chain of disjoint puddles stranded in the interior.
-    if (reachedSea) for (const e of segments) rivers[e] = true;
+    if (reachedSea) { for (const e of segments) rivers[e] = true; committedPaths.push(pathTiles); }
+  }
+
+  // River growth: accumulate flow down each committed course (grows per hex, and jumps at
+  // confluences where courses share a tile). Where flow crosses GREAT_RIVER_FLOW — the
+  // lower course, and everything below a major confluence — upgrade the land tile to a
+  // navigable great-river TILE (fordable upstream via the minor edges, a barrier+highway
+  // downstream). Only in the Great River Valley archetype.
+  if (greatRivers) {
+    const flowAt: Record<string, number> = {};
+    for (const path of committedPaths) {
+      let flow = 0;
+      for (const tk of path) {
+        flow += 1 + (flowAt[tk] || 0); // per-hex growth + absorb any tributary already here
+        if (flow > (flowAt[tk] || 0)) flowAt[tk] = flow;
+      }
+    }
+    for (const tk of Object.keys(flowAt)) {
+      if (flowAt[tk] >= GREAT_RIVER_FLOW && WALKABLE.has(tiles[tk].terrain)) tiles[tk].terrain = "great-river";
+    }
   }
 
   return rivers;
@@ -411,7 +442,8 @@ function tryGenerate(
   seed: string,
   spec: SizeSpec,
   playerCount: number,
-  roster: ReadonlyArray<CivInfo> = CIV_ROSTER
+  roster: ReadonlyArray<CivInfo> = CIV_ROSTER,
+  greatRivers = false
 ): CreateGameConfig | null {
   const { tiles, regions, elevation } = buildTerrain(seed, spec);
   const component = largestWalkableComponent(tiles, spec);
@@ -462,7 +494,7 @@ function tryGenerate(
     units[`${id}_explorer`] = { id: `${id}_explorer`, type: "explorer", ownerId: id, position: start.explorer };
   }
 
-  const rivers = carveRivers(tiles, elevation, spec, spec.rivers);
+  const rivers = carveRivers(tiles, elevation, spec, spec.rivers, greatRivers);
   sprinkleResources(tiles, seed);
 
   return {
@@ -479,6 +511,7 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   const baseSeed = options.seed ?? "hegemon-map";
   const requested = Math.max(2, Math.min(MAX_PLAYERS, Math.floor(options.playerCount ?? 2)));
   const turnLimit = TURN_LIMITS[size] ?? 60;
+  const greatRivers = options.greatRivers === true; // Great River Valley archetype
   // Seat the human's chosen civ first so it is always in the game (and player 0).
   // A full civOrder (used by the balance harness) overrides this to seat civs in
   // an exact order, so every civ can be measured at every seat.
@@ -494,7 +527,7 @@ export function generateMap(options: GenerateMapOptions = {}): CreateGameConfig 
   for (let playerCount = requested; playerCount >= 2; playerCount -= 1) {
     for (let attempt = 0; attempt < 12; attempt += 1) {
       const seed = attempt === 0 ? baseSeed : `${baseSeed}#${attempt}`;
-      const config = tryGenerate(seed, spec, playerCount, roster);
+      const config = tryGenerate(seed, spec, playerCount, roster, greatRivers);
       if (config) {
         config.turnLimit = turnLimit;
         return config;
