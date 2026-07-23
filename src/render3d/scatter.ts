@@ -17,6 +17,17 @@ function tileRng(q: number, r: number, salt: number): () => number {
 
 export type Climate = "mediterranean" | "northern" | "arid";
 
+// §11 positional climate: map a tile's region (a latitude band on random maps —
+// north/central/south — or a named Old-World region) to its scatter climate, so regions
+// are recognisable at a glance. Germania/Britannia/Alps = northern oak/beech/birch/fir;
+// the south + Nile/Africa = arid palms/scrub; the Mediterranean middle = olive/cypress/pine.
+export function climateOf(region: string | undefined): Climate {
+  const r = (region || "").toLowerCase();
+  if (/north|germ-|germania|britann|britain|gaul|gallia|alps|alpes|noricum|pannon|dacia|scyth|belgica|rhen|danub/.test(r)) return "northern";
+  if (/south|nile|nubia|egypt|aegypt|africa|libya|numid|arabia|sahara|desert|mesopotam|syria|judea/.test(r)) return "arid";
+  return "mediterranean"; // central band + Italia/Graecia/Hispania/Anatolia/islands
+}
+
 // Per climate → per biome → prop entries (key + expected count "density"). Weighted so a
 // tile draws a small, varied handful. Papyrus is applied by the Nile rule below, not here.
 type Entry = { key: string; n: number };

@@ -21,7 +21,7 @@ import type { GameState } from "../engine/types";
 import { buildCity as buildCityV2 } from "./cityModels.js";
 import { buildTerrainSurface, sampleSurface, elevationOf, mountainnessOf, type TileSample, type TileAt } from "./terrain";
 import { buildWaterSurface } from "./water";
-import { pickScatter, type Climate } from "./scatter";
+import { pickScatter, climateOf, type Climate } from "./scatter";
 import { normalizeGLB } from "./propnorm";
 import { buildDistrict } from "./districtModels.js";
 
@@ -1306,7 +1306,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       let dens = density;
       if (dd > R_FULL2) dens = density * (1 - 0.7 * ((Math.sqrt(dd) - R_FULL) / SPAN)); // thin with distance
       if (isBeach(tv.q, tv.r)) dens *= 0.2;             // sandy beach band stays mostly open
-      const places = pickScatter(tv.t, tv.q, tv.r, "mediterranean" as Climate, dens, riverTiles.has(tv.q + "," + tv.r));
+      const places = pickScatter(tv.t, tv.q, tv.r, climateOf((tv as { region?: string }).region), dens, riverTiles.has(tv.q + "," + tv.r));
       if (!places.length) continue;
       for (const p of places) {
         if (total >= HARD_CAP) break;
@@ -2563,10 +2563,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
           if (vis) { sceneDrawCalls += 1; drawBy[groupOf(o)] += 1; if ((m as THREE.Mesh).castShadow) shadowCasters += 1; }
         }
       });
+      let focusRegion = "", focusClimate = "";
+      if (lastView) {
+        let best = Infinity, bt: TileView | null = null;
+        for (const tv of lastView.tiles) { const c = axialToWorld(tv.q, tv.r); const dd = (c.x - controls.target.x) ** 2 + (c.z - controls.target.z) ** 2; if (dd < best) { best = dd; bt = tv; } }
+        if (bt) { focusRegion = (bt as { region?: string }).region || ""; focusClimate = climateOf(focusRegion); }
+      }
       return {
         relief: RELIEF,
         fps_swiftshader: Math.round(fpsEMA), // software GL — NOT representative of real-GPU fps
         sceneDrawCalls,
+        focusRegion, focusClimate,
         drawBy,
         shadowCasters,
         terrainMesh: !!terrainMesh,

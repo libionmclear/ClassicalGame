@@ -2417,7 +2417,7 @@
       // `open` = the world-ocean belt beyond the map's border. Flagged so the board
       // can render it as sea but keep it OUT of the framing (or the camera would zoom
       // out to fit the whole ocean instead of the playable map).
-      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null, wx: wx, ruin: ruinHere, village: vilHere ? vilHere.disposition : null, open: tile.open || 0 });
+      tiles.push({ q: q, r: r, t: tile.terrain, v: v, o: owner, h: h, res: tile.resource || null, imp: tile.improvement || null, wx: wx, ruin: ruinHere, village: vilHere ? vilHere.disposition : null, open: tile.open || 0, region: tile.region || "" });
       if (owner && v > 0) {
         for (const d of AXIAL_DIRS) {
           const nk = q + d[0] + "," + (r + d[1]);
