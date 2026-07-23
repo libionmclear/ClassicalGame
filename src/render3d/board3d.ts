@@ -1205,6 +1205,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const NO_SCATTER = (() => {
     try { return typeof location !== "undefined" && /(?:[?&])scatter=off\b/.test(location.search); } catch { return false; }
   })();
+  // Dev-only: ?scatter=wide widens the scatter cull + cap so a single wide screenshot can
+  // show trees across several biome bands at once (heavier — for the acceptance shot).
+  const SC_WIDE = (() => {
+    try { return typeof location !== "undefined" && /(?:[?&])scatter=wide\b/.test(location.search); } catch { return false; }
+  })();
   let terrainMesh: THREE.Mesh | null = null;
   let terrainSig = "";
   // The live surface sampler, set by buildTerrain — lets units/cities/improvements sit
@@ -1325,9 +1330,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // thinning out, nothing past R_CULL. Keeps the instance/vertex load bounded regardless
     // of how much map is revealed; rebuilt as the camera pans (loop watches the target).
     const camX = controls.target.x, camZ = controls.target.z;
-    const R_FULL = 20, R_CULL = 40, SPAN = R_CULL - R_FULL;
+    const R_FULL = SC_WIDE ? 44 : 20, R_CULL = SC_WIDE ? 80 : 40, SPAN = R_CULL - R_FULL;
     const R_FULL2 = R_FULL * R_FULL, R_CULL2 = R_CULL * R_CULL;
-    const HARD_CAP = 1000; // safety backstop on total instances (bounds the revealed-map case)
+    const HARD_CAP = SC_WIDE ? 3200 : 1000; // safety backstop on total instances (bounds the revealed-map case)
     let total = 0;
     const byKey = new Map<string, Array<{ x: number; z: number; yaw: number; scale: number }>>();
     for (const tv of view.tiles) {
