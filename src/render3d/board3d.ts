@@ -1744,8 +1744,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b, mtn: mountainnessOf(tv.t) };
     };
     reliefTileAt = tileAt; // units/cities/improvements now sample this for their height (analytic fallback)
+    // §7b: cities (and districts) get a level platform at their hex's blended height, so the
+    // model never tilts on a slope. Platform = the analytic surface at the tile centre.
+    const flatten = new Map<string, number>();
+    for (const s of view.sprites) if (s.kind === "city") { const cc = axialToWorld(s.q, s.r); flatten.set(s.q + "," + s.r, sampleSurface(cc.x, cc.z, tileAt).y); }
+    for (const dv of view.districts || []) { const cc = axialToWorld(dv.q, dv.r); flatten.set(dv.q + "," + dv.r, sampleSurface(cc.x, cc.z, tileAt).y); }
     ensureTerrainTextures();
-    { const surf = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow, cliff: terrainCliff, scree: terrainScree }); terrainMesh = surf.mesh; terrainHeightAt = surf.heightAt; }
+    { const surf = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow, cliff: terrainCliff, scree: terrainScree, flatten }); terrainMesh = surf.mesh; terrainHeightAt = surf.heightAt; }
     scene.add(terrainMesh);
     // Hide the hex prisms + their sea tints; the reflective sea plane stays. scatterGroup
     // stays VISIBLE — in relief it now holds only improvements + resource-flavour props

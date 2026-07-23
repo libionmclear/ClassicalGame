@@ -149,7 +149,9 @@ export interface SurfaceOpts {
   snow?: THREE.Texture | null;   // alpine-snow: high gentle shelves above the snowline (§2b)
   cliff?: THREE.Texture | null;  // cliff-strata: layered sedimentary walls on the steepest faces (§2c)
   scree?: THREE.Texture | null;  // mountain-scree: loose debris on lower/gentler mountain ground (§2b)
+  flatten?: Map<string, number>; // §7b: tileKey "q,r" → platform height; city hexes level off + skirt
 }
+function smooth01(a: number, b: number, x: number): number { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 // The surface mesh PLUS a sampler that returns the mesh's OWN height at any (x,z) — a
 // bilinear lookup of the vertex grid, so it matches what the tessellated triangles actually
 // render (the continuous sampleSurface has sub-grid ridges the mesh can't, which is why
@@ -163,6 +165,7 @@ export function buildTerrainSurface(
   const subdiv = opts.subdiv ?? 3.9;      // grid vertices per world unit (finer = sharper ridges)
   const margin = opts.margin ?? 2.0;
   const maxSeg = opts.maxSeg ?? 400;      // per-axis cap (perf / quality tier)
+  const flat = opts.flatten;              // §7b city platforms
 
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (const t of tiles) {
@@ -188,7 +191,19 @@ export function buildTerrainSurface(
       const wz = minZ + (iz / (nz - 1)) * d;
       const s = sampleSurface(wx, wz, tileAt);
       const vi = (iz * nx + ix) * 3;
-      pos[vi] = wx; pos[vi + 1] = s.y; pos[vi + 2] = wz;
+      let vy = s.y;
+      // §7b: flatten a city hex to a level platform, skirting back to natural terrain by the
+      // hex edge (a terrace cut) — so the city model never tilts or embeds on a slope.
+      if (flat) {
+        const rf = wz / (1.5 * SIZE), qf = wx / (SIZE * Math.sqrt(3)) - rf / 2;
+        const plat = flat.get(Math.round(qf) + "," + Math.round(rf));
+        if (plat !== undefined) {
+          const cc = axialToWorld(Math.round(qf), Math.round(rf));
+          const k = 1 - smooth01(0.60, 0.98, Math.hypot(wx - cc.x, wz - cc.z)); // 1=flat centre → 0=natural edge
+          vy = vy * (1 - k) + plat * k;
+        }
+      }
+      pos[vi] = wx; pos[vi + 1] = vy; pos[vi + 2] = wz;
       // Per-vertex variation tint (±5%) to kill large-area flatness (§5 secondary blend).
       const jit = 1 + (_noise.noise(wx * 3.1, wz * 3.1) * 0.10);
       col[vi] = s.r * jit; col[vi + 1] = s.g * jit; col[vi + 2] = s.b * jit;
