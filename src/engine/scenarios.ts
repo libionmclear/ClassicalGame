@@ -4,8 +4,9 @@ import { italiaScenario } from "./scenarios/italia";
 import { hellasScenario } from "./scenarios/hellas";
 import { oldWorldScenario } from "./scenarios/oldworld";
 import { oikoumeneScenario } from "./scenarios/oikoumene";
+import { oldWorldEpic } from "./scenarios/oldworld-epic";
 
-export type ScenarioId = "italia" | "hellas" | "oldworld" | "oikoumene";
+export type ScenarioId = "italia" | "hellas" | "oldworld" | "oikoumene" | "oldworld-epic";
 
 export interface ScenarioBriefing {
   /** Short dateline, e.g. "264 BC — The eve of the First Punic War". */
@@ -102,6 +103,25 @@ const SCENARIOS: Record<ScenarioId, ScenarioDefinition> = {
         "Around 240 BC Eratosthenes, chief librarian at Alexandria, measured the Earth's circumference from the angle of shadows at Syene and Alexandria — landing within a few percent of the true 40,000 km, using nothing but geometry and a well."
     },
     config: oikoumeneScenario
+  },
+  "oldworld-epic": {
+    id: "oldworld-epic",
+    name: "The Old World (epic)",
+    historicalBrief:
+      "The hand-authored classical world, ~96×64: the Mediterranean at its heart, Italy's boot, Britain, the Nile and four other great rivers, eight powers in their true homelands.",
+    briefing: {
+      era: "The Classical Age — the whole Old World, Pillars of Hercules to the Iranian plateau",
+      situation:
+        "This is the world drawn as it was: the Mare Nostrum narrowing at Sicily, Italy's boot reaching for Africa, Britain beyond the Channel, the Alps sealing the north, and the Nile threading the desert from the cataracts of Kush to its delta. Eight peoples begin at home — Rome, Carthage, Athens, Egypt, Kush, Gaul, the Britons and Parthia — and the great rivers are highways and walls both.",
+      objectives: [
+        "Rise from your homeland to a hegemony over the whole Old World",
+        "Hold the straits and the great rivers — they decide who moves and who is walled out",
+        "Win by holding every capital, or by leading on score when the age closes"
+      ],
+      didYouKnow:
+        "The Nile flows NORTH: fed by the Ethiopian highlands and the great lakes, it runs 6,600 km downhill to the Mediterranean, so 'Upper Egypt' is in the south and 'Lower Egypt' — the delta — is in the north."
+    },
+    config: oldWorldEpic()
   }
 };
 

@@ -24,3 +24,6 @@ _shot.mjs
 _demoshot.mjs
 _defshot.mjs
 _propshot.mjs
+
+# temp map-authoring scratch
+_ow*.ts
