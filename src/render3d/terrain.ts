@@ -50,7 +50,7 @@ export function axialToWorld(q: number, r: number): { x: number; z: number } {
 // are never hidden behind a hill at the default inclination (spec §2 readability cap).
 export const TERRAIN_ELEV: Record<string, number> = {
   sea: -0.12, coast: -0.04, plains: 0.14, valley: 0.18, marsh: 0.10,
-  forest: 0.34, hills: 0.58, highlands: 0.82, mountains: 1.12, desert: 0.14
+  forest: 0.34, hills: 0.72, highlands: 0.96, mountains: 1.20, desert: 0.14
 };
 export const SEA_LEVEL = -0.1;
 const WATER = new Set(["sea", "coast"]);
@@ -87,15 +87,29 @@ export function biomeTexPaths(biome: string): { albedo: string; height: string; 
 }
 
 // What a vertex needs to know about a tile. Off-map returns undefined → treated as sea.
-export interface TileSample { elev: number; r: number; g: number; b: number; mtn?: number }
+export interface TileSample { elev: number; r: number; g: number; b: number; mtn?: number; hill?: number }
 export type TileAt = (q: number, r: number) => TileSample | undefined;
 
-// How mountainous a terrain is (drives ridged crests §2b): mountains full, highlands
-// foothills, hills a touch. Everything else flat.
+// How mountainous a terrain is (drives ridged crags §2b): mountains full, highlands
+// foothills. Hills use the ROLLING grammar instead (hillinessOf), not crags — that
+// visual split is how a player tells impassable mountains from climbable hills (§2c).
 export function mountainnessOf(terrain: string): number {
-  return terrain === "mountains" ? 1 : terrain === "highlands" ? 0.55 : terrain === "hills" ? 0.15 : 0;
+  return terrain === "mountains" ? 1 : terrain === "highlands" ? 0.55 : 0;
+}
+// How HILLY (rolling + mildly terraced, §2c climbable grammar): hills full, highlands
+// part (blends with its crags), valley a touch. Distinct from the craggy mountain field.
+export function hillinessOf(terrain: string): number {
+  return terrain === "hills" ? 1 : terrain === "highlands" ? 0.35 : terrain === "valley" ? 0.12 : 0;
 }
 export const MOUNTAIN_AMP = 0.86; // ridged-crest amplitude on full mountains — taller so ranges tower under the softer Gate 2 light (mountains are impassable; units never stand on the crest)
+export const HILL_AMP = 0.26;     // rolling/terraced amplitude on hills (§2c climbable relief)
+// Rolling hill field with a mild terrace step — reads as stepped, climbable slopes, never
+// the sharp ridged crags of a mountain.
+function rolling(x: number, z: number): number {
+  const n = _noise.noise(x * 0.5, z * 0.5) * 0.6 + _noise.noise(x * 1.05, z * 1.05) * 0.28; // smooth rolls, ~[-0.88,0.88]
+  const stepped = Math.round(n * 3.5) / 3.5;    // quantise into terraces
+  return n * 0.55 + stepped * 0.45;             // blend smooth + terraced
+}
 
 // The heightfield: a smooth, distance-weighted blend of the surrounding hex centres'
 // elevations, so the surface flows between hexes with no cliffs (spec §2). Colour is
@@ -108,7 +122,7 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
   const rf = z / (1.5 * SIZE);
   const qf = x / (SIZE * Math.sqrt(3)) - rf / 2;
   const bq = Math.round(qf), br = Math.round(rf);
-  let ysum = 0, rsum = 0, gsum = 0, bsum = 0, msum = 0, wsum = 0;
+  let ysum = 0, rsum = 0, gsum = 0, bsum = 0, msum = 0, hsum = 0, wsum = 0;
   let nearest: TileSample | undefined; let nearestD = Infinity;
   for (let dr = -RING; dr <= RING; dr += 1) {
     for (let dq = -RING; dq <= RING; dq += 1) {
@@ -120,7 +134,8 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
       if (d >= BLEND_R) continue;
       const samp = s ?? SEA_SAMPLE;
       const w = (1 - d / BLEND_R) * (1 - d / BLEND_R); // smooth falloff
-      ysum += w * samp.elev; rsum += w * samp.r; gsum += w * samp.g; bsum += w * samp.b; msum += w * (samp.mtn ?? 0); wsum += w;
+      ysum += w * samp.elev; rsum += w * samp.r; gsum += w * samp.g; bsum += w * samp.b;
+      msum += w * (samp.mtn ?? 0); hsum += w * (samp.hill ?? 0); wsum += w;
     }
   }
   if (wsum <= 0) {
@@ -129,6 +144,7 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
   }
   let y = ysum / wsum;
   const mtn = msum / wsum; // blended mountainness — fades at range edges so hexes MERGE
+  const hill = hsum / wsum;
   if (mtn > 0.02) {
     // Ridged crests only in mountain country. Adjacent mountain hexes share one ridged
     // field → a continuous range with crests and gullies, never isolated smooth cones.
@@ -137,6 +153,7 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
     // core vs its skirts so summits tower and foothills stay walkable.
     y += (ridged(x, z) - 0.12) * MOUNTAIN_AMP * (mtn * mtn);
   }
+  if (hill > 0.02) y += rolling(x, z) * HILL_AMP * hill; // §2c climbable rolling/terraced relief
   return { y, r: rsum / wsum, g: gsum / wsum, b: bsum / wsum, mtn };
 }
 

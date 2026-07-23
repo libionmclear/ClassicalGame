@@ -19,7 +19,7 @@ import { generateMap } from "../engine/mapgen";
 import { loadScenario } from "../engine/scenarios";
 import type { GameState } from "../engine/types";
 import { buildCity as buildCityV2 } from "./cityModels.js";
-import { buildTerrainSurface, sampleSurface, elevationOf, mountainnessOf, type TileSample, type TileAt } from "./terrain";
+import { buildTerrainSurface, sampleSurface, elevationOf, mountainnessOf, hillinessOf, type TileSample, type TileAt } from "./terrain";
 import { buildWaterSurface } from "./water";
 import { pickScatter, climateOf, type Climate } from "./scatter";
 import { normalizeGLB } from "./propnorm";
@@ -1774,7 +1774,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const tv = byKey.get(q + "," + r);
       if (!tv) return undefined;
       _tc.copy(colorFor(tv, view.civColors));
-      return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b, mtn: mountainnessOf(tv.t) };
+      return { elev: elevationOf(tv.t), r: _tc.r, g: _tc.g, b: _tc.b, mtn: mountainnessOf(tv.t), hill: hillinessOf(tv.t) };
     };
     reliefTileAt = tileAt; // units/cities/improvements now sample this for their height (analytic fallback)
     // §7b: cities (and districts) get a level platform at their hex's blended height, so the
