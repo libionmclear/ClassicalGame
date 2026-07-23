@@ -5956,6 +5956,14 @@
     focusTile: function (q, r) { if (board3d && board3d.focusTile) board3d.focusTile(q, r); },
     revealAll: function () { adminRevealMap = true; if (state) render(); return true; },
     setWeather: function (w) { window.__forceWeather = w; if (state) render(); return w; },
+    // Turn the human's units into a legionary formation (for the composed checkpoint shot).
+    makeLegion: function () {
+      if (!state) return null;
+      var us = Object.values(state.map.units).filter(function (u) { return u.ownerId === HUMAN_ID; });
+      us.forEach(function (u) { u.type = "legionary"; });
+      render();
+      return us.map(function (u) { return { id: u.id, q: u.position.q, r: u.position.r }; });
+    },
     // Set the human capital's population (drives the city visual tier) — for showcasing
     // the per-level city models on the board.
     growCapital: function (pop) {
