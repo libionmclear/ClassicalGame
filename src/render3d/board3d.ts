@@ -1276,6 +1276,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // Nile signature (§6): tiles touching a river carry papyrus / date-palms.
     const riverTiles = new Set<string>();
     for (const e of view.rivers || []) { riverTiles.add(e.q + "," + e.r); riverTiles.add(e.nq + "," + e.nr); }
+    // Gate 4 exclusions — keep the landscape legible: no props on roads or on a city and its
+    // immediate ring, and thin them right down on the beach band (land touching water).
+    const _NB6 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+    const excl = new Set<string>();
+    for (const e of view.roads || []) { excl.add(e.q + "," + e.r); excl.add(e.nq + "," + e.nr); }
+    for (const s of view.sprites) { if (s.kind === "city") { excl.add(s.q + "," + s.r); for (const n of _NB6) excl.add((s.q + n[0]) + "," + (s.r + n[1])); } }
+    const waterKeys = new Set<string>();
+    for (const tv of view.tiles) if (SCATTER_WATER.has(tv.t) || tv.open) waterKeys.add(tv.q + "," + tv.r);
+    const isBeach = (q: number, r: number): boolean => { for (const n of _NB6) if (waterKeys.has((q + n[0]) + "," + (r + n[1]))) return true; return false; };
     // Gate 1: distance cull + density falloff around the camera focus — full density near,
     // thinning out, nothing past R_CULL. Keeps the instance/vertex load bounded regardless
     // of how much map is revealed; rebuilt as the camera pans (loop watches the target).
@@ -1287,11 +1296,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     const byKey = new Map<string, Array<{ x: number; z: number; yaw: number; scale: number }>>();
     for (const tv of view.tiles) {
       if (tv.v === 0 || SCATTER_WATER.has(tv.t) || tv.open) continue; // no dressing on water/fog
+      if (excl.has(tv.q + "," + tv.r)) continue;        // roads + city surrounds stay clear
       const c = axialToWorld(tv.q, tv.r);
       const dd = (c.x - camX) * (c.x - camX) + (c.z - camZ) * (c.z - camZ);
       if (dd > R_CULL2) continue;                       // beyond the far ring: no props
       let dens = density;
       if (dd > R_FULL2) dens = density * (1 - 0.7 * ((Math.sqrt(dd) - R_FULL) / SPAN)); // thin with distance
+      if (isBeach(tv.q, tv.r)) dens *= 0.2;             // sandy beach band stays mostly open
       const places = pickScatter(tv.t, tv.q, tv.r, "mediterranean" as Climate, dens, riverTiles.has(tv.q + "," + tv.r));
       if (!places.length) continue;
       for (const p of places) {
@@ -1859,13 +1870,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     if (hpBarMatCache[bucket]) return hpBarMatCache[bucket];
     const W = 64, H = 12, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
     const cx = cv.getContext("2d")!;
-    cx.fillStyle = "rgba(8,6,2,0.92)"; cx.fillRect(0, 0, W, H); // dark backing + border
+    // Gate 4 (UI quiet): softer backing + muted fills so the banner recedes into the scene.
+    cx.fillStyle = "rgba(18,16,12,0.55)"; cx.fillRect(0, 0, W, H);
     const f = bucket / 20;
-    cx.fillStyle = f > 0.6 ? "#5cc94f" : f > 0.3 ? "#e3a12b" : "#d23f2c";
+    cx.fillStyle = f > 0.6 ? "#6fa85a" : f > 0.3 ? "#c39544" : "#b25446"; // muted green/amber/red
     const pad = 2;
     cx.fillRect(pad, pad, Math.max(0, (W - pad * 2) * f), H - pad * 2); // fill
     const tex = new THREE.CanvasTexture(cv); tex.needsUpdate = true;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false });
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.8, depthWrite: false, depthTest: false });
     hpBarMatCache[bucket] = mat;
     return mat;
   }
@@ -1985,9 +1997,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         holder.add(b);
       }
 
-      // Health bar over every unit and city (sits over each unit in a stack).
+      // Health bar over every unit and city (sits over each unit in a stack). Gate 4:
+      // ~60% smaller so it reads as a marker, not a billboard.
       if (sv.hpFrac != null) {
-        const bar = makeHpBar(sv.hpFrac, isCity ? 1.5 : 0.95);
+        const bar = makeHpBar(sv.hpFrac, isCity ? 0.62 : 0.4);
         bar.position.set(ox, top + (isCity ? 1.28 : 0.86), oz);
         holder.add(bar);
       }
