@@ -7,7 +7,8 @@ export type TerrainType =
   | "mountains"
   | "desert"
   | "coast"
-  | "sea";
+  | "sea"
+  | "great-river"; // a navigable river TILE (Nile/Danube/Rhine/Tigris/Euphrates) — see data.ts
 
 export type WeatherType = "clear" | "rain" | "fog" | "storm" | "heat";
 

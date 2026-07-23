@@ -329,6 +329,15 @@ function riverAttackPenalty(state: GameState, attacker: Unit, defender: Unit): n
   return state.map.rivers[k] ? 0.25 : 0;
 }
 
+// −25% for a land unit assaulting from a great-river tile it's floating on (an embarked
+// boat assault) — unless that tile carries a bridge, i.e. it crossed on dry land.
+function greatRiverAssaultPenalty(state: GameState, attacker: Unit): number {
+  const def = UNITS[attacker.type];
+  if (def && def.domain === "naval") return 0; // ships fight on the river normally
+  const at = state.map.tiles[keyOf(attacker.position)];
+  return at && at.terrain === "great-river" && at.improvement !== "bridge" ? 0.25 : 0;
+}
+
 const pct = (n: number): string => `${n >= 0 ? "+" : "−"}${Math.round(Math.abs(n) * 100)}%`;
 const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
@@ -427,7 +436,10 @@ export function isEmbarked(state: GameState, unit: Unit): boolean {
   const def = UNITS[unit.type];
   if (!def || def.domain !== "land") return false;
   const tile = state.map.tiles[keyOf(unit.position)];
-  return !!tile && (tile.terrain === "coast" || tile.terrain === "sea");
+  if (!tile) return false;
+  // On a great river the unit is embarked (afloat) UNLESS a bridge makes it a dry crossing.
+  if (tile.terrain === "great-river") return tile.improvement !== "bridge";
+  return tile.terrain === "coast" || tile.terrain === "sea";
 }
 
 export function computeCombatPreview(state: GameState, attackerId: string, defenderId: string): CombatPreview {
@@ -458,6 +470,11 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   if (river > 0) {
     attackMult -= river;
     modifiers.push(`River crossing ${pct(-river)}`);
+  }
+  const boatAssault = greatRiverAssaultPenalty(state, attacker);
+  if (boatAssault > 0) {
+    attackMult -= boatAssault;
+    modifiers.push(`Assault by boat ${pct(-boatAssault)}`);
   }
   const counterAtk = (attackerDef.counters && attackerDef.counters[defCat]) || 0;
   if (counterAtk > 0) {
@@ -638,8 +655,10 @@ function computeCityAttackDamage(state: GameState, attacker: Unit, city: City): 
 
   const weatherMult = weather === "fog" ? 0.95 : 1;
   const siegeMult = 1 + (attackerDef.siegeBonus ?? 0);
+  // −25% when the assault comes by boat off a great river with no bridge (§ great rivers).
+  const boatMult = 1 - greatRiverAssaultPenalty(state, attacker);
   const attackPower =
-    attackerDef.attack * (attacker.hp / attacker.maxHp) * veterancyMultiplier(attacker.veterancy) * weatherMult * siegeMult;
+    attackerDef.attack * (attacker.hp / attacker.maxHp) * veterancyMultiplier(attacker.veterancy) * weatherMult * siegeMult * boatMult;
   // Cities grow tougher as their age advances — walls, ditches, drilled militia.
   const owner = state.playersById[city.ownerId];
   const cityDefense = 22 + city.population * 3 + (playerAge(owner) - 1) * 10;
@@ -1027,6 +1046,20 @@ export function computeCityYield(
       yields.production += res.yields.production ?? 0;
       yields.gold += res.yields.gold ?? 0;
       yields.science += res.yields.science ?? 0;
+    }
+  }
+
+  // Great-river fertility (the Black Land): every claimed LAND tile adjacent to a
+  // great-river tile gains +2 food. Stacks additively with Egypt's Nilometers.
+  for (const key of tileKeysWithin(city.position, cityTerritoryRadius(city))) {
+    const tile = state.map.tiles[key];
+    const trule = tile ? TERRAIN[tile.terrain] : null;
+    if (!trule || trule.navalOnly) continue; // land tiles only
+    const claim = claimingCity(state, parseKey(key));
+    if (!claim || claim.id !== cityId) continue;
+    for (const n of neighborsOf(parseKey(key))) {
+      const nt = state.map.tiles[keyOf(n)];
+      if (nt && nt.terrain === "great-river") { yields.food += 2; break; }
     }
   }
 

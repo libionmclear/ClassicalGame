@@ -53,7 +53,7 @@ export const TERRAIN_ELEV: Record<string, number> = {
   forest: 0.34, hills: 0.72, highlands: 0.96, mountains: 1.20, desert: 0.14
 };
 export const SEA_LEVEL = -0.1;
-const WATER = new Set(["sea", "coast"]);
+const WATER = new Set(["sea", "coast", "great-river"]); // great-river is a water tile (sits at water level)
 export function elevationOf(terrain: string): number {
   return WATER.has(terrain) ? SEA_LEVEL : (TERRAIN_ELEV[terrain] ?? 0.12);
 }
@@ -72,7 +72,8 @@ export const BIOME_CFG: Record<string, BiomeCfg> = {
   mountains: { tint: 0x7c7264, tiling: 0.24, dispAmp: 0.14 },
   desert:    { tint: 0xcbab68, tiling: 0.26, dispAmp: 0.05 },
   coast:     { tint: 0xb8a06a, tiling: 0.30, dispAmp: 0.02 },
-  sea:       { tint: 0x2f5177, tiling: 0.30, dispAmp: 0.0 }
+  sea:       { tint: 0x2f5177, tiling: 0.30, dispAmp: 0.0 },
+  "great-river": { tint: 0x3f7a8f, tiling: 0.30, dispAmp: 0.0 } // shallow green-blue river water
 };
 export const BIOMES = Object.keys(BIOME_CFG);
 

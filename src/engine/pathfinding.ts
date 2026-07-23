@@ -42,6 +42,13 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
   const terrain = TERRAIN[toTile.terrain];
   if (!terrain) return Number.POSITIVE_INFINITY;
 
+  // A bridge over a great river is a dry land crossing: land units cross the water
+  // TILE freely (no sailing or harbour needed) — this is the ONLY way land units enter
+  // a great-river tile short of embarking. Naval units fall through to the normal path.
+  if (toTile.terrain === "great-river" && toTile.improvement === "bridge" && unit.domain !== "naval") {
+    return 1;
+  }
+
   // Land units may embark onto water (coast, then open sea with the deeper tech)
   // once their people know how to sail; naval units never come ashore.
   if (terrain.navalOnly && unit.domain !== "naval") {

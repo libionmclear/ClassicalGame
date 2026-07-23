@@ -1306,7 +1306,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
   const _im = new THREE.Matrix4(), _iq = new THREE.Quaternion(), _iv = new THREE.Vector3(), _isc = new THREE.Vector3();
   const _scUp = new THREE.Vector3(0, 1, 0);
-  const SCATTER_WATER = new Set(["sea", "coast"]);
+  const SCATTER_WATER = new Set(["sea", "coast", "great-river"]);
   function placeReliefScatter(view: BoardView, tileAt: TileAt): void {
     reliefScatter.clear();
     reliefScatter.visible = true;
@@ -1801,7 +1801,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // Water per WATER-SPEC (§2 depth gradient + §4 foam): replace the reflective sea
     // plane with the reference-driven shader surface over the terrain's flat sea.
     if (waterSurface) { scene.remove(waterSurface); waterSurface.geometry.dispose(); (waterSurface.material as THREE.Material).dispose(); }
-    const landAt = (q: number, r: number): boolean => { const tv = byKey.get(q + "," + r); return !!tv && tv.t !== "sea" && tv.t !== "coast" && !tv.open; };
+    const landAt = (q: number, r: number): boolean => { const tv = byKey.get(q + "," + r); return !!tv && tv.t !== "sea" && tv.t !== "coast" && tv.t !== "great-river" && !tv.open; };
     const openAt = (q: number, r: number): number => { const tv = byKey.get(q + "," + r); return tv && tv.open ? tv.open : 0; };
     const wx = view.weather === "storm" ? 1 : view.weather === "rain" ? 0.5 : view.weather === "fog" ? 0.2 : 0;
     const water = buildWaterSurface({ tiles: view.tiles, landAt, openAt, seaLevel: SEA_TOP + 0.006, weather: wx });

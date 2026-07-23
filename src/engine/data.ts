@@ -13,7 +13,12 @@ export const TERRAIN: Record<string, TerrainRule> = {
   mountains: { moveCost: 3, yields: { food: 0, production: 1, gold: 0 }, defense: 0.5, vision: 2, impassableWithoutTech: "mountain-paths" },
   desert: { moveCost: 2, yields: { food: 0, production: 0, gold: 0 }, defense: 0, vision: 0 },
   coast: { moveCost: 1, yields: { food: 1, production: 0, gold: 1 }, defense: 0, vision: 0, navalOnly: true },
-  sea: { moveCost: 1, yields: { food: 0, production: 0, gold: 0 }, defense: 0, vision: 0, navalOnly: true, requiresTech: "open-sea-sailing" }
+  sea: { moveCost: 1, yields: { food: 0, production: 0, gold: 0 }, defense: 0, vision: 0, navalOnly: true, requiresTech: "open-sea-sailing" },
+  // A navigable great river (Nile/Danube/Rhine/Tigris/Euphrates). A water TILE: ships move
+  // on it like coast; land units may not enter except at a bridge improvement or by
+  // embarking. Fertile — it lifts adjacent land food (see computeCityYield) and its own
+  // tile yields a little food + trade gold. No open-sea-sailing gate (it's inland water).
+  "great-river": { moveCost: 1, yields: { food: 1, production: 0, gold: 1 }, defense: 0, vision: 0, navalOnly: true }
 };
 
 export const WEATHER_STATES = {
@@ -617,6 +622,14 @@ export const IMPROVEMENTS: Record<string, ImprovementRule> = {
     yields: { food: 1, gold: 2 },
     requiresTech: "sailing",
     note: "A quay and moorings on a coastal hex beside a city — its troops can put to sea from here. Effect: +1 food, +2 gold, and lets armies embark. (Needs Sailing.)"
+  },
+  bridge: {
+    name: "Bridge",
+    terrains: ["great-river"],
+    cost: 16,
+    yields: { gold: 1 },
+    requiresTech: "engineering",
+    note: "A piled or arched bridge across a great river — land units cross the tile freely and armies no longer assault its cities by boat. Effect: +1 gold and a permanent land crossing. (Needs Engineering.)"
   }
 };
 
