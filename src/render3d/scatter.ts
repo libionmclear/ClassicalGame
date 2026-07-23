@@ -23,12 +23,12 @@ type Entry = { key: string; n: number };
 const M: Record<string, Entry[]> = {
   plains:    [{ key: "scatter/dry-grass", n: 3.0 }, { key: "scatter/limestone-boulder", n: 0.3 }],
   valley:    [{ key: "scatter/dry-grass", n: 3.6 }, { key: "scatter/olive", n: 0.4 }],
-  hills:     [{ key: "scatter/rock-cluster", n: 1.0 }, { key: "scatter/olive", n: 0.8 }, { key: "scatter/desert-scrub", n: 0.7 }, { key: "scatter/limestone-boulder", n: 0.5 }],
+  hills:     [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/olive", n: 0.8 }, { key: "scatter/desert-scrub", n: 0.7 }, { key: "scatter/limestone-boulder", n: 0.5 }, { key: "scatter/rock-shard", n: 0.5 }],
   forest:    [{ key: "scatter/stone-pine", n: 1.6 }, { key: "scatter/cypress", n: 1.4 }, { key: "scatter/olive", n: 0.7 }, { key: "scatter/fallen-trunk", n: 0.4 }],
   highlands: [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/rock-shard", n: 0.6 }, { key: "scatter/olive", n: 0.3 }],
   mountains: [{ key: "scatter/rock-shard", n: 1.1 }],
   marsh:     [{ key: "scatter/reeds", n: 3.0 }],
-  desert:    [{ key: "scatter/desert-scrub", n: 0.9 }, { key: "scatter/rock-cluster", n: 0.5 }],
+  desert:    [{ key: "scatter/desert-scrub", n: 0.9 }, { key: "scatter/rock-cluster", n: 0.45 }, { key: "scatter/rock-shard", n: 0.6 }, { key: "scatter/limestone-boulder", n: 0.3 }],
   coast:     [{ key: "scatter/rock-cluster", n: 0.5 }, { key: "scatter/driftwood", n: 0.3 }]
 };
 const N: Record<string, Entry[]> = {
@@ -45,12 +45,12 @@ const N: Record<string, Entry[]> = {
 const A: Record<string, Entry[]> = {
   plains:    [{ key: "scatter/dry-grass", n: 1.2 }, { key: "scatter/desert-scrub", n: 0.6 }],
   valley:    [{ key: "scatter/dry-grass", n: 1.6 }, { key: "scatter/date-palm", n: 0.5 }],
-  hills:     [{ key: "scatter/rock-cluster", n: 1.0 }, { key: "scatter/desert-scrub", n: 0.7 }],
+  hills:     [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/desert-scrub", n: 0.7 }, { key: "scatter/rock-shard", n: 0.6 }],
   forest:    [{ key: "scatter/date-palm", n: 1.2 }, { key: "scatter/desert-scrub", n: 0.6 }],
   highlands: [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/rock-shard", n: 0.6 }],
-  mountains: [{ key: "scatter/rock-shard", n: 1.0 }],
+  mountains: [{ key: "scatter/rock-shard", n: 1.0 }, { key: "scatter/rock-cluster", n: 0.4 }],
   marsh:     [{ key: "scatter/reeds", n: 2.0 }],
-  desert:    [{ key: "scatter/desert-scrub", n: 1.1 }, { key: "scatter/rock-cluster", n: 0.5 }],
+  desert:    [{ key: "scatter/desert-scrub", n: 1.1 }, { key: "scatter/rock-cluster", n: 0.4 }, { key: "scatter/rock-shard", n: 0.7 }],
   coast:     [{ key: "scatter/rock-cluster", n: 0.5 }, { key: "scatter/driftwood", n: 0.3 }]
 };
 const TABLES: Record<Climate, Record<string, Entry[]>> = { mediterranean: M, northern: N, arid: A };
@@ -72,6 +72,8 @@ function vnoise(x: number, y: number): number {
 }
 // Big "canopy" props anchor a grove; everything else is understory that clusters around them.
 const CANOPY = new Set(["scatter/olive", "scatter/cypress", "scatter/stone-pine", "scatter/oak", "scatter/beech", "scatter/fir", "scatter/date-palm", "scatter/papyrus"]);
+// Rocks get WIDER size variance (§6: ±25%) and scatter loosely — a boulder field, not a stamp.
+const ROCK = new Set(["scatter/rock-cluster", "scatter/rock-shard", "scatter/limestone-boulder", "scatter/mossy-boulder"]);
 
 // Deterministically choose the props for one tile. `density` scales counts (mobile ~0.4);
 // `riverAdj` swaps in the Nile signature (papyrus on marsh, date-palms on valley).
@@ -104,14 +106,17 @@ export function pickScatter(terrain: string, q: number, r: number, climate: Clim
   for (const e of entries) {
     let count = e.n * density * groveMul;
     count = Math.floor(count) + (rng() < count - Math.floor(count) ? 1 : 0);
-    const canopy = CANOPY.has(e.key);
+    const canopy = CANOPY.has(e.key), rock = ROCK.has(e.key);
     for (let i = 0; i < count && out.length < 26; i += 1) {
-      const spread = canopy ? 0.32 : 0.5; // canopy tight around the anchor; understory a touch wider
+      const spread = canopy ? 0.32 : rock ? 0.56 : 0.5; // canopy tight; rocks strewn wider
       const ang = rng() * Math.PI * 2, rad = rng() * spread;
       const dx = Math.max(-0.82, Math.min(0.82, ax + Math.cos(ang) * rad));
       const dz = Math.max(-0.82, Math.min(0.82, az + Math.sin(ang) * rad));
-      // Size hierarchy: the first canopy tree is a tall anchor, the rest step down; understory small.
-      const scale = canopy ? (i === 0 ? 1.2 : 0.88) + rng() * 0.26 : 0.68 + rng() * 0.3;
+      // Size: canopy has a hierarchy (tall anchor → smaller), rocks vary widely (±28%),
+      // understory ±15%. Every instance also gets a random yaw so nothing looks stamped.
+      const scale = canopy ? (i === 0 ? 1.2 : 0.88) + rng() * 0.26
+        : rock ? 0.72 + rng() * 0.56
+          : 0.68 + rng() * 0.3;
       out.push({ key: e.key, dx, dz, yaw: rng() * Math.PI * 2, scale });
     }
   }
