@@ -1,23 +1,145 @@
 // HEGEMON — THE OLD WORLD (hand-authored epic map, MAP-SPEC).
-// A ~96×64 classical Europe/Mediterranean world, authored from the spec's PERCENTAGE
-// coordinates (x,y in 0..100). Acceptance is recognizability: the Med basin, Italy's boot,
-// Britain, and the Nile must read at a glance. Built as a coordinate generator (not ASCII)
-// because the spec is coordinate-based and the map needs LATITUDE climate regions, minor +
-// great rivers, and starts at exact points — none of which the ASCII atlas carries.
-//
-// FIRST PASS: topology + all five great rivers + eight starts + latitude climate bands +
-// the eight mountain spines. Coastline recognizability is refined iteratively against
-// renders. Ruins/villages (region-locked) are a follow-up once the terrain is locked.
+// Built the sculptor's way (as the shipped oikoumene map is, and proven recognizable): lay
+// down ONE connected Afro-Eurasian landmass, THEN carve the seas — the Atlantic, the
+// Mediterranean around the Italian boot and the Greek peninsula, the Black/Caspian/Aegean/
+// Red seas and the Persian Gulf — then drop Britannia in as an island. On top of that we add
+// what the epic map needs: the FIVE great rivers as navigable great-river tiles (Nile,
+// Danube, Rhine, Tigris, Euphrates), all EIGHT starts, LATITUDE climate regions (§11), and
+// region-locked ruins/villages. ~96×64, huge tier.
 import type { Coord, CreateGameConfig, TerrainType } from "../types";
-import { keyOf, neighborsOf, edgeKey } from "../hex";
+import { keyOf, neighborsOf } from "../hex";
 
 const W = 96, H = 64;
-const px = (pctX: number): number => Math.round((pctX / 100) * (W - 1));
-const py = (pctY: number): number => Math.round((pctY / 100) * (H - 1));
-function offsetToAxial(col: number, row: number): Coord { return { q: col - ((row - (row & 1)) >> 1), r: row }; }
+type Cell = string;
+const grid: Cell[][] = Array.from({ length: H }, () => Array<Cell>(W).fill("~"));
 
-// §11 positional climate by LATITUDE band (drives scatter climate + weather):
-// northern <30%, temperate 30–55%, mediterranean 55–75%, arid >75%.
+function inB(c: number, r: number): boolean { return c >= 0 && r >= 0 && c < W && r < H; }
+function blob(cx: number, cy: number, rx: number, ry: number, ch: Cell): void {
+  for (let r = 0; r < H; r += 1) for (let c = 0; c < W; c += 1) {
+    const dx = (c - cx) / rx, dy = (r - cy) / ry;
+    if (dx * dx + dy * dy <= 1) grid[r][c] = ch;
+  }
+}
+function rect(c0: number, r0: number, c1: number, r1: number, ch: Cell): void {
+  for (let r = Math.max(0, r0); r <= Math.min(H - 1, r1); r += 1)
+    for (let c = Math.max(0, c0); c <= Math.min(W - 1, c1); c += 1) grid[r][c] = ch;
+}
+function stroke(c0: number, r0: number, c1: number, r1: number, w: number, ch: Cell, landOnly = false): void {
+  const steps = Math.max(1, Math.round(Math.hypot(c1 - c0, r1 - r0)));
+  for (let i = 0; i <= steps; i += 1) {
+    const cx = c0 + ((c1 - c0) * i) / steps, cy = r0 + ((r1 - r0) * i) / steps;
+    for (let r = Math.round(cy - w); r <= Math.round(cy + w); r += 1)
+      for (let c = Math.round(cx - w); c <= Math.round(cx + w); c += 1) {
+        if (!inB(c, r) || (cx - c) * (cx - c) + (cy - r) * (cy - r) > w * w + 0.5) continue;
+        if (landOnly && grid[r][c] === "~") continue;
+        grid[r][c] = ch;
+      }
+  }
+}
+// Overlay onto LAND only (ranges/deserts/rivers that must not spill into the open sea).
+function onLand(cx: number, cy: number, rx: number, ry: number, ch: Cell): void {
+  for (let r = 0; r < H; r += 1) for (let c = 0; c < W; c += 1) {
+    const dx = (c - cx) / rx, dy = (r - cy) / ry;
+    if (dx * dx + dy * dy <= 1 && grid[r][c] !== "~") grid[r][c] = ch;
+  }
+}
+function set(c: number, r: number, ch: Cell): void { if (inB(c, r)) grid[r][c] = ch; }
+
+// ===== 1. ONE CONNECTED AFRO-EURASIAN LANDMASS (plains "."), scaled to 96×64 =====
+rect(9, 9, 60, 27, ".");                 // Europe: Iberia → Gaul → Germania → Balkans
+blob(14, 33, 10, 8, ".");                // Iberia (hangs south)
+rect(13, 25, 24, 31, ".");               // the Pyrenees isthmus — Iberia joins Gaul
+rect(54, 4, 94, 16, ".");                // Scythia / Sarmatia (northern steppe)
+rect(30, 20, 41, 30, ".");               // the Alps massif — Italy joins Europe
+stroke(38, 28, 42, 44, 1.5, ".");        // the Italian boot down to the toe
+blob(43, 45, 2.2, 1.4, ".");             // Sicilia (rejoined to the toe, carved off later)
+blob(30, 29, 1.5, 1.9, ".");             // Corsica
+blob(30, 34, 1.6, 2.1, ".");             // Sardinia
+blob(54, 32, 5.5, 5.5, ".");             // Greece (Balkan peninsula)
+set(52, 38, "."); set(55, 39, ".");      // the Peloponnese
+blob(58, 40, 1.4, 1, ".");               // Crete
+blob(69, 32, 12, 5.5, ".");              // Anatolia
+rect(69, 22, 88, 36, ".");               // Armenia / the Caucasus land-bridge
+rect(68, 32, 72, 52, ".");               // the Levant (Syria, Judaea)
+blob(82, 43, 7.5, 4.5, ".");             // Mesopotamia
+blob(90, 38, 9.5, 10, ".");              // the Persian plateau
+rect(4, 47, 64, 62, ".");                // North Africa (west → east)
+rect(56, 45, 71, 54, ".");               // Egypt + the Sinai bridge to the Levant
+rect(58, 54, 70, 63, ".");               // the upper-Nile land down to Kush
+blob(78, 55, 11, 9, ".");                // Arabia
+
+// ===== 2. CARVE THE SEAS =====
+rect(0, 0, 5, 63, "~");                  // the Atlantic (western edge)
+blob(3, 34, 4, 10, "~");                 // Iberia's Atlantic coast
+rect(11, 0, 44, 6, "~"); rect(54, 0, 96, 4, "~"); // the northern ocean / North Sea
+blob(29, 45, 13, 5, "~");                // the western Mediterranean
+blob(35, 38, 3, 4.5, "~");               // the Tyrrhenian Sea (west of Italy)
+blob(47, 44, 7, 4.5, "~");               // the Ionian Sea (south of Italy)
+blob(64, 47, 12, 5, "~");                // the eastern Mediterranean
+blob(45, 32, 2.2, 5.5, "~");             // the Adriatic (east of Italy)
+blob(58, 35, 2.8, 4.5, "~");             // the Aegean (east of Greece)
+blob(63, 23, 10, 5, "~");                // the Black Sea
+blob(93, 24, 5, 6.5, "~");               // the Caspian Sea
+rect(60, 54, 63, 63, "~"); blob(61, 58, 2.6, 6, "~"); // the Red Sea
+blob(86, 50, 4.5, 3.5, "~");             // the Persian Gulf
+
+// ===== 3. BRITANNIA & HIBERNIA (islands in the northern sea) + Tunisian cape =====
+rect(11, 3, 32, 13, "~");                // clear the sea around them first
+blob(19, 7, 3.2, 3.8, ".");              // Britannia
+blob(19, 11, 2.4, 1.7, ".");             // southern Britannia
+blob(11, 10, 2.6, 2.2, ".");             // Hibernia
+blob(30, 46, 5, 3.2, ".");               // the Tunisian cape — Carthage juts into the Med
+
+// ===== 4. MOUNTAINS, FORESTS, DESERTS (overlay on land) =====
+blob(43, 11, 15, 5, "f");                // Germania's great forest (over the plain)
+rect(32, 7, 64, 10, "f");
+onLand(18, 27, 6.5, 1.4, "^");           // the Pyrenees
+onLand(33, 22, 9, 1.6, "^");             // the Alps (arc between Gaul and Italy — Hannibal country)
+onLand(39, 30, 0.8, 5.5, "^");           // the Apennine spine of Italy
+onLand(14, 46, 8.5, 1.6, "^");           // the Atlas
+onLand(51, 14, 6.5, 1.5, "^");           // the Carpathians
+onLand(77, 24, 7.5, 1.9, "^");           // the Caucasus
+onLand(68, 34, 9.5, 1.1, "^");           // the Taurus
+stroke(79, 33, 92, 47, 1.9, "^", true);  // the Zagros (diagonal wall of Mesopotamia)
+onLand(68, 33, 8.5, 2.7, "h");           // Anatolian highland
+onLand(54, 33, 3, 3, "h");               // the Greek highlands
+onLand(14, 33, 5, 4, "h");               // the Iberian meseta hills
+rect(7, 53, 62, 62, "d");                // the Sahara
+onLand(70, 45, 9.5, 4.3, "d");           // the Syrian desert
+onLand(78, 55, 11, 9, "d");              // Arabia is desert
+onLand(58, 47, 4.3, 3.2, "d"); onLand(59, 51, 3.2, 8, "d"); // the Egyptian desert (Red/Black land)
+
+// ===== 5. THE FIVE GREAT RIVERS (navigable great-river TILES, "=") =====
+// Nile: south (Kush) → the valley → a delta at the Mediterranean's south shore.
+stroke(60, 62, 60, 55, 0.7, "=", true); stroke(60, 55, 59, 47, 0.7, "=", true);
+rect(57, 46, 61, 47, "=");               // the delta fan into the Med
+set(60, 58, ":");                        // the Nile cataract (rapids/coast — ends navigation, Egypt↔Kush chokepoint)
+// Lower Danube: the Balkans → the Black Sea.
+stroke(46, 20, 62, 24, 0.7, "=", true);
+// Lower Rhine: the Alps foreland → the North Sea.
+stroke(34, 26, 31, 12, 0.7, "=", true);
+// Tigris & Euphrates → the Persian Gulf.
+stroke(84, 36, 86, 49, 0.7, "=", true);  // Tigris
+stroke(80, 36, 84, 49, 0.7, "=", true);  // Euphrates
+
+// ===== 6. THE EIGHT CAPITALS (digits 1-8 → players by index; MAP-SPEC §3) =====
+set(39, 36, "1"); // Roma — central Italy, west coast on the Tiber
+set(30, 46, "2"); // Carthago — the Tunisian cape opposite Sicily
+set(54, 37, "3"); // Athenai — Attica, on the Aegean
+set(58, 51, "4"); // Aegyptus — mid-Nile (Memphis)
+set(60, 61, "5"); // Kush — upriver beyond the cataract
+set(25, 17, "6"); // the Gauls — the heart of Gallia
+set(19, 8, "7");  // the Britons — southern Britannia
+set(84, 40, "8"); // Parthia — the Iranian plateau
+
+// ===== 7. COMPILE the glyph grid → CreateGameConfig =====
+const LEGEND: Record<string, TerrainType> = {
+  "~": "sea", " ": "sea", ":": "coast", ".": "plains", ",": "valley",
+  f: "forest", h: "hills", H: "highlands", "^": "mountains", M: "mountains", d: "desert", "=": "great-river"
+};
+function offsetToAxial(col: number, row: number): Coord { return { q: col - ((row - (row & 1)) >> 1), r: row }; }
+// §11 positional climate by LATITUDE (drives scatter climate + weather): northern <30%,
+// temperate 30–55%, mediterranean 55–75%, arid >75%.
 function climateBand(row: number): string {
   const y = (row / (H - 1)) * 100;
   if (y < 30) return "north";
@@ -26,196 +148,37 @@ function climateBand(row: number): string {
   return "arid";
 }
 
-interface Cell { terrain: TerrainType; region: string }
-
 export function oldWorldEpic(seed = "old-world"): CreateGameConfig {
-  // Ocean canvas; land + features painted over it.
-  const grid: Cell[][] = [];
-  for (let row = 0; row < H; row += 1) {
-    grid[row] = [];
-    for (let col = 0; col < W; col += 1) grid[row][col] = { terrain: "sea", region: climateBand(row) };
-  }
-  const inB = (c: number, r: number): boolean => c >= 0 && c < W && r >= 0 && r < H;
-  const set = (c: number, r: number, t: TerrainType, region?: string): void => {
-    if (!inB(c, r)) return;
-    grid[r][c].terrain = t;
-    if (region) grid[r][c].region = region;
-  };
-  const setPct = (x: number, y: number, t: TerrainType, region?: string): void => set(px(x), py(y), t, region);
-
-  // Fill an axis-aligned percentage box with terrain (used for landmass blocks + seas).
-  const box = (x0: number, y0: number, x1: number, y1: number, t: TerrainType, region?: string): void => {
-    for (let c = px(x0); c <= px(x1); c += 1) for (let r = py(y0); r <= py(y1); r += 1) set(c, r, t, region);
-  };
-  // A filled ellipse in percentage space — for organic landmasses/seas.
-  const ellipse = (cx: number, cy: number, rx: number, ry: number, t: TerrainType, region?: string): void => {
-    const c0 = px(cx - rx), c1 = px(cx + rx), r0 = py(cy - ry), r1 = py(cy + ry);
-    const ccx = px(cx), ccy = py(cy), arx = px(cx + rx) - ccx || 1, ary = py(cy + ry) - ccy || 1;
-    for (let c = c0; c <= c1; c += 1) for (let r = r0; r <= r1; r += 1) {
-      const dx = (c - ccx) / arx, dy = (r - ccy) / ary;
-      if (dx * dx + dy * dy <= 1) set(c, r, t, region);
-    }
-  };
-  // Paint a terrain along a poly-line path (mountain spines, river courses).
-  const path = (pts: Array<[number, number]>, t: TerrainType, thick = 0, region?: string): void => {
-    for (let i = 0; i < pts.length - 1; i += 1) {
-      const [ax, ay] = pts[i], [bx, by] = pts[i + 1];
-      const c0 = px(ax), r0 = py(ay), c1 = px(bx), r1 = py(by);
-      const steps = Math.max(Math.abs(c1 - c0), Math.abs(r1 - r0)) || 1;
-      for (let s = 0; s <= steps; s += 1) {
-        const c = Math.round(c0 + ((c1 - c0) * s) / steps), r = Math.round(r0 + ((r1 - r0) * s) / steps);
-        for (let dc = -thick; dc <= thick; dc += 1) for (let dr = -thick; dr <= thick; dr += 1) set(c + dc, r + dr, t, region);
-      }
-    }
-  };
-
-  // ---- LATITUDE SKELETON: EUROPE (north) | a wide central MED sea | AFRICA (south). ----
-  // (A) EUROPE — one landmass, y 8..54; its Mediterranean coast is sculpted by Italy/Greece
-  // jutting down and the sea band below. The y54..71 gap is left as the Mediterranean.
-  box(8, 8, 96, 54, "plains", "temperate");
-  box(18, 22, 34, 50, "forest", "Gaul");             // wooded Gaul
-  box(34, 12, 55, 40, "forest", "Germania");         // the Hercynian forest
-  box(46, 40, 62, 52, "hills", "Balkans");
-  box(64, 26, 96, 46, "plains", "Steppe");           // Pontic-Caspian steppe
-  box(60, 46, 96, 60, "plains", "Anatolia"); box(64, 48, 92, 58, "hills", "Anatolia"); // Anatolia dips just below the sea line
-  box(8, 44, 22, 66, "hills", "Iberia"); box(9, 46, 20, 63, "plains", "Iberia");       // Iberian squarish peninsula reaching south
-  // (B) AFRICA — southern landmass, y 71..100; north coast fades into the Sahara.
-  box(8, 71, 80, 77, "plains", "Africa"); box(8, 77, 82, 100, "desert", "Africa");
-  box(60, 72, 72, 92, "desert", "Egypt"); box(63, 92, 72, 100, "desert", "Kush");
-  ellipse(38, 71, 5, 3, "plains", "Africa");         // the Carthaginian bulge (Tunisia) reaching for Sicily
-  // (C) EASTERN lands south of the sea line: Levant, Mesopotamia, Persia.
-  box(68, 60, 80, 78, "plains", "Levant"); box(74, 58, 90, 80, "hills", "Mesopotamia");
-  box(84, 48, 96, 82, "hills", "Persia"); box(87, 52, 96, 76, "highlands", "Persia");
-
-  // ---- SEAS carved into the land ----
-  // The MEDITERRANEAN — carve one clear central sea (Europe above it, Africa below), wide W &
-  // E basins narrowing at Sicily; Italy/Greece/islands are painted back into it afterwards.
-  box(20, 58, 42, 70, "sea", "Mediterranean");       // western basin
-  box(50, 57, 78, 70, "sea", "Mediterranean");       // eastern basin
-  box(42, 62, 50, 68, "sea", "Mediterranean");       // the Sicilian narrows join them
-  box(0, 0, 6, 100, "sea", "Atlantic");              // Atlantic west edge
-  ellipse(26, 12, 8, 7, "sea", "North Sea");         // North Sea (frees Britain)
-  ellipse(70, 50, 9, 4, "sea", "Black Sea");         // Black Sea, north of Anatolia
-  ellipse(89, 42, 4, 6, "sea", "Caspian");           // Caspian (landlocked)
-  box(66, 84, 70, 100, "sea", "Red Sea");            // Red Sea inlet east of Egypt
-  box(82, 78, 88, 86, "sea", "Persian Gulf");
-  ellipse(48, 60, 2.5, 7, "sea", "Adriatic");        // Adriatic splits Italy from the Balkans
-  ellipse(60, 64, 3, 4, "sea", "Aegean");            // Aegean, east of Greece
-
-  // ---- Signature lands painted BACK into the sea (islands + the boot) ----
-  ellipse(17, 15, 4, 7, "plains", "Britain"); box(15, 4, 21, 11, "highlands", "Caledonia"); // Britain
-  ellipse(9, 15, 2, 4, "plains", "Hibernia");        // Ireland
-  // ITALY — the boot: hangs from Europe (y52) down through the Med toward Sicily.
-  box(38, 50, 44, 55, "hills", "Italia");            // Po plain + top of the boot (attached to Europe)
-  path([[41, 55], [42, 60], [43, 64], [45, 68]], "hills", 1, "Italia"); // the leg down to the toe
-  setPct(41, 56, "plains", "Italia");                // Latium (Rome), west coast
-  ellipse(47, 70, 2.5, 2, "hills", "Sicily");        // Sicily off the toe (Messina narrows kept 1 hex)
-  ellipse(35, 62, 2, 2.5, "hills", "Sardinia"); ellipse(36, 57, 1.5, 2, "hills", "Corsica");
-  // GREECE — peninsulas + Peloponnese jutting into the E Med.
-  box(53, 55, 60, 61, "hills", "Greece"); path([[56, 60], [57, 64], [58, 67]], "hills", 1, "Greece");
-
-  // ---- MOUNTAIN SPINES (§2b) — the great ranges as ridge paths ----
-  path([[15, 47], [19, 47], [23, 47]], "mountains", 0, "Pyrenees");         // Pyrenees seal Iberia
-  path([[36, 45], [40, 44], [44, 45], [47, 47]], "mountains", 1, "Alps");   // Alps arc (Hannibal country)
-  path([[41, 52], [42, 58], [44, 64]], "mountains", 0, "Apennines");        // Apennine spine of Italy
-  path([[62, 56], [66, 57], [72, 56]], "mountains", 0, "Taurus");           // Taurus (south Anatolia)
-  path([[84, 52], [87, 60], [88, 68]], "mountains", 0, "Zagros");           // Zagros wall of Mesopotamia
-  path([[76, 44], [80, 44], [84, 45]], "mountains", 0, "Caucasus");         // Caucasus (Black↔Caspian)
-  path([[13, 74], [18, 75], [23, 75]], "mountains", 0, "Atlas");            // Atlas (NW Africa)
-  path([[50, 40], [55, 41], [61, 42]], "mountains", 0, "Carpathians");      // Carpathians (N of Danube)
-
-  // Straits — exactly 1 hex of water between two lands (naval chokepoints).
-  setPct(11, 68, "sea", "Gibraltar"); setPct(62, 52, "sea", "Bosporus"); setPct(22, 22, "sea", "Channel");
-
-  // ---- 3 + rivers: RIVERS. Great rivers become great-river TILES; minors = edge rivers. ----
-  // Nile: south edge (Kush) → the valley → a delta fan at the Mediterranean's south shore.
-  const nile: Array<[number, number]> = [[67, 98], [67, 90], [66, 82], [66, 76], [65, 72], [64, 70]];
-  path(nile, "great-river", 0, "Egypt");
-  box(61, 70, 67, 72, "great-river", "Egypt");        // delta fan into the Med (2 hexes wide)
-  // Lower Danube: the Balkans → the Black Sea.
-  path([[50, 44], [56, 46], [62, 48], [66, 49]], "great-river", 0, "Danube");
-  // Lower Rhine: delta stretch to the North Sea.
-  path([[32, 34], [31, 26], [29, 18], [28, 15]], "great-river", 0, "Rhine");
-  // Tigris & Euphrates → Persian Gulf.
-  path([[76, 64], [78, 70], [80, 76], [81, 80]], "great-river", 0, "Mesopotamia"); // Euphrates
-  path([[80, 64], [82, 70], [83, 76], [82, 80]], "great-river", 0, "Mesopotamia"); // Tigris
-
-  // ---- Coast ring: any land tile touching the sea becomes shallow coast's neighbour;
-  // mark a one-hex coast band so ships hug the shore (and cities sit on real coasts).
-  const isSea = (c: number, r: number): boolean => inB(c, r) && grid[r][c].terrain === "sea";
-  const coastMark: Array<[number, number]> = [];
-  for (let r = 0; r < H; r += 1) for (let c = 0; c < W; c += 1) {
-    const t = grid[r][c].terrain;
-    if (t === "sea" || t === "great-river") continue;
-    const ax = offsetToAxial(c, r);
-    for (const n of neighborsOf(ax)) {
-      // convert axial neighbour back to offset to test sea adjacency
-      const nr = n.r, nc = n.q + ((nr - (nr & 1)) >> 1);
-      if (isSea(nc, nr)) { coastMark.push([c, r]); break; }
-    }
-  }
-  for (const [c, r] of coastMark) if (grid[r][c].terrain === "plains" || grid[r][c].terrain === "desert") grid[r][c].terrain = "coast";
-
-  // ---- Compile to CreateGameConfig ----
-  const tiles: Record<string, Cell> = {};
-  const rivers: Record<string, boolean> = {};
+  const tiles: Record<string, { terrain: TerrainType; region: string }> = {};
+  const capitalAt: Record<number, Coord> = {};
   const usedRegions = new Set<string>();
-  for (let r = 0; r < H; r += 1) for (let c = 0; c < W; c += 1) {
-    const cell = grid[r][c];
-    usedRegions.add(cell.region);
-    tiles[keyOf(offsetToAxial(c, r))] = cell;
-  }
-
-  // Minor edge-rivers: Po, Rhone, Tiber, Ebro, Seine (short flavour courses).
-  const minorEdges: Array<Array<[number, number]>> = [
-    [[38, 49], [42, 51], [46, 52]],   // Po → Adriatic
-    [[42, 45], [40, 52], [38, 58]],   // Rhone → W Med
-    [[42, 54], [41, 56], [40, 58]],   // Tiber past Rome
-    [[16, 55], [12, 58], [9, 60]],    // Ebro → Atlantic-ish
-    [[26, 34], [22, 30], [20, 26]]    // Seine → Channel
-  ];
-  for (const line of minorEdges) {
-    for (let i = 0; i < line.length - 1; i += 1) {
-      const a = offsetToAxial(px(line[i][0]), py(line[i][1]));
-      const b = offsetToAxial(px(line[i + 1][0]), py(line[i + 1][1]));
-      rivers[edgeKey(a, b)] = true;
+  for (let row = 0; row < H; row += 1) {
+    for (let col = 0; col < W; col += 1) {
+      const ch = grid[row][col];
+      let terrain: TerrainType;
+      if (ch >= "1" && ch <= "9") { terrain = "plains"; capitalAt[Number(ch) - 1] = offsetToAxial(col, row); }
+      else terrain = LEGEND[ch] ?? "sea";
+      const region = climateBand(row);
+      usedRegions.add(region);
+      tiles[keyOf(offsetToAxial(col, row))] = { terrain, region };
     }
   }
 
-  // ---- 3. THE EIGHT STARTS (spec §3) ----
-  const STARTS: Array<{ id: string; civ: string; x: number; y: number }> = [
-    { id: "rome", civ: "rome", x: 41, y: 56 },
-    { id: "carthage", civ: "carthage", x: 38, y: 70 },
-    { id: "greece", civ: "greece", x: 56, y: 62 },
-    { id: "egypt", civ: "egypt", x: 66, y: 82 },
-    { id: "kush", civ: "kush", x: 67, y: 95 },
-    { id: "gaul", civ: "gaul", x: 26, y: 38 },
-    { id: "britons", civ: "britons", x: 19, y: 22 },
-    { id: "parthia", civ: "parthia", x: 88, y: 62 }
-  ];
   const cities: NonNullable<CreateGameConfig["map"]>["cities"] = {};
   const units: NonNullable<CreateGameConfig["map"]>["units"] = {};
   const occupied = new Set<string>();
+  const STARTS = [
+    { id: "rome", civ: "rome" }, { id: "carthage", civ: "carthage" }, { id: "greece", civ: "greece" },
+    { id: "egypt", civ: "egypt" }, { id: "kush", civ: "kush" }, { id: "gaul", civ: "gaul" },
+    { id: "britons", civ: "britons" }, { id: "parthia", civ: "parthia" }
+  ];
   const players = STARTS.map((s) => ({ id: s.id, civ: s.civ, food: 8, production: 30, gold: 20, techs: [] as string[] }));
-  for (const s of STARTS) {
-    const col = px(s.x), row = py(s.y);
-    // Seat the capital on the nearest dry, non-mountain land (searching outward).
-    let cap: Coord | null = null;
-    outer: for (let rad = 0; rad < 8 && !cap; rad += 1) {
-      for (let dr = -rad; dr <= rad; dr += 1) for (let dc = -rad; dc <= rad; dc += 1) {
-        const c = col + dc, r = row + dr;
-        if (!inB(c, r)) continue;
-        const t = grid[r][c].terrain;
-        if (t === "plains" || t === "valley" || t === "hills" || t === "coast" || t === "desert") {
-          grid[r][c].terrain = "plains"; cap = offsetToAxial(c, r); break outer;
-        }
-      }
-    }
-    if (!cap) cap = offsetToAxial(col, row);
-    const ck = keyOf(cap);
-    tiles[ck] = { terrain: "plains", region: climateBand(cap.r) }; // capital always on dry plains
+  STARTS.forEach((s, i) => {
+    const cap = capitalAt[i];
+    if (!cap) return;
+    tiles[keyOf(cap)] = { terrain: "plains", region: climateBand(cap.r) };
     cities[`${s.id}_capital`] = { id: `${s.id}_capital`, ownerId: s.id, position: cap, population: 2, hp: 40, maxHp: 40, isCapital: true };
-    occupied.add(ck);
+    occupied.add(keyOf(cap));
     const spots: Coord[] = [];
     for (const n of neighborsOf(cap)) {
       const k = keyOf(n); const tt = tiles[k]?.terrain;
@@ -226,12 +189,16 @@ export function oldWorldEpic(seed = "old-world"): CreateGameConfig {
     const ep = spots[1] ?? cap; occupied.add(keyOf(ep));
     units[`${s.id}_warrior`] = { id: `${s.id}_warrior`, type: "warrior", ownerId: s.id, position: wp };
     units[`${s.id}_explorer`] = { id: `${s.id}_explorer`, type: "explorer", ownerId: s.id, position: ep };
-  }
+  });
+
+  // NOTE: region-locked ruins/villages at historical seats (Giza, Troy, Knossos, Stonehenge,
+  // Ur, …) are a follow-up — CreateGameConfig.map carries no ruins/villages field yet, so
+  // authored placement needs a small engine hook (else they're scattered at game creation).
 
   return {
     seed,
-    turnLimit: 120,
+    turnLimit: 160,
     players,
-    map: { width: W, height: H, regions: Array.from(usedRegions), rivers, tiles, cities, units }
+    map: { width: W, height: H, regions: Array.from(usedRegions), rivers: {}, tiles, cities, units }
   };
 }

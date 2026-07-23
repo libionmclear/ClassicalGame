@@ -53,9 +53,15 @@ export const TERRAIN_ELEV: Record<string, number> = {
   forest: 0.34, hills: 0.72, highlands: 0.96, mountains: 1.20, desert: 0.14
 };
 export const SEA_LEVEL = -0.1;
-const WATER = new Set(["sea", "coast", "great-river"]); // great-river is a water tile (sits at water level)
+// The DEEP seabed sits well below the water plane so the water surface never z-fights the
+// terrain's sea tiles (that interference showed as horizontal bands on big maps). Coast +
+// great-river stay just below the water so the §5 shore transparency reveals their bed.
+const DEEP_SEA = -0.44;
 export function elevationOf(terrain: string): number {
-  return WATER.has(terrain) ? SEA_LEVEL : (TERRAIN_ELEV[terrain] ?? 0.12);
+  if (terrain === "sea") return DEEP_SEA;
+  if (terrain === "coast") return -0.08;
+  if (terrain === "great-river") return -0.12;
+  return TERRAIN_ELEV[terrain] ?? 0.12;
 }
 
 // Per-biome render config (extended as the art pipeline fills in). tiling = texture
@@ -118,7 +124,7 @@ function rolling(x: number, z: number): number {
 // same tiles in → same surface out.
 const BLEND_R = 2.8 * SIZE;               // blend radius (~1.5 hexes)
 const RING = 2;                           // axial neighbourhood scanned per sample
-const SEA_SAMPLE: TileSample = { elev: SEA_LEVEL, r: 0x2f / 255, g: 0x51 / 255, b: 0x77 / 255, mtn: 0 };
+const SEA_SAMPLE: TileSample = { elev: DEEP_SEA, r: 0x2f / 255, g: 0x51 / 255, b: 0x77 / 255, mtn: 0 };
 export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number; r: number; g: number; b: number; mtn: number } {
   const rf = z / (1.5 * SIZE);
   const qf = x / (SIZE * Math.sqrt(3)) - rf / 2;
