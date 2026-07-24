@@ -2363,14 +2363,74 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     borderGroup.add(mesh);
     return mesh;
   }
+  // ===== SHIFT #1 — Rivers rebuild (WATER-SPEC §8) =====
+  // The old per-edge box ribbons are replaced by ONE continuous course per river: the river
+  // graph is chained into polylines, each becomes a Catmull-Rom spline tube SUNK into a
+  // shallow channel (below bank level), with downstream flow scrolling. No segments, no gaps.
+  const riverGroup = new THREE.Group();
+  scene.add(riverGroup);
+  const riverFlowNormal = makeNoiseNormalMap(128, [[4, 1], [9, 0.5], [16, 0.3]], 1.5);
+  riverFlowNormal.wrapS = riverFlowNormal.wrapT = THREE.RepeatWrapping;
+  riverFlowNormal.repeat.set(14, 1); // ripple bands ALONG the course (u = along the tube)
+  const riverFlowMat = new THREE.MeshStandardMaterial({
+    color: 0x3f6f86, roughness: 0.2, metalness: 0.06, transparent: true, opacity: 0.92,
+    normalMap: riverFlowNormal, emissive: 0x0a2942, emissiveIntensity: 0.22
+  });
+  // Trace the river edge-set into continuous polylines (each edge consumed once; tributaries
+  // meet at a shared junction so they read as one system). Leaves (sources/mouths) start first.
+  function chainRivers(edges: EdgeView[] | undefined): Array<Array<{ q: number; r: number }>> {
+    if (!edges || !edges.length) return [];
+    const adj = new Map<string, Set<string>>();
+    const add = (a: string, b: string) => { let s = adj.get(a); if (!s) { s = new Set(); adj.set(a, s); } s.add(b); };
+    for (const e of edges) { const a = e.q + "," + e.r, b = e.nq + "," + e.nr; add(a, b); add(b, a); }
+    const used = new Set<string>();
+    const ek = (a: string, b: string) => (a < b ? a + "|" + b : b + "|" + a);
+    const parse = (k: string) => { const p = k.split(",").map(Number); return { q: p[0], r: p[1] }; };
+    const chains: Array<Array<{ q: number; r: number }>> = [];
+    const starts = [...adj.keys()].sort((a, b) => adj.get(a)!.size - adj.get(b)!.size);
+    for (const start of starts) {
+      for (const first of adj.get(start)!) {
+        if (used.has(ek(start, first))) continue;
+        const chain = [start];
+        let cur = start, next: string | null = first, prev = "";
+        while (next && !used.has(ek(cur, next))) {
+          used.add(ek(cur, next)); chain.push(next);
+          prev = cur; cur = next; next = null;
+          for (const nb of adj.get(cur)!) if (nb !== prev && !used.has(ek(cur, nb))) { next = nb; break; }
+          if (!next) for (const nb of adj.get(cur)!) if (!used.has(ek(cur, nb))) { next = nb; break; }
+        }
+        if (chain.length >= 2) chains.push(chain.map(parse));
+      }
+    }
+    return chains;
+  }
+  function buildRiverMesh(view: BoardView, hAt: (q: number, r: number) => number): void {
+    while (riverGroup.children.length) { const m = riverGroup.children[0] as THREE.Mesh; riverGroup.remove(m); m.geometry.dispose(); }
+    const cityTiles = new Set(view.sprites.filter((s) => s.kind === "city").map((s) => s.q + "," + s.r));
+    for (const chain of chainRivers(view.rivers)) {
+      const pts: THREE.Vector3[] = [];
+      for (const c of chain) {
+        if (cityTiles.has(c.q + "," + c.r)) continue; // route around/under the city platform
+        const w = axialToWorld(c.q, c.r);
+        pts.push(new THREE.Vector3(w.x, hAt(c.q, c.r) - 0.05, w.z)); // sunk below the bank
+      }
+      if (pts.length < 2) continue;
+      const curve = new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5);
+      const tub = Math.max(10, (pts.length - 1) * 8);
+      const geo = new THREE.TubeGeometry(curve, tub, 0.15, 6, false);
+      const mesh = new THREE.Mesh(geo, riverFlowMat);
+      mesh.renderOrder = 1;
+      riverGroup.add(mesh);
+    }
+  }
+
   function drawWaterways(view: BoardView): void {
     const terrainByKey: Record<string, string> = {};
     for (const tv of view.tiles) terrainByKey[tv.q + "," + tv.r] = tv.t;
     const heightOf = (q: number, r: number): number => { const t = terrainByKey[q + "," + r] || "plains"; const w = axialToWorld(q, r); return groundY(t, w.x, w.z); };
     roadMesh = drawEdges(view.roads, roadGeo, roadMat, 0.05, true, heightOf, roadMesh);
-    // Rivers flow ALONG the path (centre to centre) like roads, so consecutive
-    // segments join into one continuous waterway instead of disjoint edge-bars.
-    riverMesh = drawEdges(view.rivers, riverGeo, riverMat, 0.04, true, heightOf, riverMesh);
+    buildRiverMesh(view, heightOf); // §8: one continuous carved channel per river (replaces edge-bars)
+    void riverMesh; void riverGeo; void riverMat; // (retired ribbon path)
   }
 
   function pickIndex(cx: number, cy: number): number {
@@ -2680,6 +2740,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       sun.intensity += boost * 1.4;
       skyMat.uniforms.topColor.value.lerp(new THREE.Color(0xe6ecf2), boost);
     }
+    riverFlowNormal.offset.x -= dt * 0.4; // §8: water visibly flows downstream (scroll along the course)
     if (selRing.visible) { const m = (selRing.material as THREE.MeshBasicMaterial).map; if (m) m.rotation += dt * 0.5; } // R2.5: slow laurel spin
     if (attackGroup.children.length) { // R2.6: throb the attackable rings
       const pulse = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(hlTime * 4.5));
