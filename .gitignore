@@ -29,6 +29,7 @@ _clickdiag.mjs
 _rawclick.mjs
 _overlayaudit.mjs
 _scenariorender.mjs
+_eventprobe.mjs
 
 # temp map-authoring scratch
 _ow*.ts
