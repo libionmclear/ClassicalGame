@@ -951,7 +951,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // Filmic tone mapping for richer, less-flat colour (applied by the OutputPass
   // at the end of the post-processing chain).
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.88; // Gate 2/item 8: highlights (foliage) don't clip white
+  renderer.toneMappingExposure = 0.9; // §3 daylight — modest; warm ambient + high bloom threshold carry the brightness without clipping foliage
 
   // Graphics quality (localStorage "hegemon_gfx": "high" default | "low"). HIGH runs
   // the full pipeline (ambient occlusion + antialiasing + env reflections + procedural
@@ -1055,10 +1055,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
 
-  const ambLight = new THREE.AmbientLight(0xbfd4ff, 0.62);
-  const hemiLight = new THREE.HemisphereLight(0xcfe4ff, 0x36342f, 0.5);
+  // Warm daylight: neutral-warm ambient + a warmer sky hemi (was cool blue 0xbfd4ff/0xcfe4ff,
+  // which cast a dusky overcast tint over the whole scene). §3 daylight pass.
+  const ambLight = new THREE.AmbientLight(0xe4e0d0, 0.66);
+  const hemiLight = new THREE.HemisphereLight(0xe6ecec, 0x3c382e, 0.52);
   scene.add(ambLight, hemiLight);
-  const sun = new THREE.DirectionalLight(0xfff0d4, 1.15);
+  const sun = new THREE.DirectionalLight(0xfff2d6, 1.22); // §3: warm daylight key (brightness comes from the warm ambient + no dusk cast, not a blinding sun that clips foliage)
   sun.position.set(-26, 44, 20);
   sun.castShadow = true;
   sun.shadow.mapSize.set(HIGH ? 2048 : 1024, HIGH ? 2048 : 1024); // capped for perf (Gate 1)
@@ -1373,7 +1375,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
             for (const mm of mats) {
               const sm = mm as THREE.MeshStandardMaterial;
               if ("roughness" in sm) { sm.roughness = 1; sm.metalness = 0; }
-              if (tint !== undefined && sm.color) sm.color.multiply(new THREE.Color(tint));
+              // Kill any baked EMISSIVE — Meshy foliage often ships a self-illuminating white
+              // canopy (emissive map/colour) that no tint, exposure or bloom setting can tame;
+              // that is the real "white trees" cause. Then force the fresco tint on the albedo.
+              if (sm.emissive) { sm.emissive.setRGB(0, 0, 0); sm.emissiveIntensity = 0; if (sm.emissiveMap) sm.emissiveMap = null; }
+              if (tint !== undefined && sm.color) sm.color.set(tint);
             }
             propModels.set(key, norm); scatterDirty = true; // loop rebuilds scatter once, coalesced
           }
@@ -2532,7 +2538,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   }
   // Gate 2: gentler bloom + higher threshold so lit foliage keeps its silver-green instead
   // of blooming to white; only genuine speculars/sun bloom now.
-  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.10, 0.55, 0.93);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.09, 0.55, 0.985); // §3: high threshold so bright daylight foliage never blooms to white — only true speculars/sun
   composer.addPass(bloom);
   if (HIGH) composer.addPass(new SMAAPass());
   composer.addPass(new OutputPass());
@@ -2674,10 +2680,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     curFogFar += (moodTarget.fogFar - curFogFar) * kw;
     curDisc += (moodTarget.disc - curDisc) * kw;
     curCloud += (moodTarget.cloud - curCloud) * kw;
-    // Day/night restored: a slow real-time cycle (~3.5 min), biased toward daylight so
-    // night is a shorter dusky spell (the sun keeps a moon floor, so it's never pitch black
-    // and the board stays playable). cos starts at +1 → full daylight on load.
-    dayTarget = Math.max(0, Math.min(1, 0.58 + 0.62 * Math.cos(hlTime * 0.03)));
+    // Day/night: BRIGHT WARM DAYLIGHT is the default look (per reference). A slow, gentle
+    // cycle holds full daylight most of the time and only dips to a soft evening — never a
+    // dark dusk that dominates play. cos starts at +1 → full bright daylight on load.
+    dayTarget = Math.max(0, Math.min(1, 0.84 + 0.42 * Math.cos(hlTime * 0.016)));
     // Ease the day/night factor + the sun's arc alongside the weather.
     curDay += (dayTarget - curDay) * kw;
     curElev += (elevTarget - curElev) * kw;
