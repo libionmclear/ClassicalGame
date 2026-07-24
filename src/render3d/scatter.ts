@@ -31,38 +31,44 @@ export function climateOf(region: string | undefined): Climate {
 // Per climate → per biome → prop entries (key + expected count "density"). Weighted so a
 // tile draws a small, varied handful. Papyrus is applied by the Nile rule below, not here.
 type Entry = { key: string; n: number };
+// P2.8 rebalance (stabilization): rocks DOWN sharply on plains/hills/highlands/desert
+// (a boulder field read as "rocks everywhere"); grass/scrub UP on plains/valley; forest
+// tiles carry full grove density — the per-tile sums below reach ~10–12, and with the
+// grove multiplier (×0…1.7) dense grove tiles hit ~15–25 trees while clearings go bare.
+// Mountains stay craggy (rock is correct there). Rock keys: rock-cluster/rock-shard/
+// limestone-boulder/mossy-boulder.
 const M: Record<string, Entry[]> = {
-  plains:    [{ key: "scatter/dry-grass", n: 3.0 }, { key: "scatter/limestone-boulder", n: 0.3 }],
-  valley:    [{ key: "scatter/dry-grass", n: 3.6 }, { key: "scatter/olive", n: 0.4 }],
-  hills:     [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/olive", n: 0.8 }, { key: "scatter/desert-scrub", n: 0.7 }, { key: "scatter/limestone-boulder", n: 0.5 }, { key: "scatter/rock-shard", n: 0.5 }],
-  forest:    [{ key: "scatter/stone-pine", n: 1.6 }, { key: "scatter/cypress", n: 1.4 }, { key: "scatter/olive", n: 0.7 }, { key: "scatter/fallen-trunk", n: 0.4 }],
-  highlands: [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/rock-shard", n: 0.6 }, { key: "scatter/olive", n: 0.3 }],
-  mountains: [{ key: "scatter/rock-shard", n: 1.1 }],
+  plains:    [{ key: "scatter/dry-grass", n: 4.2 }, { key: "scatter/limestone-boulder", n: 0.1 }],
+  valley:    [{ key: "scatter/dry-grass", n: 4.4 }, { key: "scatter/olive", n: 0.5 }],
+  hills:     [{ key: "scatter/olive", n: 1.0 }, { key: "scatter/desert-scrub", n: 0.8 }, { key: "scatter/rock-cluster", n: 0.35 }, { key: "scatter/limestone-boulder", n: 0.18 }, { key: "scatter/rock-shard", n: 0.2 }],
+  forest:    [{ key: "scatter/stone-pine", n: 4.6 }, { key: "scatter/cypress", n: 4.0 }, { key: "scatter/olive", n: 1.7 }, { key: "scatter/fallen-trunk", n: 0.5 }],
+  highlands: [{ key: "scatter/olive", n: 0.6 }, { key: "scatter/rock-cluster", n: 0.4 }, { key: "scatter/rock-shard", n: 0.28 }],
+  mountains: [{ key: "scatter/rock-shard", n: 0.85 }],
   marsh:     [{ key: "scatter/reeds", n: 3.0 }],
-  desert:    [{ key: "scatter/desert-scrub", n: 0.9 }, { key: "scatter/rock-cluster", n: 0.45 }, { key: "scatter/rock-shard", n: 0.6 }, { key: "scatter/limestone-boulder", n: 0.3 }],
-  coast:     [{ key: "scatter/rock-cluster", n: 0.5 }, { key: "scatter/driftwood", n: 0.3 }]
+  desert:    [{ key: "scatter/desert-scrub", n: 1.15 }, { key: "scatter/rock-cluster", n: 0.14 }, { key: "scatter/rock-shard", n: 0.18 }, { key: "scatter/limestone-boulder", n: 0.1 }],
+  coast:     [{ key: "scatter/rock-cluster", n: 0.2 }, { key: "scatter/driftwood", n: 0.3 }]
 };
 const N: Record<string, Entry[]> = {
-  plains:    [{ key: "scatter/dry-grass", n: 3.4 }, { key: "scatter/mossy-boulder", n: 0.4 }],
-  valley:    [{ key: "scatter/dry-grass", n: 3.8 }],
-  hills:     [{ key: "scatter/mossy-boulder", n: 1.2 }, { key: "scatter/rock-cluster", n: 0.6 }, { key: "scatter/oak", n: 0.5 }],
-  forest:    [{ key: "scatter/oak", n: 1.4 }, { key: "scatter/beech", n: 1.2 }, { key: "scatter/fir", n: 1.2 }, { key: "scatter/fallen-trunk", n: 0.5 }],
-  highlands: [{ key: "scatter/mossy-boulder", n: 0.9 }, { key: "scatter/rock-shard", n: 0.6 }, { key: "scatter/fir", n: 0.4 }],
-  mountains: [{ key: "scatter/rock-shard", n: 1.1 }],
+  plains:    [{ key: "scatter/dry-grass", n: 4.4 }, { key: "scatter/mossy-boulder", n: 0.14 }],
+  valley:    [{ key: "scatter/dry-grass", n: 4.6 }],
+  hills:     [{ key: "scatter/oak", n: 0.9 }, { key: "scatter/mossy-boulder", n: 0.45 }, { key: "scatter/rock-cluster", n: 0.22 }],
+  forest:    [{ key: "scatter/oak", n: 4.2 }, { key: "scatter/beech", n: 3.6 }, { key: "scatter/fir", n: 3.6 }, { key: "scatter/fallen-trunk", n: 0.6 }],
+  highlands: [{ key: "scatter/fir", n: 0.8 }, { key: "scatter/mossy-boulder", n: 0.4 }, { key: "scatter/rock-shard", n: 0.28 }],
+  mountains: [{ key: "scatter/rock-shard", n: 0.85 }],
   marsh:     [{ key: "scatter/reeds", n: 3.2 }],
-  desert:    [{ key: "scatter/desert-scrub", n: 0.6 }],
-  coast:     [{ key: "scatter/rock-cluster", n: 0.6 }, { key: "scatter/driftwood", n: 0.4 }]
+  desert:    [{ key: "scatter/desert-scrub", n: 0.7 }],
+  coast:     [{ key: "scatter/rock-cluster", n: 0.24 }, { key: "scatter/driftwood", n: 0.35 }]
 };
 const A: Record<string, Entry[]> = {
-  plains:    [{ key: "scatter/dry-grass", n: 1.2 }, { key: "scatter/desert-scrub", n: 0.6 }],
-  valley:    [{ key: "scatter/dry-grass", n: 1.6 }, { key: "scatter/date-palm", n: 0.5 }],
-  hills:     [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/desert-scrub", n: 0.7 }, { key: "scatter/rock-shard", n: 0.6 }],
-  forest:    [{ key: "scatter/date-palm", n: 1.2 }, { key: "scatter/desert-scrub", n: 0.6 }],
-  highlands: [{ key: "scatter/rock-cluster", n: 0.9 }, { key: "scatter/rock-shard", n: 0.6 }],
-  mountains: [{ key: "scatter/rock-shard", n: 1.0 }, { key: "scatter/rock-cluster", n: 0.4 }],
-  marsh:     [{ key: "scatter/reeds", n: 2.0 }],
-  desert:    [{ key: "scatter/desert-scrub", n: 1.1 }, { key: "scatter/rock-cluster", n: 0.4 }, { key: "scatter/rock-shard", n: 0.7 }],
-  coast:     [{ key: "scatter/rock-cluster", n: 0.5 }, { key: "scatter/driftwood", n: 0.3 }]
+  plains:    [{ key: "scatter/dry-grass", n: 2.4 }, { key: "scatter/desert-scrub", n: 0.9 }],
+  valley:    [{ key: "scatter/dry-grass", n: 2.6 }, { key: "scatter/date-palm", n: 0.6 }],
+  hills:     [{ key: "scatter/desert-scrub", n: 0.9 }, { key: "scatter/rock-cluster", n: 0.3 }, { key: "scatter/rock-shard", n: 0.2 }],
+  forest:    [{ key: "scatter/date-palm", n: 3.4 }, { key: "scatter/desert-scrub", n: 1.0 }],
+  highlands: [{ key: "scatter/rock-cluster", n: 0.35 }, { key: "scatter/rock-shard", n: 0.22 }],
+  mountains: [{ key: "scatter/rock-shard", n: 0.8 }, { key: "scatter/rock-cluster", n: 0.18 }],
+  marsh:     [{ key: "scatter/reeds", n: 2.4 }],
+  desert:    [{ key: "scatter/desert-scrub", n: 1.4 }, { key: "scatter/rock-cluster", n: 0.13 }, { key: "scatter/rock-shard", n: 0.2 }],
+  coast:     [{ key: "scatter/rock-cluster", n: 0.2 }, { key: "scatter/driftwood", n: 0.3 }]
 };
 const TABLES: Record<Climate, Record<string, Entry[]>> = { mediterranean: M, northern: N, arid: A };
 
