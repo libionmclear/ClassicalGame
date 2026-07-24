@@ -191,23 +191,15 @@ function glyphTexture(glyph: string): THREE.Texture {
     cv.width = 64;
     cv.height = 64;
     const ctx = cv.getContext("2d")!;
-    ctx.fillStyle = "rgba(8,12,20,0.86)";
-    ctx.beginPath();
-    // rounded chip
-    const r = 14;
-    ctx.moveTo(6 + r, 8);
-    ctx.arcTo(58, 8, 58, 56, r);
-    ctx.arcTo(58, 56, 6, 56, r);
-    ctx.arcTo(6, 56, 6, 8, r);
-    ctx.arcTo(6, 8, 58, 8, r);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.35)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.font = "34px system-ui, 'Segoe UI Emoji', sans-serif";
+    // R2.2: NO backing plate (the "black box"). The glyph floats alone; a soft dark
+    // halo (a few blurred passes) keeps it legible over any terrain without a chip.
+    ctx.font = "40px system-ui, 'Segoe UI Emoji', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(glyph, 32, 34);
+    ctx.shadowColor = "rgba(0,0,0,0.9)";
+    for (const blur of [7, 5, 3]) { ctx.shadowBlur = blur; ctx.fillText(glyph, 32, 33); }
+    ctx.shadowBlur = 0;
+    ctx.fillText(glyph, 32, 33);
     tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     glyphTextures.set(glyph, tex);
@@ -224,9 +216,12 @@ function shadowTexture(): THREE.Texture {
   cv.width = 64;
   cv.height = 64;
   const ctx = cv.getContext("2d")!;
-  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
-  g.addColorStop(0, "rgba(0,0,0,0.5)");
-  g.addColorStop(0.55, "rgba(0,0,0,0.26)");
+  // R2.2: a SOFT contact smudge — low centre alpha and an early fade so a small blob
+  // reads as grounding, never a hard "black box" where the flat plane floats over relief.
+  const g = ctx.createRadialGradient(32, 32, 1, 32, 32, 30);
+  g.addColorStop(0, "rgba(0,0,0,0.34)");
+  g.addColorStop(0.4, "rgba(0,0,0,0.14)");
+  g.addColorStop(0.7, "rgba(0,0,0,0.04)");
   g.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
@@ -2041,8 +2036,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const shadow = new THREE.Mesh(shadowGeo, shadowMat);
       shadow.rotation.x = -Math.PI / 2;
       shadow.position.set(ox, top + 0.02, oz);
-      const sh = isCity ? 1.7 : 1.0;
+      const sh = isCity ? 1.4 : 0.66; // tight to the footprint so it doesn't float over relief
       shadow.scale.set(sh, sh, 1);
+      shadow.renderOrder = 1;
       holder.add(shadow);
 
       if (isCity && sv.garrison && sv.garrison > 0) {
@@ -2059,7 +2055,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
       if (sv.badge) {
         const b = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(sv.badge), transparent: true, depthWrite: false, depthTest: false }));
-        b.center.set(0.5, 0); b.scale.set(0.5, 0.5, 0.5); b.position.set(ox, top + (isCity ? 1.5 : 1.05), oz); b.renderOrder = 999;
+        b.center.set(0.5, 0); b.scale.set(0.42, 0.42, 0.42); b.position.set(ox, top + (isCity ? 1.5 : 1.05), oz); b.renderOrder = 999;
         holder.add(b);
       }
 
@@ -2074,7 +2070,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       // Army count over a stacked tile (once, on the first unit, at tile centre).
       if (stackN > 1 && (tileUnitOrd[sv.q + "," + sv.r] === 1)) {
         const cb = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture("⚔" + stackN), transparent: true, depthWrite: false, depthTest: false }));
-        cb.center.set(0.5, 0); cb.scale.set(0.6, 0.6, 0.6); cb.position.set(0, top + 1.5, 0); cb.renderOrder = 999;
+        cb.center.set(0.5, 0); cb.scale.set(0.5, 0.5, 0.5); cb.position.set(0, top + 1.5, 0); cb.renderOrder = 999;
         holder.add(cb);
       }
 
