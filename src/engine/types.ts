@@ -298,6 +298,9 @@ export interface GameState {
    *  (pushed too far past the map's border). The client reports these, then it's
    *  overwritten on the next end-turn. */
   lostAtSea?: Array<{ playerId: string; unitId: string; type: string }>;
+  /** History-Deck event effects currently in play (multi-turn buffs, temp bridges,
+   *  siege lines, bleeding regions). Pruned at each world-turn boundary. */
+  activeEffects?: ActiveEffect[];
   /** Off-grid corsair raids currently in flight against coastal cities (raiders.md). */
   raids?: Raid[];
   /** Transient: warnings raised and strikes resolved on the world-turn that just
@@ -378,6 +381,57 @@ export interface ChooseForkAction {
 export interface EndTurnAction {
   type: "END_TURN";
   playerId: string;
+}
+
+/** History-Deck event cards resolve through this one action; `instant` is the
+ *  mechanic key from cards-data-v2 (effect.instant). Optional targets are
+ *  resolved by the client where a choice is needed; the engine falls back to a
+ *  deterministic pick when they are absent. */
+export interface PlayEventCardAction {
+  type: "PLAY_EVENT_CARD";
+  playerId: string;
+  cardId: string;
+  instant: string;
+  /** A designated unit (the army the card acts on / through). */
+  unitId?: string;
+  /** A designated enemy city (siege / evocatio). */
+  cityId?: string;
+  /** A designated tile (bridge span, region seed). */
+  target?: Coord;
+}
+
+/** A History-Deck effect currently in play — a multi-turn buff, a temporary
+ *  bridge, siege lines, or a bleeding region. Pruned once `state.turn` passes
+ *  `expiresTurn`. Kept deliberately small and JSON-plain (it round-trips through
+ *  serializeState like the rest of the world). */
+export type EffectKind =
+  | "temp-bridge" // a span over a river / sea strait; land units cross the tile freely
+  | "levy" // a temporary unit (its `unitId`) that disbands when the effect lapses
+  | "mountain-pass" // this player's units may cross "impassable" mountains (with attrition)
+  | "forced-march" // this player's infantry gain +1 movement
+  | "bulwark" // a designated unit holds a choke: huge defence, immune to flanking
+  | "fabian" // this player refuses battle: its units evade the first blow, invaders bleed
+  | "siege-lines" // an enemy city is circumvallated: no healing, no fresh garrison, bleeds HP
+  | "evocatio" // an enemy city's defence & loyalty are sapped
+  | "scorched-earth"; // a region burns any enemy unit that ends its turn in it
+
+export interface ActiveEffect {
+  id: string;
+  kind: EffectKind;
+  /** The player who cast it (owns / benefits from it). */
+  ownerId: string;
+  /** Last world-turn on which it is active; dropped once `state.turn` exceeds it. */
+  expiresTurn: number;
+  /** Scoped to a unit (buffs). */
+  unitId?: string;
+  /** Scoped to a city (siege / evocatio). */
+  cityId?: string;
+  /** Scoped to a region (scorched earth). */
+  region?: string;
+  /** Scoped to a tile "q,r" (temp bridge). */
+  tileKey?: string;
+  /** Provenance — the card that cast it. */
+  cardId?: string;
 }
 
 export interface FoundCityAction {
@@ -586,6 +640,7 @@ export type GameAction =
   | ResearchTechAction
   | ChooseForkAction
   | EndTurnAction
+  | PlayEventCardAction
   | FoundCityAction
   | BuildUnitAction
   | AttackCityAction

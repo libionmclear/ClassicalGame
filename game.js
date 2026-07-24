@@ -4639,43 +4639,62 @@
       showCombatToast("✗ " + card.name + " needs " + card.requiresTech.replace(/-/g, " ") + " researched.", "loss"); return;
     }
     const eff = (card.effect && card.effect.instant) || "";
-    let msg = "";
-    if (eff === "capital+10food") {
-      const cap = Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) || Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
-      if (cap) cap.food = (cap.food || 0) + 10;
-      msg = "🌾 " + card.name + " — +10 food in your capital.";
-    } else if (eff === "+15science") {
-      me.science += 15;
-      msg = "📜 " + card.name + " — +15 science.";
-    } else if (eff === "bridge-adjacent-river-2-turns") {
-      // Caesar's Bridge: span a great river beside your army with a temporary bridge —
-      // land units cross freely (engine reads tile.improvement="bridge"); pruned after 2 turns.
-      const HEX_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
-      const myUnits = Object.values(state.map.units).filter((u) => u.ownerId === HUMAN_ID);
-      let placed = null;
-      for (const u of myUnits) {
-        for (const d of HEX_DIRS) {
-          const tk = (u.position.q + d[0]) + "," + (u.position.r + d[1]); const t = state.map.tiles[tk];
-          if (t && t.terrain === "great-river" && t.improvement !== "bridge") { t.improvement = "bridge"; placed = tk; break; }
-        }
-        if (placed) break;
+    // Every History-Deck card resolves through the engine's PLAY_EVENT_CARD action,
+    // where each mechanic is a real, deterministic rule (buffs live in
+    // state.activeEffects; combat/movement/turn hooks read them). We pass the
+    // player's current selection as hints (the army to act through, the tile/enemy
+    // city to target); the engine falls back to a sensible pick when absent. On an
+    // illegal play the engine throws a readable reason and the card is NOT consumed.
+    const act = { type: "PLAY_EVENT_CARD", playerId: HUMAN_ID, cardId: id, instant: eff };
+    const selUnit = selectedUnitId && state.map.units[selectedUnitId];
+    if (selUnit && selUnit.ownerId === HUMAN_ID) act.unitId = selectedUnitId;
+    if (selectedTileKey && state.map.tiles[selectedTileKey]) {
+      const p = selectedTileKey.split(",").map(Number);
+      act.target = { q: p[0], r: p[1] };
+      if (eff === "siege-lines" || eff === "besieged-city-loyalty-defense-down") {
+        const city = Object.values(state.map.cities).find((c) => c.position.q === p[0] && c.position.r === p[1] && c.ownerId !== HUMAN_ID);
+        if (city) act.cityId = city.id;
       }
-      if (!placed) { showCombatToast("✗ " + card.name + " needs one of your armies beside a great river.", "loss"); return; }
-      state.tempBridges = state.tempBridges || [];
-      state.tempBridges.push({ key: placed, expire: state.turn + 2 });
-      msg = "🌉 " + card.name + " — a bridge spans the river; your armies cross freely for two turns.";
-    } else {
-      // Needs an engine hook that doesn't exist yet — flag and DON'T consume.
-      showCombatToast("⚑ " + card.name + " isn't wired to the engine yet — flagged (" + eff + ").", "");
+    }
+    let next;
+    try {
+      next = engine.applyAction(state, act);
+    } catch (e) {
+      const reason = (e && e.message) || "can't be played now.";
+      // Cards outside the wired History Deck still land on the engine's "not wired"
+      // path — keep the old neutral flag (never a red error) and don't consume them.
+      if (reason.indexOf("isn't wired") === 0) showCombatToast("⚑ " + card.name + " isn't available yet.", "");
+      else showCombatToast("✗ " + card.name + " — " + reason, "loss");
       return;
     }
+    state = next;
     state.playedEvents = state.playedEvents || {}; state.playedEvents[id] = 1;
+    const msg = (EVENT_PLAY_MSG[eff] || "✦ {name} played.").replace("{name}", card.name);
     logAction(msg);
     showCombatToast(msg, "");
     render();
     saveGame();
     renderHand();
   }
+  // Flavourful confirmation copy for each History-Deck card (the engine does the
+  // mechanics; this is only the toast/log line the player sees).
+  var EVENT_PLAY_MSG = {
+    "capital+10food": "🌾 {name} — +10 food in your capital.",
+    "+15science": "📜 {name} — +15 science.",
+    "bridge-adjacent-river-2-turns": "🌉 {name} — a bridge spans the river; your armies cross freely for two turns.",
+    "bridge-sea-strait-2-turns": "⛵ {name} — a pontoon bridges the strait; your army marches across dry-shod.",
+    "spawn-militia-capital-level": "🚜 {name} — Cincinnatus leaves the plough; a levy musters at the capital.",
+    "retreat-army-to-nearest-city": "🏃 {name} — the stranded army cuts its way home to the nearest city.",
+    "free-settler-4hex": "🌱 {name} — the sacred spring sends out youth to found a distant colony.",
+    "infantry+1move-3-turns": "🥾 {name} — the mules march: your infantry gain +1 movement for three turns.",
+    "cross-mountains-attrition": "🏔️ {name} — your army may cross the mountains for two turns (it will cost men).",
+    "pass-defense-immunity-2-turns": "🛡️ {name} — your unit holds the pass: unbreakable and unflankable for two turns.",
+    "withdraw-before-combat-3-turns": "🦊 {name} — you refuse open battle; the enemy bleeds giving chase for three turns.",
+    "cancel-ambush-reveal-adjacent": "🦢 {name} — the alarm is raised; the ground around your forces is revealed.",
+    "siege-lines": "⚒️ {name} — siege lines close around the city: no relief, no repair, it bleeds.",
+    "besieged-city-loyalty-defense-down": "📉 {name} — evocatio: the city's gods are called out; its defence and loyalty fail.",
+    "self-pillage-region-attrition": "🔥 {name} — scorched earth: you burn your own province so the invader starves."
+  };
 
   // Equip a Legend / Edict / Event into its one slot (toggle off if already there).
   function equipSlot(id) {

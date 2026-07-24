@@ -42,10 +42,11 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
   const terrain = TERRAIN[toTile.terrain];
   if (!terrain) return Number.POSITIVE_INFINITY;
 
-  // A bridge over a great river is a dry land crossing: land units cross the water
-  // TILE freely (no sailing or harbour needed) — this is the ONLY way land units enter
-  // a great-river tile short of embarking. Naval units fall through to the normal path.
-  if (toTile.terrain === "great-river" && toTile.improvement === "bridge" && unit.domain !== "naval") {
+  // A bridge is a dry land crossing over any water tile — a great river (Caesar's
+  // Bridge) or a one-hex sea strait (Xerxes' Pontoon). Land units cross the water
+  // TILE freely (no sailing or harbour needed); this is the ONLY way they enter a
+  // bridged water tile short of embarking. Naval units fall through to the normal path.
+  if (terrain.navalOnly && toTile.improvement === "bridge" && unit.domain !== "naval") {
     return 1;
   }
 
@@ -66,7 +67,14 @@ export function movementCost(state: GameState, unit: UnitMovementContext, from: 
     return Number.POSITIVE_INFINITY;
   }
 
-  if (terrain.impassableWithoutTech && !state.playersById[unit.ownerId].techs.includes(terrain.impassableWithoutTech)) {
+  // Hannibal Crosses the Alps: while the effect holds, this player's units may
+  // enter the "impassable" mountains without the mountain-paths tech (they pay
+  // the range's steep move cost, and bleed men each turn — attrition is applied
+  // at the turn boundary, not here).
+  const mountainPass =
+    terrain.impassableWithoutTech === "mountain-paths" &&
+    (state.activeEffects ?? []).some((e) => e.kind === "mountain-pass" && e.ownerId === unit.ownerId && state.turn <= e.expiresTurn);
+  if (terrain.impassableWithoutTech && !state.playersById[unit.ownerId].techs.includes(terrain.impassableWithoutTech) && !mountainPass) {
     return Number.POSITIVE_INFINITY;
   }
 

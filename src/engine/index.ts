@@ -39,6 +39,9 @@ import type {
   CreateGameConfig,
   City,
   EndTurnAction,
+  PlayEventCardAction,
+  ActiveEffect,
+  EffectKind,
   GameAction,
   GameMap,
   GameState,
@@ -234,6 +237,8 @@ function movementBudgetFor(state: GameState, unit: Unit): number {
   // Slice 4: flat +move from branch techs / cards (movePlus, per-cat, +navalMovePlus).
   let bonus = playerPctMod(owner, "movePlus", def.category);
   if (def.domain === "naval") bonus += playerPctMod(owner, "navalMovePlus");
+  // Marius' Mules: the professional legion out-marches everyone (+1 to land infantry).
+  if (def.domain === "land" && def.category === "infantry" && playerHasEffect(state, unit.ownerId, "forced-march")) bonus += 1;
   return def.movement + logistics + bonus;
 }
 
@@ -465,10 +470,15 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   const defG = techCardCombat(state.playersById[defender.ownerId], defCat, atkCat, "def");
 
   let attackMult = veterancyMultiplier(attacker.veterancy);
-  const flank = flankingBonus(state, attacker, defender);
+  // Thermopylae's Stand: a bulwarked unit cannot be flanked — the narrow ground
+  // means only the front rank ever fights, no matter how many close in.
+  const defenderBulwark = unitHasEffect(state, defender.id, "bulwark");
+  const flank = defenderBulwark ? 0 : flankingBonus(state, attacker, defender);
   if (flank > 0) {
     attackMult += flank;
     modifiers.push(`Flanking ${pct(flank)}`);
+  } else if (defenderBulwark) {
+    modifiers.push("Bulwark — no flanking");
   }
   const river = riverAttackPenalty(state, attacker, defender);
   if (river > 0) {
@@ -538,6 +548,11 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   }
   // Generic branch-tech + card defence bonuses (effect wiring, Slice 1).
   if (defG.bonus) { defenseMult += defG.bonus; modifiers.push(...defG.labels); }
+  // Thermopylae's Stand: the designated unit holds the pass — a huge defensive wall.
+  if (defenderBulwark) {
+    defenseMult += 1.0;
+    modifiers.push("Bulwark +100%");
+  }
 
   const atkPower = attackerDef.attack * (attacker.hp / attacker.maxHp) * Math.max(0.1, attackMult);
   let defPower = defenderDef.defense * (defender.hp / defender.maxHp) * Math.max(0.1, defenseMult);
@@ -553,6 +568,12 @@ export function computeCombatPreview(state: GameState, attackerId: string, defen
   if (weather === "fog") {
     damageToDefender = Math.max(1, Math.round(damageToDefender * 0.95));
     modifiers.push("Fog −5%");
+  }
+  // Fabian Strategy: the defender's people refuse a decisive stand — they give
+  // ground before the blow lands, so half the enemy's effort hits only dust.
+  if (attacker.ownerId !== defender.ownerId && playerHasEffect(state, defender.ownerId, "fabian")) {
+    damageToDefender = Math.max(1, Math.round(damageToDefender * 0.5));
+    modifiers.push("Fabian withdrawal −50%");
   }
 
   const rangedNoRetaliation = attackerDef.range > 1 && distance(attacker.position, defender.position) > 1;
@@ -665,7 +686,10 @@ function computeCityAttackDamage(state: GameState, attacker: Unit, city: City): 
     attackerDef.attack * (attacker.hp / attacker.maxHp) * veterancyMultiplier(attacker.veterancy) * weatherMult * siegeMult * boatMult;
   // Cities grow tougher as their age advances — walls, ditches, drilled militia.
   const owner = state.playersById[city.ownerId];
-  const cityDefense = 22 + city.population * 3 + (playerAge(owner) - 1) * 10;
+  let cityDefense = 22 + city.population * 3 + (playerAge(owner) - 1) * 10;
+  // Evocatio: the city's gods are called out and its defenders lose heart — the
+  // walls stand, but the will to hold them is gone (defence sapped ~40%).
+  if (cityEffect(state, city.id, "evocatio")) cityDefense *= 0.6;
 
   return Math.max(1, Math.round((18 * attackPower) / (attackPower + cityDefense)));
 }
@@ -1511,6 +1535,389 @@ export function restHealAmount(state: GameState, unit: Unit): number {
   return (claim && claim.ownerId === unit.ownerId ? HEAL_IN_TERRITORY : HEAL_IN_FIELD) + medic;
 }
 
+// ===== History Deck — event-card mechanics (persistent effects) ==============
+// Each of the twelve cards' tricks IS a real rule here (never a themed stat
+// bonus): buffs that live in state.activeEffects and are read by the combat,
+// movement and turn hooks, plus a few one-shot mutations. Pruned every world-turn.
+const MOUNTAIN_PASS_ATTRITION = 3; // Hannibal — crossing the Alps costs you men
+const SCORCHED_ATTRITION = 3;      // Scorched Earth — an invader starves in the ash
+const FABIAN_ATTRITION = 2;        // Fabian — the enemy wears down chasing shadows
+const SIEGE_LINES_BLEED = 4;       // Circumvallation — a walled-in city loses HP each turn
+const LEVY_TURNS = 4;              // Cincinnatus — the militia go home after the crisis
+const MOUNTAIN_PASS_TURNS = 2;     // window to get an army across
+const BULWARK_TURNS = 2;
+const FORCED_MARCH_TURNS = 3;
+const FABIAN_TURNS = 3;
+const SIEGE_TURNS = 3;
+const BRIDGE_TURNS = 2;
+
+function effectsList(state: GameState): ActiveEffect[] {
+  if (!state.activeEffects) state.activeEffects = [];
+  return state.activeEffects;
+}
+function playerHasEffect(state: GameState, ownerId: string, kind: EffectKind): boolean {
+  return (state.activeEffects ?? []).some((e) => e.kind === kind && e.ownerId === ownerId && state.turn <= e.expiresTurn);
+}
+function unitHasEffect(state: GameState, unitId: string, kind: EffectKind): boolean {
+  return (state.activeEffects ?? []).some((e) => e.kind === kind && e.unitId === unitId && state.turn <= e.expiresTurn);
+}
+function cityEffect(state: GameState, cityId: string, kind: EffectKind): ActiveEffect | undefined {
+  return (state.activeEffects ?? []).find((e) => e.kind === kind && e.cityId === cityId && state.turn <= e.expiresTurn);
+}
+function addEffect(state: GameState, e: Omit<ActiveEffect, "id">): ActiveEffect {
+  const list = effectsList(state);
+  let counter = 1;
+  let id = `fx_${e.kind}_${state.turn}_${counter}`;
+  while (list.some((x) => x.id === id)) { counter += 1; id = `fx_${e.kind}_${state.turn}_${counter}`; }
+  const full: ActiveEffect = { id, ...e };
+  list.push(full);
+  return full;
+}
+
+// A card's designated army: the client's chosen unit, else the player's first
+// (id-sorted, for determinism) land military unit that can act on the field.
+function designatedUnit(state: GameState, playerId: string, unitId?: string): Unit | undefined {
+  if (unitId) { const u = state.map.units[unitId]; if (u && u.ownerId === playerId) return u; }
+  const owned = Object.values(state.map.units)
+    .filter((u) => u.ownerId === playerId && !u.garrison && isLandMilitary(u))
+    .sort((a, b) => (a.id < b.id ? -1 : 1));
+  return owned[0];
+}
+function playerCapital(state: GameState, playerId: string): City | undefined {
+  const player = state.playersById[playerId];
+  if (!player) return undefined;
+  return (
+    player.cityIds.map((id) => state.map.cities[id]).find((c) => c && c.isCapital) ||
+    state.map.cities[player.cityIds[0]]
+  );
+}
+// Tiles in rings of increasing distance from a centre (nearest first), on-map only.
+function ringsFrom(state: GameState, center: Coord, maxRadius: number): Coord[] {
+  const seen = new Set<string>([keyOf(center)]);
+  const out: Coord[] = [];
+  let frontier: Coord[] = [center];
+  for (let r = 0; r < maxRadius; r += 1) {
+    const next: Coord[] = [];
+    for (const c of frontier) {
+      for (const n of neighborsOf(c)) {
+        const k = keyOf(n);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        if (state.map.tiles[k]) { out.push(n); next.push(n); }
+      }
+    }
+    frontier = next;
+  }
+  return out;
+}
+function tileOccupied(state: GameState, c: Coord): boolean {
+  for (const u of Object.values(state.map.units)) if (u.position.q === c.q && u.position.r === c.r) return true;
+  return false;
+}
+// A dry, empty tile a spawned/retreating land unit can legally stand on.
+function isOpenLandTile(state: GameState, c: Coord): boolean {
+  const t = state.map.tiles[keyOf(c)];
+  if (!t) return false;
+  const terr = TERRAIN[t.terrain];
+  if (!terr || terr.navalOnly || terr.impassableWithoutTech) return false;
+  return true;
+}
+function firstFreeLandNear(state: GameState, center: Coord, occupied: Set<string>): Coord | undefined {
+  const candidates = [center, ...ringsFrom(state, center, 6)];
+  for (const c of candidates) {
+    const k = keyOf(c);
+    if (occupied.has(k)) continue;
+    if (!isOpenLandTile(state, c)) continue;
+    if (tileOccupied(state, c)) continue;
+    if (cityAtPos(state, c)) continue;
+    return c;
+  }
+  return undefined;
+}
+function spawnCardUnit(state: GameState, ownerId: string, type: string, pos: Coord, veterancy: Veterancy): Unit {
+  const def = UNITS[type];
+  let counter = 1;
+  let unitId = `${ownerId}_${type}_card_${state.turn}_${counter}`;
+  while (state.map.units[unitId]) { counter += 1; unitId = `${ownerId}_${type}_card_${state.turn}_${counter}`; }
+  const unit: Unit = {
+    id: unitId, type, ownerId, position: { q: pos.q, r: pos.r },
+    hp: def.maxHp, maxHp: def.maxHp, movementRemaining: 0, veterancy
+  };
+  state.map.units[unitId] = unit;
+  syncOwnershipIndexes(state);
+  return unit;
+}
+// A water tile beside `from` that is a crossable strait: it borders at least one
+// land tile other than `from` itself (so a pontoon reaches the far bank).
+function straitBeside(state: GameState, from: Coord): Coord | undefined {
+  for (const w of neighborsOf(from)) {
+    const wt = state.map.tiles[keyOf(w)];
+    if (!wt) continue;
+    const terr = TERRAIN[wt.terrain];
+    if (!terr || !terr.navalOnly || wt.improvement === "bridge") continue;
+    for (const l of neighborsOf(w)) {
+      if (l.q === from.q && l.r === from.r) continue;
+      const lt = state.map.tiles[keyOf(l)];
+      if (lt && TERRAIN[lt.terrain] && !TERRAIN[lt.terrain].navalOnly) return w;
+    }
+  }
+  return undefined;
+}
+
+// The whole History-Deck dispatch. Mutates `state` for the given card; throws a
+// player-readable Error when the card cannot legally apply (the client shows the
+// message and does NOT consume the card — a card is never wasted on a no-op).
+function applyPlayEventCard(state: GameState, action: PlayEventCardAction): void {
+  assertPlayerTurn(state, action.playerId);
+  const player = state.playersById[action.playerId];
+  if (!player) throw new Error(`Unknown player ${action.playerId}`);
+  const turn = state.turn;
+
+  switch (action.instant) {
+    // --- Simple instants (kept here so every card routes through one action) ---
+    case "capital+10food": {
+      const cap = playerCapital(state, player.id);
+      if (!cap) throw new Error("You have no city to feed.");
+      cap.food = (cap.food ?? 0) + 10;
+      break;
+    }
+    case "+15science": {
+      player.science += 15;
+      break;
+    }
+
+    // --- Caesar's Bridge / Xerxes' Pontoon — a temporary span ---
+    case "bridge-adjacent-river-2-turns": {
+      let placed: string | undefined;
+      for (const u of Object.values(state.map.units).filter((x) => x.ownerId === player.id).sort((a, b) => (a.id < b.id ? -1 : 1))) {
+        for (const n of neighborsOf(u.position)) {
+          const t = state.map.tiles[keyOf(n)];
+          if (t && t.terrain === "great-river" && t.improvement !== "bridge") { t.improvement = "bridge"; placed = keyOf(n); break; }
+        }
+        if (placed) break;
+      }
+      if (!placed) throw new Error("needs one of your armies beside a great river.");
+      addEffect(state, { kind: "temp-bridge", ownerId: player.id, expiresTurn: turn + BRIDGE_TURNS, tileKey: placed, cardId: action.cardId });
+      break;
+    }
+    case "bridge-sea-strait-2-turns": {
+      let placed: Coord | undefined;
+      for (const u of Object.values(state.map.units).filter((x) => x.ownerId === player.id).sort((a, b) => (a.id < b.id ? -1 : 1))) {
+        placed = straitBeside(state, u.position);
+        if (placed) break;
+      }
+      if (!placed) throw new Error("needs one of your armies beside a one-hex sea strait.");
+      const t = state.map.tiles[keyOf(placed)];
+      t.improvement = "bridge";
+      addEffect(state, { kind: "temp-bridge", ownerId: player.id, expiresTurn: turn + BRIDGE_TURNS, tileKey: keyOf(placed), cardId: action.cardId });
+      break;
+    }
+
+    // --- Cincinnatus — an emergency levy as strong as the capital ---
+    case "spawn-militia-capital-level": {
+      const cap = playerCapital(state, player.id);
+      if (!cap) throw new Error("you have no capital to raise a levy from.");
+      const spot = firstFreeLandNear(state, cap.position, new Set());
+      if (!spot) throw new Error("there is no open ground by your capital for the levy.");
+      const vet: Veterancy = cap.population >= 12 ? "elite" : cap.population >= 6 ? "veteran" : "recruit";
+      const unit = spawnCardUnit(state, player.id, "warrior", spot, vet);
+      addEffect(state, { kind: "levy", ownerId: player.id, expiresTurn: turn + LEVY_TURNS, unitId: unit.id, cardId: action.cardId });
+      break;
+    }
+
+    // --- March of the Ten Thousand — a stranded army marches home intact ---
+    case "retreat-army-to-nearest-city": {
+      const candidates = (action.unitId
+        ? [state.map.units[action.unitId]].filter((u): u is Unit => !!u && u.ownerId === player.id)
+        : Object.values(state.map.units).filter((u) => u.ownerId === player.id && !u.garrison && UNITS[u.type].domain === "land"))
+        .sort((a, b) => (a.id < b.id ? -1 : 1));
+      const stranded = action.unitId ? candidates : candidates.filter((u) => { const c = claimingCity(state, u.position); return !c || c.ownerId !== player.id; });
+      if (!stranded.length) throw new Error("no stranded army to bring home.");
+      const occupied = new Set<string>();
+      let moved = 0;
+      for (const u of stranded) {
+        const home = nearestOwnCity(state, player.id, u.position);
+        if (!home) throw new Error("you hold no city to retreat to.");
+        const spot = firstFreeLandNear(state, home.position, occupied);
+        if (!spot) continue;
+        u.position = { q: spot.q, r: spot.r };
+        u.movementRemaining = 0;
+        occupied.add(keyOf(spot));
+        moved += 1;
+      }
+      if (!moved) throw new Error("no clear ground by your cities to receive the army.");
+      break;
+    }
+
+    // --- Ver Sacrum — the sacred spring sends youth to a distant new colony ---
+    case "free-settler-4hex": {
+      const cap = playerCapital(state, player.id);
+      if (!cap) throw new Error("you have no city to send out a colony from.");
+      const cities = player.cityIds.map((id) => state.map.cities[id]).filter((c): c is City => !!c);
+      const farEnough = (c: Coord): boolean => cities.every((ci) => distance(ci.position, c) >= 4);
+      let spot: Coord | undefined;
+      for (const c of ringsFrom(state, cap.position, 12)) {
+        if (!isOpenLandTile(state, c) || tileOccupied(state, c) || cityAtPos(state, c)) continue;
+        if (farEnough(c)) { spot = c; break; }
+      }
+      if (!spot) throw new Error("no open land far enough for a new colony.");
+      spawnCardUnit(state, player.id, "settler", spot, "recruit");
+      break;
+    }
+
+    // --- Marius' Mules — the professional army out-marches everyone ---
+    case "infantry+1move-3-turns": {
+      addEffect(state, { kind: "forced-march", ownerId: player.id, expiresTurn: turn + FORCED_MARCH_TURNS, cardId: action.cardId });
+      break;
+    }
+
+    // --- Hannibal Crosses the Alps — cross the "impassable" range (with attrition) ---
+    case "cross-mountains-attrition": {
+      addEffect(state, { kind: "mountain-pass", ownerId: player.id, expiresTurn: turn + MOUNTAIN_PASS_TURNS, cardId: action.cardId });
+      break;
+    }
+
+    // --- Thermopylae's Stand — a unit holds a choke, unflankable ---
+    case "pass-defense-immunity-2-turns": {
+      const unit = designatedUnit(state, player.id, action.unitId);
+      if (!unit) throw new Error("needs one of your units to hold the line.");
+      addEffect(state, { kind: "bulwark", ownerId: player.id, expiresTurn: turn + BULWARK_TURNS, unitId: unit.id, cardId: action.cardId });
+      break;
+    }
+
+    // --- Fabian Strategy — refuse decisive battle; the enemy bleeds giving chase ---
+    case "withdraw-before-combat-3-turns": {
+      addEffect(state, { kind: "fabian", ownerId: player.id, expiresTurn: turn + FABIAN_TURNS, cardId: action.cardId });
+      break;
+    }
+
+    // --- Sacred Geese — the alarm is raised; the approaches are watched ---
+    case "cancel-ambush-reveal-adjacent": {
+      state.discovered = state.discovered ?? {};
+      const seen = new Set(state.discovered[player.id] ?? []);
+      const centres: Coord[] = [
+        ...Object.values(state.map.units).filter((u) => u.ownerId === player.id).map((u) => u.position),
+        ...player.cityIds.map((id) => state.map.cities[id]).filter((c): c is City => !!c).map((c) => c.position)
+      ];
+      if (!centres.length) throw new Error("you have nothing left to keep watch.");
+      for (const at of centres) {
+        seen.add(keyOf(at));
+        for (const c of ringsFrom(state, at, 2)) seen.add(keyOf(c));
+      }
+      state.discovered[player.id] = [...seen];
+      break;
+    }
+
+    // --- Circumvallation — wall the city in: no relief, no healing, it bleeds ---
+    case "siege-lines": {
+      const city = besiegeableCity(state, player.id, action.cityId);
+      if (!city) throw new Error("needs one of your armies beside an enemy city to invest it.");
+      addEffect(state, { kind: "siege-lines", ownerId: player.id, expiresTurn: turn + SIEGE_TURNS, cityId: city.id, cardId: action.cardId });
+      break;
+    }
+
+    // --- Evocatio — call out the city's gods; its defence and loyalty collapse ---
+    case "besieged-city-loyalty-defense-down": {
+      const city = besiegeableCity(state, player.id, action.cityId);
+      if (!city) throw new Error("needs one of your armies beside the enemy city.");
+      addEffect(state, { kind: "evocatio", ownerId: player.id, expiresTurn: turn + SIEGE_TURNS, cityId: city.id, cardId: action.cardId });
+      break;
+    }
+
+    // --- Scorched Earth — burn your own province so the invader starves ---
+    case "self-pillage-region-attrition": {
+      const region = action.target ? (state.map.tiles[keyOf(action.target)]?.region) : playerCapital(state, player.id)?.position && state.map.tiles[keyOf(playerCapital(state, player.id)!.position)]?.region;
+      if (!region) throw new Error("no home province to put to the torch.");
+      // Burn your own improvements & districts across the province.
+      for (const [k, t] of Object.entries(state.map.tiles)) {
+        if (t.region !== region) continue;
+        const owner = claimingCity(state, parseKey(k));
+        if (!owner || owner.ownerId !== player.id) continue;
+        if (t.improvement && t.improvement !== "bridge") t.improvement = undefined;
+      }
+      for (const c of Object.values(state.map.cities)) {
+        if (c.ownerId !== player.id) continue;
+        if (state.map.tiles[keyOf(c.position)]?.region !== region) continue;
+        for (const d of c.districts ?? []) d.pillaged = true;
+      }
+      addEffect(state, { kind: "scorched-earth", ownerId: player.id, expiresTurn: turn + FABIAN_TURNS, region, cardId: action.cardId });
+      break;
+    }
+
+    default:
+      throw new Error(`isn't wired to the engine (${action.instant}).`);
+  }
+}
+
+// An enemy city one of the player's units stands next to (the client may name it
+// explicitly). Both Circumvallation and Evocatio need a real investment first.
+function besiegeableCity(state: GameState, playerId: string, cityId?: string): City | undefined {
+  const beside = (city: City): boolean =>
+    Object.values(state.map.units).some(
+      (u) => u.ownerId === playerId && !u.garrison && (distance(u.position, city.position) <= 1)
+    );
+  if (cityId) {
+    const c = state.map.cities[cityId];
+    if (c && c.ownerId !== playerId && beside(c)) return c;
+    return undefined;
+  }
+  return Object.values(state.map.cities)
+    .filter((c) => c.ownerId !== playerId && beside(c))
+    .sort((a, b) => (a.id < b.id ? -1 : 1))[0];
+}
+
+// Prune lapsed effects (restoring the world they touched) and apply the once-per-
+// world-turn attrition the standing effects inflict. Called at the turn boundary.
+function tickHistoryEffects(state: GameState): void {
+  const list = state.activeEffects ?? [];
+  if (!list.length) return;
+
+  // 1) Standing attrition, applied once as the world-turn turns over.
+  for (const e of list) {
+    if (state.turn > e.expiresTurn) continue; // lapsed this turn — no more ticks
+    if (e.kind === "mountain-pass") {
+      for (const u of Object.values(state.map.units)) {
+        if (u.ownerId !== e.ownerId) continue;
+        const t = state.map.tiles[keyOf(u.position)];
+        if (t && t.terrain === "mountains") u.hp = Math.max(1, u.hp - MOUNTAIN_PASS_ATTRITION);
+      }
+    } else if (e.kind === "scorched-earth") {
+      for (const u of Object.values(state.map.units)) {
+        if (u.ownerId === e.ownerId || !isAtWar(state, u.ownerId, e.ownerId)) continue;
+        const t = state.map.tiles[keyOf(u.position)];
+        if (t && t.region === e.region) u.hp = Math.max(1, u.hp - SCORCHED_ATTRITION);
+      }
+    } else if (e.kind === "fabian") {
+      for (const u of Object.values(state.map.units)) {
+        if (u.ownerId === e.ownerId || !isAtWar(state, u.ownerId, e.ownerId)) continue;
+        const claim = claimingCity(state, u.position);
+        if (claim && claim.ownerId === e.ownerId) u.hp = Math.max(1, u.hp - FABIAN_ATTRITION);
+      }
+    } else if (e.kind === "siege-lines") {
+      const city = e.cityId ? state.map.cities[e.cityId] : undefined;
+      if (city) city.hp = Math.max(1, city.hp - SIEGE_LINES_BLEED);
+    }
+  }
+
+  // 2) Prune the lapsed, restoring what they held.
+  const kept: ActiveEffect[] = [];
+  for (const e of list) {
+    if (state.turn <= e.expiresTurn) { kept.push(e); continue; }
+    if (e.kind === "temp-bridge" && e.tileKey) {
+      const t = state.map.tiles[e.tileKey];
+      if (t && t.improvement === "bridge") t.improvement = undefined;
+    } else if (e.kind === "levy" && e.unitId) {
+      const u = state.map.units[e.unitId];
+      if (u) {
+        delete state.map.units[e.unitId];
+        const owner = state.playersById[u.ownerId];
+        if (owner) owner.unitIds = owner.unitIds.filter((id) => id !== e.unitId);
+      }
+    }
+  }
+  state.activeEffects = kept;
+}
+
 function applyEndTurn(state: GameState, action: EndTurnAction): void {
   assertPlayerTurn(state, action.playerId);
   const endingPlayer = getCurrentPlayer(state);
@@ -1561,8 +1968,9 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
 
       // A city left in peace repairs its walls; one under assault this turn does
       // not — so taking a city needs sustained, concentrated force, not a lone
-      // unit chipping at it turn after turn.
-      if (city.hp < city.maxHp && (city.lastAttackedTurn ?? -1) < state.turn) {
+      // unit chipping at it turn after turn. A city under Circumvallation (siege
+      // lines) gets no relief and cannot repair at all.
+      if (city.hp < city.maxHp && (city.lastAttackedTurn ?? -1) < state.turn && !cityEffect(state, city.id, "siege-lines")) {
         city.hp = Math.min(city.maxHp, city.hp + CITY_REGEN);
       }
     }
@@ -1670,6 +2078,7 @@ function applyEndTurn(state: GameState, action: EndTurnAction): void {
     // warning on the horizon. Once per world-turn, fully seeded (raiders.md).
     resolveRaids(state);
     scheduleRaid(state);
+    tickHistoryEffects(state); // History-Deck attrition + prune lapsed effects, once per world-turn
   }
 
   const nextPlayer = getCurrentPlayer(state);
@@ -2888,6 +3297,9 @@ export function applyAction(inputState: GameState, action: GameAction): GameStat
       break;
     case "CHOOSE_FORK":
       applyChooseFork(state, action);
+      break;
+    case "PLAY_EVENT_CARD":
+      applyPlayEventCard(state, action);
       break;
     case "END_TURN":
       applyEndTurn(state, action);
