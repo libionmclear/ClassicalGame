@@ -1511,6 +1511,7 @@
   function getTileHintsForSelectedUnit(visibility) {
     const hints = {
       reachable: new Set(),
+      reachableCostly: new Set(), // R2.6: reachable only by spending most of the move budget
       attackable: new Set(),
       tradeDest: new Set()
     };
@@ -1569,6 +1570,9 @@
         const freshOneStep = path.length === 2 && unit.movementRemaining >= (unitDef.movement || 1);
         if ((totalCost <= unit.movementRemaining || freshOneStep) && !occupiedByEnemyUnit) {
           hints.reachable.add(key);
+          // R2.6 two-step: tiles that eat most of the budget (river crossings, rough
+          // ground, the edge of range) read dimmer than easily-reached ones.
+          if (totalCost > (unit.movementRemaining || 1) * 0.6) hints.reachableCostly.add(key);
         }
       }
 
@@ -2409,7 +2413,7 @@
       else if (selectedTileKey === key) h = 4;
       else if (hints.attackable.has(key)) h = 2;
       else if (hints.tradeDest && hints.tradeDest.has(key)) h = 7;
-      else if (hints.reachable.has(key)) h = 1;
+      else if (hints.reachable.has(key)) h = (hints.reachableCostly && hints.reachableCostly.has(key)) ? 8 : 1;
       else if (hoveredPathKeys.has(key)) h = 5;
       const wx = v === 2 && state.weather && state.weather.current ? (state.weather.current[tile.region] || "clear") : "clear";
       const ruinHere = v > 0 && state.map.ruins && state.map.ruins[key] && !state.map.ruins[key].excavated ? 1 : 0;
@@ -2532,6 +2536,8 @@
     if (window.__forceWeather) skyWx = window.__forceWeather; // dev: pin the sky for grade screenshots
     updateSoundscape(skyWx, tiles);
     const view = { tiles: tiles, sprites: sprites, borders: borders, districts: districts, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx, turn: state.turn };
+    // R2.6: reachable hexes tint toward the selected unit's civ colour.
+    if (selUnit) view.selColor = CIV_COLORS[selUnit.ownerId] || null;
     if (pendingRecenter) {
       const home =
         Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||

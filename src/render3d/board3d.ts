@@ -260,6 +260,30 @@ function selectionRingTexture(): THREE.Texture {
 }
 const selRingGeo = new THREE.PlaneGeometry(1, 1);
 
+// R2.6: a bold solid ring for the ATTACKABLE pulse — white, tinted red at runtime, its
+// opacity pulsed in the frame loop so enemy hexes throb.
+let atkRingTex: THREE.Texture | null = null;
+function attackRingTexture(): THREE.Texture {
+  if (atkRingTex) return atkRingTex;
+  const S = 128, cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+  const ctx = cv.getContext("2d")!;
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, 50, 0, Math.PI * 2);
+  ctx.stroke();
+  atkRingTex = new THREE.CanvasTexture(cv);
+  atkRingTex.colorSpace = THREE.SRGBColorSpace;
+  return atkRingTex;
+}
+// R2.6: a flat hexagon fill for the reachable/costly decals. Baked flat (XZ) and rotated to
+// the pointy-top grid so each fill sits square in its cell. Vertex tints can't be used for
+// this on the relief board — the terrain mesh is cached and never repainted on selection —
+// so the movement range is drawn as decals that hug the ground, camera-independent.
+const reachHexGeo = new THREE.CircleGeometry(0.95, 6);
+reachHexGeo.rotateX(-Math.PI / 2);
+reachHexGeo.rotateY(Math.PI / 6);
+
 // ---- Procedural low-poly models (placeholders until real glTF art arrives) ----
 // Shared geometries (created once) — meshes are cheap, geometries/materials reused.
 const GEO = {
@@ -1501,6 +1525,58 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     (selRing.material as THREE.MeshBasicMaterial).color.set(col);
     selRing.visible = true;
   }
+
+  // R2.6: pulsing red rings on ATTACKABLE hexes (h===2). One decal per enemy hex in range,
+  // pooled and rebuilt per render; opacity is pulsed in the frame loop.
+  const attackGroup = new THREE.Group();
+  scene.add(attackGroup);
+  const attackPool: THREE.Mesh[] = [];
+  function updateAttackRings(view: BoardView): void {
+    let n = 0;
+    for (const tv of view.tiles) {
+      if (tv.h !== 2) continue;
+      let ring = attackPool[n];
+      if (!ring) {
+        ring = new THREE.Mesh(selRingGeo, new THREE.MeshBasicMaterial({ map: attackRingTexture(), transparent: true, depthWrite: false, depthTest: false, color: 0xe0533d }));
+        ring.rotation.x = -Math.PI / 2; ring.renderOrder = 4;
+        attackPool[n] = ring; attackGroup.add(ring);
+      }
+      const w = axialToWorld(tv.q, tv.r);
+      ring.position.set(w.x, groundY(tv.t, w.x, w.z) + 0.05, w.z);
+      ring.scale.set(1.5, 1.5, 1);
+      ring.visible = true;
+      n += 1;
+    }
+    for (let i = n; i < attackPool.length; i += 1) attackPool[i].visible = false;
+  }
+  // R2.6: reachable hexes tint toward the SELECTED unit's civ colour (set per render).
+  const selHintCol = new THREE.Color(0x7ed957);
+  let hlTime = 0; // highlight-pulse clock (attackable throb)
+
+  // R2.6: reachable/costly movement decals — translucent civ-colour hex fills on the ground.
+  // Two-step opacity: reachable this turn brighter, reachable-but-costly dimmer.
+  const reachGroup = new THREE.Group();
+  scene.add(reachGroup);
+  const reachPool: THREE.Mesh[] = [];
+  function updateReachHexes(view: BoardView): void {
+    let n = 0;
+    for (const tv of view.tiles) {
+      if (tv.h !== 1 && tv.h !== 8) continue;
+      let hex = reachPool[n];
+      if (!hex) {
+        hex = new THREE.Mesh(reachHexGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthTest: false, color: 0xffffff }));
+        hex.renderOrder = 2; reachPool[n] = hex; reachGroup.add(hex);
+      }
+      const w = axialToWorld(tv.q, tv.r);
+      hex.position.set(w.x, groundY(tv.t, w.x, w.z) + 0.03, w.z);
+      const mat = hex.material as THREE.MeshBasicMaterial;
+      mat.color.copy(selHintCol);
+      mat.opacity = tv.h === 1 ? 0.30 : 0.15; // reachable vs costly
+      hex.visible = true;
+      n += 1;
+    }
+    for (let i = n; i < reachPool.length; i += 1) reachPool[i].visible = false;
+  }
   const scatterGroup = new THREE.Group();
   scene.add(scatterGroup);
   const districtGroup = new THREE.Group();
@@ -1931,7 +2007,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     else if (tv.h === 4) c.lerp(SELGREEN, 0.5);
     else if (tv.h === 2) c.lerp(RED, 0.5);
     else if (tv.h === 7) c.lerp(GOLD, 0.6); // trade destination
-    else if (tv.h === 1) c.lerp(GREEN, 0.4);
+    else if (tv.h === 1) c.lerp(selHintCol, 0.46);   // reachable this turn — civ colour
+    else if (tv.h === 8) c.lerp(selHintCol, 0.24);   // reachable but COSTLY — dimmer (R2.6 two-step)
     else if (tv.h === 5) c.lerp(PATH, 0.4);
     if (tv.h === 6) c.lerp(WHITE, 0.55);
     // Weather gives a SUBTLE atmospheric cast — never enough to wash a visible
@@ -2457,6 +2534,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       controls.target.z = Math.min(Math.max(controls.target.z, boardBounds.minZ - margin), boardBounds.maxZ + margin);
     }
     const dt = animClock.getDelta();
+    hlTime += dt; // R2.6 highlight-pulse clock
     if (dt > 0.0001) fpsEMA = fpsEMA * 0.9 + (1 / dt) * 0.1;
     // Re-dress scatter around the new focus when the camera has panned far enough (the
     // distance-cull ring follows the camera). Coalesced with the prop-load dirty flag so
@@ -2593,6 +2671,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       skyMat.uniforms.topColor.value.lerp(new THREE.Color(0xe6ecf2), boost);
     }
     if (selRing.visible) { const m = (selRing.material as THREE.MeshBasicMaterial).map; if (m) m.rotation += dt * 0.5; } // R2.5: slow laurel spin
+    if (attackGroup.children.length) { // R2.6: throb the attackable rings
+      const pulse = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(hlTime * 4.5));
+      for (const ring of attackGroup.children) { const r = ring as THREE.Mesh; if (r.visible) { (r.material as THREE.MeshBasicMaterial).opacity = pulse; const s = 1.5 + 0.12 * Math.sin(hlTime * 4.5); r.scale.set(s, s, 1); } }
+    }
     if (aoCam) { // keep the AO camera exactly on the real camera (minus the atmosphere layer)
       aoCam.fov = camera.fov; aoCam.aspect = camera.aspect; aoCam.near = camera.near; aoCam.far = camera.far;
       aoCam.updateProjectionMatrix();
@@ -2607,6 +2689,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   return {
     render(view) {
       lastView = view;
+      // R2.6: reachable hexes tint toward the selected unit's civ colour (fall back to green).
+      if ((view as BoardView & { selColor?: string }).selColor) selHintCol.set((view as BoardView & { selColor?: string }).selColor!);
+      else selHintCol.set(0x7ed957);
       buildTiles(view);
       paintTiles(view);
       buildTerrain(view); // continuous-landscape surface (flagged) — after paint, so colours are current
@@ -2615,6 +2700,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       placeDistricts(view);
       placeMarkers(view);
       updateSelRing(view);
+      updateAttackRings(view);
+      updateReachHexes(view);
       drawBorders(view);
       drawWaterways(view);
       // Rain over the wet region's footprint — but only when a real part of the
