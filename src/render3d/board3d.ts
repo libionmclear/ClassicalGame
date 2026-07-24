@@ -955,7 +955,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // Filmic tone mapping for richer, less-flat colour (applied by the OutputPass
   // at the end of the post-processing chain).
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.9; // §3 daylight — modest; warm ambient + high bloom threshold carry the brightness without clipping foliage
+  renderer.toneMappingExposure = 1.42; // §1A LOCKED bright noon — foliage emissive is killed, so exposure can carry real daylight brightness without white canopies
 
   // Graphics quality (localStorage "hegemon_gfx": "high" default | "low"). HIGH runs
   // the full pipeline (ambient occlusion + antialiasing + env reflections + procedural
@@ -1161,8 +1161,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // coast tint then lifts the shallows above it. Rain/storm/fog darken/grey it further.
   interface SkyMood { top: number; bottom: number; fog: number; fogNear: number; fogFar: number; sun: number; sunI: number; ambI: number; hemiI: number; sea: number; disc: number; cloud: number; }
   const WEATHER_SKY: Record<string, SkyMood> = {
-    clear: { top: 0x9ad2f5, bottom: 0x0a1626, fog: 0xaed4ee, fogNear: 160, fogFar: 470, sun: 0xffeecf, sunI: 1.08, ambI: 0.82, hemiI: 0.62, sea: 0x224d78, disc: 0.95, cloud: 0.0 },
-    heat:  { top: 0xd6c294, bottom: 0x2a2415, fog: 0xe0d0a4, fogNear: 130, fogFar: 400, sun: 0xffe6b6, sunI: 1.14, ambI: 0.86, hemiI: 0.58, sea: 0x235069, disc: 0.85, cloud: 0.10 },
+    clear: { top: 0x9ad2f5, bottom: 0x0a1626, fog: 0xaed4ee, fogNear: 160, fogFar: 470, sun: 0xffeecf, sunI: 1.34, ambI: 0.98, hemiI: 0.72, sea: 0x224d78, disc: 0.95, cloud: 0.0 }, // §1A brighter warm noon
+    heat:  { top: 0xd6c294, bottom: 0x2a2415, fog: 0xe0d0a4, fogNear: 130, fogFar: 400, sun: 0xffe6b6, sunI: 1.4, ambI: 1.0, hemiI: 0.68, sea: 0x235069, disc: 0.85, cloud: 0.10 },
     fog:   { top: 0xaeb8bd, bottom: 0x4b535a, fog: 0xb4bdc2, fogNear: 40, fogFar: 190, sun: 0xd6dce0, sunI: 0.65, ambI: 0.78, hemiI: 0.6, sea: 0x46545e, disc: 0.0, cloud: 0.55 },
     rain:  { top: 0x5c6b79, bottom: 0x272f38, fog: 0x59636e, fogNear: 90, fogFar: 300, sun: 0xb9c4cf, sunI: 0.5, ambI: 0.55, hemiI: 0.5, sea: 0x2c4150, disc: 0.0, cloud: 0.85 },
     storm: { top: 0x3d4650, bottom: 0x1a1f26, fog: 0x39424c, fogNear: 70, fogFar: 250, sun: 0x9aa6b2, sunI: 0.34, ambI: 0.46, hemiI: 0.42, sea: 0x233040, disc: 0.0, cloud: 1.0 }
@@ -2709,14 +2709,21 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     curSunI += (moodTarget.sunI - curSunI) * kw;
     curAmbI += (moodTarget.ambI - curAmbI) * kw;
     curHemiI += (moodTarget.hemiI - curHemiI) * kw;
+    // §1A — weather may only dim to 80% of the daylight baseline (a bounded offset, never a
+    // dark scene). Storms/rain still read moody via sky/fog/cloud, but the LIGHT stays bright.
+    const DAY_FLOOR = 0.8, CB = WEATHER_SKY.clear;
+    curSunI = Math.max(curSunI, DAY_FLOOR * CB.sunI);
+    curAmbI = Math.max(curAmbI, DAY_FLOOR * CB.ambI);
+    curHemiI = Math.max(curHemiI, DAY_FLOOR * CB.hemiI);
     curFogNear += (moodTarget.fogNear - curFogNear) * kw;
     curFogFar += (moodTarget.fogFar - curFogFar) * kw;
     curDisc += (moodTarget.disc - curDisc) * kw;
     curCloud += (moodTarget.cloud - curCloud) * kw;
-    // Day/night: BRIGHT WARM DAYLIGHT is the default look (per reference). A slow, gentle
-    // cycle holds full daylight most of the time and only dips to a soft evening — never a
-    // dark dusk that dominates play. cos starts at +1 → full bright daylight on load.
-    dayTarget = Math.max(0, Math.min(1, 0.84 + 0.42 * Math.cos(hlTime * 0.016)));
+    // MARCHING ORDERS v2 §1A — daylight LOCKED. The night/evening dip was compounding with
+    // weather dimming into near-black scenes (the recurring "darkness"). Bright warm noon is
+    // now held constant; the only dimming allowed is weather, and that is clamped to >=80% of
+    // baseline below. (Night cycle retired — darkness was a shipping bug, not a feature.)
+    dayTarget = 1;
     // Ease the day/night factor + the sun's arc alongside the weather.
     curDay += (dayTarget - curDay) * kw;
     curElev += (elevTarget - curElev) * kw;

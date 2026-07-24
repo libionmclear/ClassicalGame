@@ -10,6 +10,7 @@ import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { PNG } from "pngjs";
 
 const PORT = 8811;
 const DB = path.join(process.env.TEMP || ".", "hegemon-uismoke-" + PORT + ".db");
@@ -70,6 +71,22 @@ try {
     return getComputedStyle(c).display !== "none" && r.width > 200 && r.height > 200;
   });
   check("the 3D board canvas is rendered and sized", canvasOk);
+
+  // 2b) LUMINANCE GUARD (MARCHING ORDERS v2 §1A): the board must render as BRIGHT daylight,
+  //     never a dark/dusk scene. Sample the canvas centre and assert average brightness — this
+  //     is the CI assertion that makes "darkness" impossible to ship again.
+  // Use a high PERCENTILE (the brightest ~15% = the lit LAND), robust to how much dark sea/sky
+  // is in frame. A genuinely dark scene has NO bright regions, so even p85 stays low.
+  let p85 = -1;
+  try {
+    const shot = await page.locator("#board3d-canvas").screenshot();
+    const png = PNG.sync.read(shot);
+    const lums = [];
+    for (let i = 0; i < png.data.length; i += 4) lums.push(0.299 * png.data[i] + 0.587 * png.data[i + 1] + 0.114 * png.data[i + 2]);
+    lums.sort((a, b) => a - b);
+    p85 = lums.length ? lums[Math.floor(lums.length * 0.85)] / 255 : -1;
+  } catch (e) { p85 = -1; }
+  check("the board renders BRIGHT daylight, not darkness (p85 luminance >= 0.4)", p85 >= 0.4, { p85: +p85.toFixed(3) });
 
   // 3) The HUD reflects the running game.
   const hud = await page.evaluate(() => ({
