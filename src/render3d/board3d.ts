@@ -2274,7 +2274,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     strikes.push({ objs: [ring, core], mats: [ringMat, coreMat], t: 0, dur: 0.5 });
   }
 
-  const borderGeo = new THREE.BoxGeometry(SIZE * 1.03, 0.1, 0.14);
+  const borderGeo = new THREE.BoxGeometry(SIZE * 1.06, 0.035, 0.055); // §4: a THIN ribbon (~40% of the old 0.14 tube), laid flat and hugging the terrain
   const borderMat = new THREE.MeshBasicMaterial();
   let borderMesh: THREE.InstancedMesh | null = null;
   function drawBorders(view: BoardView): void {
@@ -2284,6 +2284,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       borderMesh = null;
     }
     if (!view.borders.length) return;
+    const terrainByKey: Record<string, string> = {};
+    for (const tv of view.tiles) terrainByKey[tv.q + "," + tv.r] = tv.t;
+    const hAt = (q: number, r: number): number => { const t = terrainByKey[q + "," + r] || "plains"; const w = axialToWorld(q, r); return groundY(t, w.x, w.z); };
     const mesh = new THREE.InstancedMesh(borderGeo, borderMat, view.borders.length);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(view.borders.length * 3), 3);
     const m = new THREE.Matrix4();
@@ -2299,7 +2302,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const ang = Math.atan2(dz, dx);
       // The border runs ALONG the shared edge — perpendicular to the centre line.
       qt.setFromAxisAngle(up, -ang - Math.PI / 2);
-      p.set(mx, 0.16, mz);
+      p.set(mx, (hAt(b.q, b.r) + hAt(b.nq, b.nr)) / 2 + 0.06, mz); // §4: hug the terrain surface, not a fixed float
       m.compose(p, qt, s);
       mesh.setMatrixAt(i, m);
       mesh.setColorAt(i, new THREE.Color(b.color));
