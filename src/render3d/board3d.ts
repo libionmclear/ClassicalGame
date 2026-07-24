@@ -234,6 +234,32 @@ function shadowTexture(): THREE.Texture {
 }
 const shadowGeo = new THREE.PlaneGeometry(1, 1);
 
+// R2.5: the selection ring — a laurel-segmented annulus on transparent, drawn WHITE so it
+// can be tinted to any civ colour at runtime and spun (rotate the texture) as a decal that
+// lies flat on the ground, camera-independent.
+let selRingTex: THREE.Texture | null = null;
+function selectionRingTexture(): THREE.Texture {
+  if (selRingTex) return selRingTex;
+  const S = 128, cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+  const ctx = cv.getContext("2d")!;
+  const cx = S / 2, cy = S / 2, rOut = 60, rIn = 48, N = 20; // 20 laurel segments
+  ctx.fillStyle = "#ffffff";
+  for (let i = 0; i < N; i += 1) {
+    const a0 = (i / N) * Math.PI * 2 + 0.05;
+    const a1 = ((i + 0.62) / N) * Math.PI * 2 - 0.05; // ~62% laurel, ~38% gap
+    ctx.beginPath();
+    ctx.arc(cx, cy, rOut, a0, a1);
+    ctx.arc(cx, cy, rIn, a1, a0, true);
+    ctx.closePath();
+    ctx.fill();
+  }
+  selRingTex = new THREE.CanvasTexture(cv);
+  selRingTex.colorSpace = THREE.SRGBColorSpace;
+  selRingTex.center.set(0.5, 0.5);
+  return selRingTex;
+}
+const selRingGeo = new THREE.PlaneGeometry(1, 1);
+
 // ---- Procedural low-poly models (placeholders until real glTF art arrives) ----
 // Shared geometries (created once) — meshes are cheap, geometries/materials reused.
 const GEO = {
@@ -1446,6 +1472,35 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
   const spriteGroup = new THREE.Group();
   scene.add(spriteGroup);
+
+  // R2.5: the rotating civ-colour selection ring. A flat laurel-ring decal that lies on the
+  // ground under the selected unit/city (depthTest off so it never clips through relief),
+  // tinted to the owner's colour and slowly spun in the frame loop.
+  const selRing = new THREE.Mesh(
+    selRingGeo,
+    new THREE.MeshBasicMaterial({ map: selectionRingTexture().clone(), transparent: true, depthWrite: false, depthTest: false, color: 0xffffff, opacity: 0.92 })
+  );
+  selRing.rotation.x = -Math.PI / 2;
+  selRing.renderOrder = 4;
+  selRing.visible = false;
+  { const m = (selRing.material as THREE.MeshBasicMaterial).map; if (m) m.center.set(0.5, 0.5); }
+  scene.add(selRing);
+  function updateSelRing(view: BoardView): void {
+    // The selected unit/city tile is flagged h===3 by the client.
+    let sel: TileView | undefined;
+    for (const tv of view.tiles) if (tv.h === 3) { sel = tv; break; }
+    if (!sel) { selRing.visible = false; return; }
+    const spr = view.sprites.find((s) => s.q === sel!.q && s.r === sel!.r && (s.kind === "unit" || s.kind === "city"));
+    const isCity = !!spr && spr.kind === "city";
+    const col = (spr && spr.color) || (sel.o && view.civColors[sel.o]) || "#e2c15a";
+    const w = axialToWorld(sel.q, sel.r);
+    const y = groundY(sel.t, w.x, w.z);
+    selRing.position.set(w.x, y + 0.05, w.z);
+    const d = isCity ? 1.9 : 1.3;
+    selRing.scale.set(d, d, 1);
+    (selRing.material as THREE.MeshBasicMaterial).color.set(col);
+    selRing.visible = true;
+  }
   const scatterGroup = new THREE.Group();
   scene.add(scatterGroup);
   const districtGroup = new THREE.Group();
@@ -2537,6 +2592,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       sun.intensity += boost * 1.4;
       skyMat.uniforms.topColor.value.lerp(new THREE.Color(0xe6ecf2), boost);
     }
+    if (selRing.visible) { const m = (selRing.material as THREE.MeshBasicMaterial).map; if (m) m.rotation += dt * 0.5; } // R2.5: slow laurel spin
     if (aoCam) { // keep the AO camera exactly on the real camera (minus the atmosphere layer)
       aoCam.fov = camera.fov; aoCam.aspect = camera.aspect; aoCam.near = camera.near; aoCam.far = camera.far;
       aoCam.updateProjectionMatrix();
@@ -2558,6 +2614,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       placeScatter(view);
       placeDistricts(view);
       placeMarkers(view);
+      updateSelRing(view);
       drawBorders(view);
       drawWaterways(view);
       // Rain over the wet region's footprint — but only when a real part of the
