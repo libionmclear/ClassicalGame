@@ -213,10 +213,27 @@ export function oldWorldEpic(seed = "old-world"): CreateGameConfig {
     ruins[k] = { ruinId: id, excavated: false }; occupied.add(k);
   }
 
+  // Region-locked minor-people VILLAGES (§10.3, ids from peoples.ts) at their real seats,
+  // snapped to nearby land off capitals/ruins. Authored here so the engine won't scatter them.
+  type Disp = "open" | "wary" | "hostile";
+  const VILLAGE_SITES: Array<[number, number, string, Disp]> = [
+    [42, 38, "latins", "open"], [43, 40, "samnites", "hostile"], [37, 33, "etruscans", "wary"],
+    [41, 30, "veneti", "open"], [49, 33, "illyrians", "wary"], [58, 31, "thracians", "wary"],
+    [55, 27, "getae", "hostile"], [66, 37, "lydians", "open"], [80, 35, "armenians", "wary"],
+    [68, 45, "judeans", "wary"], [72, 50, "nabataeans", "hostile"], [86, 48, "chaldeans", "wary"],
+    [28, 50, "numidians", "hostile"], [28, 15, "belgae", "wary"]
+  ];
+  const villages: Record<string, { peopleId: string; disposition: Disp; contacted?: boolean; attempts?: number }> = {};
+  for (const [c, r, id, disp] of VILLAGE_SITES) {
+    const p = snap(c, r); if (!p) continue;
+    const k = keyOf(p); if (villages[k] || ruins[k]) continue;
+    villages[k] = { peopleId: id, disposition: disp }; occupied.add(k);
+  }
+
   return {
     seed,
     turnLimit: 160,
     players,
-    map: { width: W, height: H, regions: Array.from(usedRegions), rivers: {}, tiles, cities, units, ruins }
+    map: { width: W, height: H, regions: Array.from(usedRegions), rivers: {}, tiles, cities, units, ruins, villages }
   };
 }

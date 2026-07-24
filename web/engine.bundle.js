@@ -10219,11 +10219,36 @@ var HegemonEngine = (() => {
       ruins[k] = { ruinId: id, excavated: false };
       occupied.add(k);
     }
+    const VILLAGE_SITES = [
+      [42, 38, "latins", "open"],
+      [43, 40, "samnites", "hostile"],
+      [37, 33, "etruscans", "wary"],
+      [41, 30, "veneti", "open"],
+      [49, 33, "illyrians", "wary"],
+      [58, 31, "thracians", "wary"],
+      [55, 27, "getae", "hostile"],
+      [66, 37, "lydians", "open"],
+      [80, 35, "armenians", "wary"],
+      [68, 45, "judeans", "wary"],
+      [72, 50, "nabataeans", "hostile"],
+      [86, 48, "chaldeans", "wary"],
+      [28, 50, "numidians", "hostile"],
+      [28, 15, "belgae", "wary"]
+    ];
+    const villages = {};
+    for (const [c, r, id, disp] of VILLAGE_SITES) {
+      const p = snap(c, r);
+      if (!p) continue;
+      const k = keyOf(p);
+      if (villages[k] || ruins[k]) continue;
+      villages[k] = { peopleId: id, disposition: disp };
+      occupied.add(k);
+    }
     return {
       seed,
       turnLimit: 160,
       players,
-      map: { width: W2, height: H2, regions: Array.from(usedRegions), rivers: {}, tiles, cities, units, ruins }
+      map: { width: W2, height: H2, regions: Array.from(usedRegions), rivers: {}, tiles, cities, units, ruins, villages }
     };
   }
 
