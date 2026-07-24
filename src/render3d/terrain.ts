@@ -267,7 +267,7 @@ export function buildTerrainSurface(
       shader.uniforms.uSnow = { value: snow };
       shader.uniforms.uCliff = { value: cliff };
       shader.uniforms.uScree = { value: scree };
-      shader.uniforms.uRockSlope = { value: new THREE.Vector2(0.24, 0.68) }; // slope where rock starts / is full
+      shader.uniforms.uRockSlope = { value: new THREE.Vector2(0.52, 0.86) }; // slope where rock starts / is full — high, so ONLY genuinely steep faces grey over (relief micro-slopes on plains kept their biome colour; was 0.24 which greyed the whole map on real GPUs where the rock texture loads)
       shader.uniforms.uSnowY = { value: new THREE.Vector2(1.80, 2.28) };     // world-height snowline band (summits only — rock faces show below; raised for taller peaks)
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", "#include <common>\nattribute float aMtn;\nvarying vec3 vWN_t;\nvarying vec3 vWP_t;\nvarying float vMtn_t;")

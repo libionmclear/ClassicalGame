@@ -1338,14 +1338,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // canopy into the fresco palette by multiplying its material toward a muted sage/olive
   // (warm, desaturated) — conifers a touch darker, olive/palm silvery. The map multiplies
   // by color, so this pulls the bright green down without touching the ground or props.
+  // Darkened hard (was ~0xb0c090): on a real GPU the sun + bloom washed even the tinted
+  // canopies to white. A darker, more saturated multiply keeps foliage below the bloom
+  // threshold so it stays green/olive instead of blowing out (the "white trees" fix).
   const PROP_TINT: Record<string, number> = {
-    "scatter/olive": 0xb9c692,
-    "scatter/oak": 0xa7b482,
-    "scatter/beech": 0xafba86,
-    "scatter/stone-pine": 0x9aad7a,
-    "scatter/cypress": 0x93a771,
-    "scatter/fir": 0x97a877,
-    "scatter/date-palm": 0xb4bd8a
+    "scatter/olive": 0x8a9a5c,
+    "scatter/oak": 0x63813e,
+    "scatter/beech": 0x6f8a46,
+    "scatter/stone-pine": 0x55763a,
+    "scatter/cypress": 0x4f7038,
+    "scatter/fir": 0x53743a,
+    "scatter/date-palm": 0x82934c
   };
   function normalizeProp(scene0: THREE.Object3D, key: string): { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] } | null {
     return normalizeGLB(scene0, PROP_H[key] ?? 0.4);
@@ -1962,7 +1965,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     const water = buildWaterSurface({ tiles: view.tiles, landAt, openAt, seaLevel: SEA_TOP + 0.006, weather: wx });
     waterSurface = water.mesh; waterTick = water.tick;
     scene.add(waterSurface);
-    if (seaMesh) seaMesh.visible = false;
+    // Keep the big 6000x6000 sea plane VISIBLE as the INFINITE OCEAN to the horizon (it sits
+    // just below the detailed water surface, which covers the playable map on top). Hiding it
+    // left the world ending at a hard square edge with a dark void beyond.
+    if (seaMesh) { seaMesh.visible = true; seaMesh.position.y = SEA_TOP - 0.02; }
 
     // §6 climate-aware scatter, instanced on the displaced surface (replaces the old
     // procedural scatter we hid above). Rebuilt via the loop's dirty flag so it always
@@ -2145,7 +2151,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
           glb = getGLB("assets/approved/cities/rome-l" + lvl + ".glb");
         }
         if (!glb) glb = getGLB("assets/models/cities/" + sv.civ + ".glb");
-        if (glb) { model = glbInstanceCity(glb, 1.62).obj; scale = 1; } // fit ~one hex (§7b footprint)
+        if (glb) { model = glbInstanceCity(glb, 2.0).obj; scale = 1; } // fill the hex (§7b) — the GLBs carry empty bbox margin, so fit larger than flat-to-flat (1.73) so the structures reach the rim
         else {
           // v2 procedural city: 10 tiers, 12 styles, seeded by hex so it's stable.
           const seed = (((sv.q * 73856093) ^ (sv.r * 19349663)) >>> 0) % 100000;
@@ -2608,6 +2614,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     curFogFar += (moodTarget.fogFar - curFogFar) * kw;
     curDisc += (moodTarget.disc - curDisc) * kw;
     curCloud += (moodTarget.cloud - curCloud) * kw;
+    // Day/night restored: a slow real-time cycle (~3.5 min), biased toward daylight so
+    // night is a shorter dusky spell (the sun keeps a moon floor, so it's never pitch black
+    // and the board stays playable). cos starts at +1 → full daylight on load.
+    dayTarget = Math.max(0, Math.min(1, 0.58 + 0.62 * Math.cos(hlTime * 0.03)));
     // Ease the day/night factor + the sun's arc alongside the weather.
     curDay += (dayTarget - curDay) * kw;
     curElev += (elevTarget - curElev) * kw;
