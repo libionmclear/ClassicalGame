@@ -5958,6 +5958,23 @@
       };
     },
     clickTile: function (q, r) { onTileClick(q, r); },
+    deselect: function () { clearSelection(); render(); },
+    // A REAL click: project the tile to screen pixels and dispatch mousedown+mouseup on
+    // the canvas so the whole pick path runs (raycast → pickIndex → onPick → onTileClick).
+    // clickTile() above bypasses all of that, which is why it kept passing while real
+    // input was dead. Tests should use THIS to catch pick/raycast regressions.
+    screenOf: function (q, r) { return (USE_3D && board3d && board3d.screenOf) ? board3d.screenOf(q, r) : null; },
+    clickTileReal: function (q, r) {
+      if (!USE_3D || !board3d || !board3d.screenOf) return { ok: false, reason: "no 3D board" };
+      var s = board3d.screenOf(q, r);
+      if (!s) return { ok: false, reason: "tile off-screen" };
+      var canvas = document.getElementById("board3d-canvas");
+      if (!canvas) return { ok: false, reason: "no canvas" };
+      var opts = { bubbles: true, cancelable: true, clientX: Math.round(s.x), clientY: Math.round(s.y), button: 0 };
+      canvas.dispatchEvent(new MouseEvent("mousedown", opts));
+      canvas.dispatchEvent(new MouseEvent("mouseup", opts));
+      return { ok: true, x: Math.round(s.x), y: Math.round(s.y), selectedUnitId: selectedUnitId, selectedTileKey: selectedTileKey, selectedCityId: selectedCityId };
+    },
     // A selected unit shows only a small toggle by default; open the full actions
     // panel (what the unit-detail symbol does) so tests can inspect it.
     openUnitPanel: function () { unitDetailsOpen = true; render(); },

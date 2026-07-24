@@ -87,6 +87,22 @@ try {
   const selLine = await page.locator("#selection-line").textContent();
   check("the selection line reflects the selected unit", /Move|move/.test(selLine || ""), selLine);
 
+  // 4-REAL) A GENUINE canvas click through the raycast/pick path — NOT the hook shortcut.
+  // HGTest.clickTile() above bypasses picking entirely, which is exactly why it kept
+  // passing while real mouse input was dead. Frame the unit, deselect, then dispatch a
+  // real mousedown+mouseup on the canvas at the unit's projected pixel and assert the
+  // selection returns. This is the guard that fails CI if pickIndex/raycast regresses.
+  if (await page.evaluate(() => window.HGTest.use3d())) {
+    await page.evaluate(([q, r]) => window.HGTest.focusTile(q, r), [u.q, u.r]);
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.HGTest.deselect());
+    const dsel = await page.evaluate(() => window.HGTest.snapshot());
+    check("deselect clears the selection (real-click test setup)", dsel && !dsel.selectedUnitId, dsel);
+    const rc = await page.evaluate(([q, r]) => window.HGTest.clickTileReal(q, r), [u.q, u.r]);
+    const sr = await page.evaluate(() => window.HGTest.snapshot());
+    check("a REAL canvas click on the unit's tile selects it (pick/raycast path)", sr && sr.selectedUnitId === u.id, { clickAt: rc, got: sr && sr.selectedUnitId, want: u.id });
+  }
+
   // A freshly-selected unit shows only a small toggle; open the full actions panel.
   // Once open it docks LEFT + is click-through, so its buttons occlude fewer board
   // move-targets than a right-docked panel.

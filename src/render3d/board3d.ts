@@ -127,6 +127,8 @@ export interface BoardController {
   getTilt(): number;
   /** Move the camera to frame tile (q,r), keeping the current angle + distance. */
   focusTile(q: number, r: number): void;
+  /** Project tile (q,r)'s centre to canvas client pixels (for a real-click test), or null if clipped. */
+  screenOf(q: number, r: number): { x: number; y: number } | null;
   /** Dev diagnostics: relief/scatter/texture state for the checkpoint screenshots. */
   reliefDebug(): Record<string, unknown>;
   dispose(): void;
@@ -2213,8 +2215,26 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     pointer.x = ((cx - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((cy - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
-    // Land lives in tileMesh and discovered sea in waterMesh — hit-test BOTH (they
-    // share instance indices) so the sea stays clickable for ship orders.
+    // RELIEF board (the default): the flat hex prisms (tileMesh/waterMesh) and the sea
+    // plane are hidden, so Three's raycaster — which skips invisible objects — can never
+    // hit them. Hit-test the VISIBLE displaced surfaces instead (the terrain mesh and the
+    // shader water), then resolve the hex from the world point. This is what makes clicks
+    // land at all on the relief board. (regression: input went dead when relief became
+    // default because pickIndex still targeted only the now-invisible prisms.)
+    const surfaces: THREE.Object3D[] = [];
+    if (terrainMesh && terrainMesh.visible) surfaces.push(terrainMesh);
+    if (waterSurface && waterSurface.visible) surfaces.push(waterSurface);
+    if (surfaces.length) {
+      const rs = raycaster.intersectObjects(surfaces, false);
+      if (rs.length) {
+        const a = worldToAxial(rs[0].point.x, rs[0].point.z);
+        const idx = indexByKey[a.q + "," + a.r];
+        if (idx != null) return idx;
+      }
+      return -1;
+    }
+    // FLAT board: land lives in tileMesh and discovered sea in waterMesh — hit-test BOTH
+    // (they share instance indices) so the sea stays clickable for ship orders.
     const hit = raycaster.intersectObjects(waterMesh ? [tileMesh, waterMesh] : [tileMesh], false);
     if (hit.length && hit[0].instanceId != null) return hit[0].instanceId as number;
     // Nothing solid under the cursor: the OPEN OCEAN wears no tint hexes, so fall back
@@ -2575,6 +2595,20 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       camera.position.copy(controls.target).add(off);
       camera.lookAt(controls.target);
       controls.update();
+    },
+    // Project a tile's centre (at its surface height) to canvas client pixels, so a test
+    // can dispatch a REAL mouse click there and exercise the whole pick path — the only
+    // way to catch a pickIndex/raycast regression like the invisible-mesh one above.
+    // Returns null if the tile projects behind the camera.
+    screenOf(q: number, r: number): { x: number; y: number } | null {
+      const w = axialToWorld(q, r);
+      let t = "plains";
+      if (lastView) { const tv = lastView.tiles.find((x) => x.q === q && x.r === r); if (tv) t = tv.t; }
+      const y = groundY(t, w.x, w.z);
+      const v = new THREE.Vector3(w.x, y, w.z).project(camera);
+      if (v.z > 1) return null; // clipped / behind the camera
+      const rect = canvas.getBoundingClientRect();
+      return { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
     },
     // Diagnostics for the relief/scatter checkpoint screenshots (dev only).
     reliefDebug(): Record<string, unknown> {

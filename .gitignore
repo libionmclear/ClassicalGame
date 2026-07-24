@@ -24,6 +24,11 @@ _shot.mjs
 _demoshot.mjs
 _defshot.mjs
 _propshot.mjs
+# stabilization diagnostics (real-click / overlay / scenario-render probes)
+_clickdiag.mjs
+_rawclick.mjs
+_overlayaudit.mjs
+_scenariorender.mjs
 
 # temp map-authoring scratch
 _ow*.ts
