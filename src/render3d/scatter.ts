@@ -23,9 +23,13 @@ export type Climate = "mediterranean" | "northern" | "arid";
 // the south + Nile/Africa = arid palms/scrub; the Mediterranean middle = olive/cypress/pine.
 export function climateOf(region: string | undefined): Climate {
   const r = (region || "").toLowerCase();
-  if (/north|germ-|germania|britann|britain|gaul|gallia|alps|alpes|noricum|pannon|dacia|scyth|belgica|rhen|danub/.test(r)) return "northern";
-  if (/south|nile|nubia|egypt|aegypt|africa|libya|numid|arabia|sahara|desert|mesopotam|syria|judea/.test(r)) return "arid";
-  return "mediterranean"; // central band + Italia/Graecia/Hispania/Anatolia/islands
+  // ARID first (palms/scrub only here). Includes the latitude-band name "arid" and "south"
+  // — the leak was that neither matched, so arid tiles fell through and, worse, other bands'
+  // names didn't resolve either, letting the wrong table (palms) appear beside temperate trees.
+  if (/arid|south|nile|nubia|egypt|aegypt|africa|libya|numid|arabia|sahara|desert|mesopotam|syria|judea/.test(r)) return "arid";
+  // NORTHERN = temperate deciduous/conifer (oak/beech/fir) — the north + temperate bands.
+  if (/north|temperate|germ|britann|britain|gaul|gallia|alps|alpes|noricum|pannon|dacia|scyth|belgica|rhen|danub/.test(r)) return "northern";
+  return "mediterranean"; // central/mediterranean band + Italia/Graecia/Hispania/Anatolia/islands
 }
 
 // Per climate → per biome → prop entries (key + expected count "density"). Weighted so a
