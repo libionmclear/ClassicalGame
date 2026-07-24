@@ -150,7 +150,10 @@ const PATH = new THREE.Color(0x7dd3fc);
 const WHITE = new THREE.Color(0xffffff);
 // Unexplored land reads as an aged papyrus map (sepia), not black — and lies flat
 // (no hex relief) so it's truly undiscovered until you scout it.
-const HIDDEN = new THREE.Color(0xcbb794);
+// R2.4: undiscovered tiles were a warm sand-tan (0xcbb794) — on a large mostly-unexplored
+// map the whole board read as "one giant desert". A cool desaturated slate reads clearly as
+// UNKNOWN/mist (distinct from the warm desert gold), and lets the discovered green world pop.
+const HIDDEN = new THREE.Color(0x6b7783);
 const HIDDEN_ELEV = 0.04;
 
 // A coloured banner marker for civs that have no sprite art yet.
