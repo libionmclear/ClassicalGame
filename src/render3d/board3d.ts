@@ -60,6 +60,12 @@ const TERRAIN_ELEV: Record<string, number> = {
 };
 const FLOOR = -0.6;
 const SIZE = 1;
+// The grid is POINTY-TOP (axialToWorld: x=√3·(q+r/2), z=1.5·r) → hex cells have a
+// vertex at ±z and flat edges facing ±x. City/settlement GLB bases are authored
+// flat-top, so a single constant yaw snaps every base's edges parallel to the cell
+// edges (all cells share one orientation — §7b "base fills the hex"). Tuned against a
+// top-down capture of the capital over the grid overlay.
+const CITY_YAW = Math.PI / 6; // 30° flat-top → pointy-top
 // The sea is rendered as ONE FLAT surface: coast and open water sit at a single
 // level (depth is shown by colour, not elevation), and as thin slabs so there are
 // no tall prism sides — those sides caught the warm sun on dark-blue water and
@@ -127,6 +133,8 @@ export interface BoardController {
   getTilt(): number;
   /** Move the camera to frame tile (q,r), keeping the current angle + distance. */
   focusTile(q: number, r: number): void;
+  /** Frame tile (q,r) straight down at `dist` units (verification captures). */
+  topDown(q: number, r: number, dist?: number): void;
   /** Project tile (q,r)'s centre to canvas client pixels (for a real-click test), or null if clipped. */
   screenOf(q: number, r: number): { x: number; y: number } | null;
   /** Dev diagnostics: relief/scatter/texture state for the checkpoint screenshots. */
@@ -2024,7 +2032,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         } else { model = buildUnit(form, color, frac, sv.q, sv.r, sv.civ, sv.utype); scale = 1.35; }
       }
       model.scale.setScalar(scale);
-      model.position.set(ox, top + 0.01, oz);
+      // §7b: snap the settlement's hex base parallel to the grid cells (one constant),
+      // and seat it a hair proud of the flattened platform so no terrain pokes through.
+      if (isCity) model.rotation.y = CITY_YAW;
+      model.position.set(ox, top + (isCity ? 0.02 : 0.01), oz);
       holder.add(model);
 
       const shadow = new THREE.Mesh(shadowGeo, shadowMat);
@@ -2593,6 +2604,16 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const off = camera.position.clone().sub(controls.target);
       controls.target.set(w.x, 0, w.z);
       camera.position.copy(controls.target).add(off);
+      camera.lookAt(controls.target);
+      controls.update();
+    },
+    // Frame a tile straight-down (verification captures: city hex alignment / seating).
+    topDown(q: number, r: number, dist = 9): void {
+      const wpt = axialToWorld(q, r);
+      const y = groundY("plains", wpt.x, wpt.z);
+      controls.minPolarAngle = 0.0001; // allow a true vertical for the capture
+      controls.target.set(wpt.x, y, wpt.z);
+      camera.position.set(wpt.x, y + dist, wpt.z + 0.0008); // hair of z so it isn't gimbal-locked
       camera.lookAt(controls.target);
       controls.update();
     },

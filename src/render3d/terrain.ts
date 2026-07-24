@@ -223,7 +223,10 @@ export function buildTerrainSurface(
         const plat = flat.get(Math.round(qf) + "," + Math.round(rf));
         if (plat !== undefined) {
           const cc = axialToWorld(Math.round(qf), Math.round(rf));
-          const k = 1 - smooth01(0.60, 0.98, Math.hypot(wx - cc.x, wz - cc.z)); // 1=flat centre → 0=natural edge
+          // §7b: the flat zone must cover the city's whole ~0.81-radius footprint (base is
+          // ~92% flat-to-flat) so nothing on a slope pokes up through the base; the terrace
+          // skirt cuts back to natural only in the last sliver to the hex edge (apothem 0.866).
+          const k = 1 - smooth01(0.84, 1.02, Math.hypot(wx - cc.x, wz - cc.z)); // 1=flat platform → 0=natural edge
           vy = vy * (1 - k) + plat * k;
         }
       }

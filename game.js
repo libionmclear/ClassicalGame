@@ -5964,6 +5964,7 @@
     // clickTile() above bypasses all of that, which is why it kept passing while real
     // input was dead. Tests should use THIS to catch pick/raycast regressions.
     screenOf: function (q, r) { return (USE_3D && board3d && board3d.screenOf) ? board3d.screenOf(q, r) : null; },
+    topDown: function (q, r, dist) { if (USE_3D && board3d && board3d.topDown) board3d.topDown(q, r, dist); },
     clickTileReal: function (q, r) {
       if (!USE_3D || !board3d || !board3d.screenOf) return { ok: false, reason: "no 3D board" };
       var s = board3d.screenOf(q, r);
