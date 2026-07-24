@@ -7,6 +7,7 @@
 //   h hills       H highlands        ^ mountains  d desert    s marsh    = great-river   o oasis
 //   1-8 = the eight capitals (rendered as plains; placed by digit).
 // Rows are top (north, row 0) to bottom (south). Keep every row exactly 96 chars.
+// Round-trips with a paintable PNG via scripts/map-png.mjs.
 export const OLD_WORLD_GRID = [
   "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
   "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
