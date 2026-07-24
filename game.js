@@ -163,6 +163,9 @@
   let unitDetailsOpen = false;
   let lastUnitKey = null;
   let hoveredPathKeys = new Set();
+  // §2c hover-path cost markers: the ORDERED path with a per-step mark (chevron on a slope,
+  // ford at a great-river crossing, sun on entering desert) for the 3D board to decal.
+  let hoverPathOrdered = [];
   let pendingRecenter = true;
   let combatFlashKeys = new Set();
   let zoomLevel = 1;
@@ -1593,6 +1596,7 @@
 
   function computePathPreviewKeys(q, r, visibility) {
     const keys = new Set();
+    hoverPathOrdered = [];
     if (!selectedUnitId) return keys;
     const unit = state.map.units[selectedUnitId];
     if (!unit) return keys;
@@ -1622,9 +1626,19 @@
       );
       totalCost += stepCost;
       if (totalCost > unit.movementRemaining) {
+        hoverPathOrdered = [];
         return new Set();
       }
-      keys.add(path[i + 1].q + "," + path[i + 1].r);
+      const dest = path[i + 1];
+      keys.add(dest.q + "," + dest.r);
+      // §2c per-edge cost marker from the destination terrain: sun entering desert, ford at a
+      // great-river crossing, double-chevron climbing onto a slope (hills/highlands/mountains).
+      const dt = (state.map.tiles[dest.q + "," + dest.r] || {}).terrain;
+      let mark = null;
+      if (dt === "desert") mark = "attrition";
+      else if (dt === "great-river") mark = "ford";
+      else if (dt === "hills" || dt === "highlands" || dt === "mountains") mark = "chevron";
+      hoverPathOrdered.push({ q: dest.q, r: dest.r, mark: mark });
     }
 
     return keys;
@@ -2538,6 +2552,8 @@
     const view = { tiles: tiles, sprites: sprites, borders: borders, districts: districts, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx, turn: state.turn };
     // R2.6: reachable hexes tint toward the selected unit's civ colour.
     if (selUnit) view.selColor = CIV_COLORS[selUnit.ownerId] || null;
+    // §2c: the ordered hover path + per-step cost marks (chevron/ford/attrition) for decals.
+    view.hoverPath = hoverPathOrdered;
     if (pendingRecenter) {
       const home =
         Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
@@ -2555,6 +2571,7 @@
     last3DHoverKey = key;
     if (!key) {
       hoveredPathKeys = new Set();
+      hoverPathOrdered = [];
       hintLineEl.textContent = defaultHintText;
       render();
       return;
@@ -5970,6 +5987,13 @@
     // clickTile() above bypasses all of that, which is why it kept passing while real
     // input was dead. Tests should use THIS to catch pick/raycast regressions.
     screenOf: function (q, r) { return (USE_3D && board3d && board3d.screenOf) ? board3d.screenOf(q, r) : null; },
+    hoverTileReal: function (q, r) {
+      if (!USE_3D || !board3d || !board3d.screenOf) return { ok: false, reason: "no 3D board" };
+      var s = board3d.screenOf(q, r); if (!s) return { ok: false, reason: "off-screen" };
+      var canvas = document.getElementById("board3d-canvas"); if (!canvas) return { ok: false };
+      canvas.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: Math.round(s.x), clientY: Math.round(s.y) }));
+      return { ok: true, marks: hoverPathOrdered.filter(function (m) { return m.mark; }).length };
+    },
     topDown: function (q, r, dist) { if (USE_3D && board3d && board3d.topDown) board3d.topDown(q, r, dist); },
     clickTileReal: function (q, r) {
       if (!USE_3D || !board3d || !board3d.screenOf) return { ok: false, reason: "no 3D board" };

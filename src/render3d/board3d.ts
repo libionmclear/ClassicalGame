@@ -112,6 +112,10 @@ export interface BoardView {
   civColors: Record<string, string>;
   rivers?: EdgeView[];
   roads?: EdgeView[];
+  /** §2c ordered hover-path with per-step cost marks (chevron/ford/attrition) for decals. */
+  hoverPath?: Array<{ q: number; r: number; mark: string | null }>;
+  /** Selected unit's civ colour (drives the reachable-tile tint). */
+  selColor?: string | null;
   focus?: { q: number; r: number };
   /** Game turn — drives the day/night cycle (the sun rises, peaks, sets over a span
    *  of turns; night falls; weather dims on top). */
@@ -1562,6 +1566,32 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const selHintCol = new THREE.Color(0x7ed957);
   let hlTime = 0; // highlight-pulse clock (attackable throb)
 
+  // §2c: hover-path COST MARKS — a small glyph floating over each marked step of the previewed
+  // path (chevron climbing a slope, ford at a great-river, sun entering desert). Camera-facing.
+  const hoverMarkGroup = new THREE.Group();
+  scene.add(hoverMarkGroup);
+  const hoverMarkPool: THREE.Sprite[] = [];
+  const MARK_GLYPH: Record<string, string> = { chevron: "⌃⌃", ford: "≈", attrition: "☀" };
+  function updateHoverMarks(view: BoardView): void {
+    let n = 0;
+    for (const step of view.hoverPath || []) {
+      if (!step.mark || !MARK_GLYPH[step.mark]) continue;
+      let spr = hoverMarkPool[n];
+      if (!spr) {
+        spr = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: false }));
+        spr.center.set(0.5, 0); spr.renderOrder = 999; hoverMarkPool[n] = spr; hoverMarkGroup.add(spr);
+      }
+      const mat = spr.material as THREE.SpriteMaterial;
+      mat.map = glyphTexture(MARK_GLYPH[step.mark]); mat.needsUpdate = true;
+      const w = axialToWorld(step.q, step.r);
+      spr.position.set(w.x, groundY("plains", w.x, w.z) + 0.32, w.z);
+      spr.scale.set(0.44, 0.44, 0.44);
+      spr.visible = true;
+      n += 1;
+    }
+    for (let i = n; i < hoverMarkPool.length; i += 1) hoverMarkPool[i].visible = false;
+  }
+
   // R2.6: reachable/costly movement decals — translucent civ-colour hex fills on the ground.
   // Two-step opacity: reachable this turn brighter, reachable-but-costly dimmer.
   const reachGroup = new THREE.Group();
@@ -2782,6 +2812,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       updateSelRing(view);
       updateAttackRings(view);
       updateReachHexes(view);
+      updateHoverMarks(view);
       drawBorders(view);
       drawWaterways(view);
       // Rain over the wet region's footprint — but only when a real part of the
