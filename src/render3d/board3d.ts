@@ -1284,7 +1284,19 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   };
   // Gate 2 material tints (multiply the baked map). The Meshy olive bakes a near-white
   // canopy; pull it to the silver-green of the approved 2D olive.
-  const PROP_TINT: Record<string, number> = { "scatter/olive": 0xb9c692 };
+  // R2.3: the approved foliage GLBs bake a saturated candy-green canopy. Clamp EVERY
+  // canopy into the fresco palette by multiplying its material toward a muted sage/olive
+  // (warm, desaturated) — conifers a touch darker, olive/palm silvery. The map multiplies
+  // by color, so this pulls the bright green down without touching the ground or props.
+  const PROP_TINT: Record<string, number> = {
+    "scatter/olive": 0xb9c692,
+    "scatter/oak": 0xa7b482,
+    "scatter/beech": 0xafba86,
+    "scatter/stone-pine": 0x9aad7a,
+    "scatter/cypress": 0x93a771,
+    "scatter/fir": 0x97a877,
+    "scatter/date-palm": 0xb4bd8a
+  };
   function normalizeProp(scene0: THREE.Object3D, key: string): { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] } | null {
     return normalizeGLB(scene0, PROP_H[key] ?? 0.4);
   }
@@ -1299,12 +1311,16 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         gltfLoader.load(rel, (gltf) => {
           const norm = normalizeProp(gltf.scene, key);
           if (norm) {
-            // Gate 2: some Meshy foliage bakes a near-WHITE canopy; tint the material toward
-            // the true silver-green of the approved 2D reference (the map multiplies by color).
+            // R2.3: proptest proved the GLBs are GREEN in isolation — the white canopies are a
+            // scene-lighting blowout. Force every foliage material MATTE (roughness 1, metalness 0)
+            // so the strong sun can't throw a white specular highlight, and clamp the base colour
+            // into the fresco palette (silver-green) via a multiply tint.
             const tint = PROP_TINT[key];
-            if (tint !== undefined) {
-              const mats = Array.isArray(norm.mat) ? norm.mat : [norm.mat];
-              for (const mm of mats) { const sm = mm as THREE.MeshStandardMaterial; if (sm.color) sm.color.multiply(new THREE.Color(tint)); }
+            const mats = Array.isArray(norm.mat) ? norm.mat : [norm.mat];
+            for (const mm of mats) {
+              const sm = mm as THREE.MeshStandardMaterial;
+              if ("roughness" in sm) { sm.roughness = 1; sm.metalness = 0; }
+              if (tint !== undefined && sm.color) sm.color.multiply(new THREE.Color(tint));
             }
             propModels.set(key, norm); scatterDirty = true; // loop rebuilds scatter once, coalesced
           }
