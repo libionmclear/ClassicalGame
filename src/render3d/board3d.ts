@@ -1976,7 +1976,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const _tc = new THREE.Color();
   function buildTerrain(view: BoardView): void {
     if (!RELIEF) return;
-    const sig = view.tiles.length + ":" + (view.tiles[0] ? view.tiles[0].q + "," + view.tiles[0].r + "," + view.tiles[0].t : "");
+    const sig = view.tiles.length + ":" + (view.tiles[0] ? view.tiles[0].q + "," + view.tiles[0].r + "," + view.tiles[0].t : "") + ":r" + (view.rivers ? view.rivers.length : 0);
     if (terrainMesh && sig === terrainSig) return;
     terrainSig = sig;
     if (terrainMesh) { scene.remove(terrainMesh); terrainMesh.geometry.dispose(); (terrainMesh.material as THREE.Material).dispose(); terrainMesh = null; }
@@ -1996,7 +1996,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     for (const s of view.sprites) if (s.kind === "city") { const cc = axialToWorld(s.q, s.r); flatten.set(s.q + "," + s.r, sampleSurface(cc.x, cc.z, tileAt).y); }
     for (const dv of view.districts || []) { const cc = axialToWorld(dv.q, dv.r); flatten.set(dv.q + "," + dv.r, sampleSurface(cc.x, cc.z, tileAt).y); }
     ensureTerrainTextures();
-    { const surf = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow, cliff: terrainCliff, scree: terrainScree, flatten }); terrainMesh = surf.mesh; terrainHeightAt = surf.heightAt; }
+    // §8.1: carve river channels from the SAME centrelines the water ribbon uses (chainRivers →
+    // tile-centre polylines), so the water sits inside a trough. City hexes override via flatten.
+    const carveSegs: number[] = [];
+    for (const chain of chainRivers(view.rivers)) {
+      for (let i = 0; i < chain.length - 1; i += 1) {
+        const a = axialToWorld(chain[i].q, chain[i].r), b = axialToWorld(chain[i + 1].q, chain[i + 1].r);
+        carveSegs.push(a.x, a.z, b.x, b.z);
+      }
+    }
+    const carve = carveSegs.length ? { segments: carveSegs, halfWidth: 0.42, depth: 0.16 } : undefined;
+    { const surf = buildTerrainSurface(view.tiles, tileAt, { rock: terrainRock, snow: terrainSnow, cliff: terrainCliff, scree: terrainScree, flatten, carve }); terrainMesh = surf.mesh; terrainHeightAt = surf.heightAt; }
     scene.add(terrainMesh);
     // Hide the hex prisms + their sea tints; the reflective sea plane stays. scatterGroup
     // stays VISIBLE — in relief it now holds only improvements + resource-flavour props
@@ -2557,11 +2567,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         const fan = Math.max(0, (d - 0.88) / 0.12);     // mouth fan widening (§8.6), capped
         return w + fan * fan * 0.13;
       };
-      // Layered by height: wet-earth bank (widest, lowest) → water → bank foam (top).
-      const earth = new THREE.Mesh(ribbonGeo(pts, (i) => halfW(i) * 1.7 + 0.05, 0.02), riverBankMat); earth.renderOrder = 1;
+      // The CARVED trough (buildTerrain) is now the channel + banks; here we only lay the water,
+      // a thin moist-earth rim right at the waterline (§8.7), and bank foam on top.
+      const rim = new THREE.Mesh(ribbonGeo(pts, (i) => halfW(i) * 1.28, 0.042), riverBankMat); rim.renderOrder = 1;
       const water = new THREE.Mesh(ribbonGeo(pts, (i) => halfW(i), 0.05), riverFlowMat); water.renderOrder = 2;
       const foam = new THREE.Mesh(ribbonGeo(pts, (i) => halfW(i) * 1.06, 0.062), riverFoamMat); foam.renderOrder = 3;
-      riverGroup.add(earth, water, foam);
+      riverGroup.add(rim, water, foam);
       // Rapids (§8.5): a small foam burst at a genuine elevation STEP — a steep drop that is
       // also spaced from the last one, so rapids are occasional accents, not a pearl-string
       // down every steadily-descending reach.
@@ -2589,7 +2600,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     for (const tv of view.tiles) terrainByKey[tv.q + "," + tv.r] = tv.t;
     const heightOf = (q: number, r: number): number => { const t = terrainByKey[q + "," + r] || "plains"; const w = axialToWorld(q, r); return groundY(t, w.x, w.z); };
     roadMesh = drawEdges(view.roads, roadGeo, roadMat, 0.05, true, heightOf, roadMesh);
-    buildRiverMesh(view, heightOf); // §8: one continuous carved channel per river (replaces edge-bars)
+    // §8.1: the river follows the CARVED surface (terrainHeightAt samples the trough we cut in
+    // buildTerrain), so the ribbon sits inside the channel rather than on top of the grass.
+    const riverHeight = terrainHeightAt
+      ? (q: number, r: number): number => { const w = axialToWorld(q, r); return terrainHeightAt!(w.x, w.z); }
+      : heightOf;
+    buildRiverMesh(view, riverHeight); // §8: one continuous carved channel per river (replaces edge-bars)
     void riverMesh; void riverGeo; void riverMat; // (retired ribbon path)
   }
 

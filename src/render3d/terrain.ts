@@ -174,6 +174,7 @@ export interface SurfaceOpts {
   cliff?: THREE.Texture | null;  // cliff-strata: layered sedimentary walls on the steepest faces (§2c)
   scree?: THREE.Texture | null;  // mountain-scree: loose debris on lower/gentler mountain ground (§2b)
   flatten?: Map<string, number>; // §7b: tileKey "q,r" → platform height; city hexes level off + skirt
+  carve?: { segments: number[]; halfWidth: number; depth: number }; // §8.1: river channels — flat [ax,az,bx,bz,…] centreline segments; the surface dips into a smooth trough within halfWidth
 }
 function smooth01(a: number, b: number, x: number): number { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 // The surface mesh PLUS a sampler that returns the mesh's OWN height at any (x,z) — a
@@ -190,6 +191,9 @@ export function buildTerrainSurface(
   const margin = opts.margin ?? 2.0;
   const maxSeg = opts.maxSeg ?? 400;      // per-axis cap (perf / quality tier)
   const flat = opts.flatten;              // §7b city platforms
+  const carveSeg = opts.carve && opts.carve.segments.length ? opts.carve.segments : null; // §8.1 river channels
+  const carveHW = opts.carve ? opts.carve.halfWidth : 0;
+  const carveDepth = opts.carve ? opts.carve.depth : 0;
 
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (const t of tiles) {
@@ -216,6 +220,21 @@ export function buildTerrainSurface(
       const s = sampleSurface(wx, wz, tileAt);
       const vi = (iz * nx + ix) * 3;
       let vy = s.y;
+      // §8.1: carve a smooth river channel — dip toward the centreline within halfWidth, so the
+      // water surface can sit INSIDE a trough instead of on top of the grass. Applied BEFORE the
+      // city flatten below, so a city on a river keeps its level platform (flatten overrides).
+      if (carveSeg) {
+        let best = carveHW;
+        for (let si = 0; si < carveSeg.length; si += 4) {
+          const ax = carveSeg[si], az = carveSeg[si + 1], ex = carveSeg[si + 2], ez = carveSeg[si + 3];
+          if (wx < Math.min(ax, ex) - carveHW || wx > Math.max(ax, ex) + carveHW || wz < Math.min(az, ez) - carveHW || wz > Math.max(az, ez) + carveHW) continue;
+          const dx = ex - ax, dz = ez - az, l2 = dx * dx + dz * dz || 1e-6;
+          let t = ((wx - ax) * dx + (wz - az) * dz) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const d = Math.hypot(wx - (ax + t * dx), wz - (az + t * dz));
+          if (d < best) best = d;
+        }
+        if (best < carveHW) { const u = best / carveHW; vy -= carveDepth * (1 - u * u * (3 - 2 * u)); } // smooth trough: full depth at centre → 0 at the bank
+      }
       // §7b: flatten a city hex to a level platform, skirting back to natural terrain by the
       // hex edge (a terrace cut) — so the city model never tilts or embeds on a slope.
       if (flat) {
