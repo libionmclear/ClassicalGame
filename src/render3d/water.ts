@@ -7,9 +7,13 @@ import { axialToWorld, SIZE } from "./terrain";
 
 // §2 colour anchors, sampled from the reference paintings.
 const WET_SAND = new THREE.Color(0xe2c179); // pale warm sand through shallow water
-const SHALLOW  = new THREE.Color(0x8fd8b8); // green-turquoise shelf
-const AQUA     = new THREE.Color(0x2fb0cf); // mid aquamarine body (richer)
-const DEEP     = new THREE.Color(0x2a5bb0); // lapis / Egyptian blue — lifted so it reads blue, not black
+// Round B: toned so the shallow shelf is a SUBTLE coast band, not a bright mint rim that bloom
+// blows into a UI-selection glow; and DEEP converges onto the reflective sea-plane colour
+// (board3d seaMesh 0x24446a) so the painted map-water blends into the open ocean with no
+// stair-step seam. (Full reflective-everywhere unification is the pending real-GPU step.)
+const SHALLOW  = new THREE.Color(0x5c9ea0); // muted teal shelf (was bright mint 0x8fd8b8)
+const AQUA     = new THREE.Color(0x2f7a9a); // mid blue-teal body (was neon 0x2fb0cf)
+const DEEP     = new THREE.Color(0x264a72); // matches the reflective sea plane → seamless
 const FOAM     = new THREE.Color(0xeef0e6); // §4 soft WARM white — never pure #FFFFFF
 
 export interface WaterOpts {
@@ -123,7 +127,7 @@ export function buildWaterSurface(opts: WaterOpts): { mesh: THREE.Mesh; tick: (t
   const segZ = Math.max(1, Math.min(300, Math.round(d * 2.2)));
   const nx = segX + 1, nz = segZ + 1;
 
-  const SHORE_RANGE = 5.0; // world units over which shallow→deep plays out
+  const SHORE_RANGE = 3.0; // world units over which shallow→deep plays out — TIGHTER (was 5.0) so the shallow band hugs the coast instead of glowing far out to sea
   const pos = new Float32Array(nx * nz * 3);
   const aShore = new Float32Array(nx * nz);
   const aOpen = new Float32Array(nx * nz);
