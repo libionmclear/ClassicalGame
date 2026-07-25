@@ -122,14 +122,20 @@ function rolling(x: number, z: number): number {
 // elevations, so the surface flows between hexes with no cliffs (spec §2). Colour is
 // blended by the same kernel so biomes cross-fade at their borders. Deterministic —
 // same tiles in → same surface out.
-const BLEND_R = 2.8 * SIZE;               // blend radius (~1.5 hexes)
+const BLEND_R = 2.8 * SIZE;               // HEIGHT blend radius (~1.5 hexes) — keeps relief smooth
+const BLEND_R_LAND = 1.5 * SIZE;          // COLOUR blend radius — tight, so each hex reads as its own fill
 const RING = 2;                           // axial neighbourhood scanned per sample
 const SEA_SAMPLE: TileSample = { elev: DEEP_SEA, r: 0x2f / 255, g: 0x51 / 255, b: 0x77 / 255, mtn: 0 };
+// Round A (terrain legibility): HEIGHT stays a wide smooth blend (continuous relief, no cliffs),
+// but COLOUR is now a TIGHT, LAND-ONLY per-hex fill. Each land hex holds its own distinct palette
+// colour with only a narrow soft band into adjacent LAND hexes; sea/coast never bleed into land,
+// so the coastline reads as a crisp hex-edge boundary instead of a mushy olive-tan gradient.
 export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number; r: number; g: number; b: number; mtn: number } {
   const rf = z / (1.5 * SIZE);
   const qf = x / (SIZE * Math.sqrt(3)) - rf / 2;
   const bq = Math.round(qf), br = Math.round(rf);
-  let ysum = 0, rsum = 0, gsum = 0, bsum = 0, msum = 0, hsum = 0, wsum = 0;
+  let ysum = 0, msum = 0, hsum = 0, wsum = 0;
+  let lrsum = 0, lgsum = 0, lbsum = 0, lwsum = 0; // tight LAND-only colour accumulation (per-hex fill)
   let nearest: TileSample | undefined; let nearestD = Infinity;
   for (let dr = -RING; dr <= RING; dr += 1) {
     for (let dq = -RING; dq <= RING; dq += 1) {
@@ -140,9 +146,14 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
       if (d < nearestD) { nearestD = d; nearest = s; }
       if (d >= BLEND_R) continue;
       const samp = s ?? SEA_SAMPLE;
-      const w = (1 - d / BLEND_R) * (1 - d / BLEND_R); // smooth falloff
-      ysum += w * samp.elev; rsum += w * samp.r; gsum += w * samp.g; bsum += w * samp.b;
-      msum += w * (samp.mtn ?? 0); hsum += w * (samp.hill ?? 0); wsum += w;
+      const w = (1 - d / BLEND_R) * (1 - d / BLEND_R); // smooth falloff for HEIGHT + relief masks
+      ysum += w * samp.elev; msum += w * (samp.mtn ?? 0); hsum += w * (samp.hill ?? 0); wsum += w;
+      // Per-hex fill COLOUR: tight quartic kernel, LAND tiles only (elev ≥ 0.05). Water is
+      // excluded so a land vertex keeps its own colour right up to the shared coast edge.
+      if (samp.elev >= 0.05 && d < BLEND_R_LAND) {
+        const wl = 1 - d / BLEND_R_LAND, wt = wl * wl * wl * wl;
+        lrsum += wt * samp.r; lgsum += wt * samp.g; lbsum += wt * samp.b; lwsum += wt;
+      }
     }
   }
   if (wsum <= 0) {
@@ -155,13 +166,16 @@ export function sampleSurface(x: number, z: number, tileAt: TileAt): { y: number
   if (mtn > 0.02) {
     // Ridged crests only in mountain country. Adjacent mountain hexes share one ridged
     // field → a continuous range with crests and gullies, never isolated smooth cones.
-    // Subtract only a little (not the ridge's mean) so the term adds NET HEIGHT — the
-    // elevation blend otherwise flattens peaks to gentle humps. mtn² sharpens the range
-    // core vs its skirts so summits tower and foothills stay walkable.
     y += (ridged(x, z) - 0.12) * MOUNTAIN_AMP * (mtn * mtn);
   }
   if (hill > 0.02) y += rolling(x, z) * HILL_AMP * hill; // §2c climbable rolling/terraced relief
-  return { y, r: rsum / wsum, g: gsum / wsum, b: bsum / wsum, mtn };
+  // COLOUR: land vertices take the tight per-hex land fill (crisp coast); water vertices take
+  // their own bed colour (the water shader paints the real sea on top of it).
+  const nearWater = !nearest || nearest.elev < 0.05;
+  let cr: number, cg: number, cb: number;
+  if (!nearWater && lwsum > 0) { cr = lrsum / lwsum; cg = lgsum / lwsum; cb = lbsum / lwsum; }
+  else { const n = nearest ?? SEA_SAMPLE; cr = n.r; cg = n.g; cb = n.b; }
+  return { y, r: cr, g: cg, b: cb, mtn };
 }
 
 // Build the continuous ground surface: a subdivided grid over the board's world
