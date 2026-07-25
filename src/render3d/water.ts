@@ -91,10 +91,11 @@ const FRAG = /* glsl */`
     float foam = clamp(band * band * pulse * broken * 1.6, 0.0, 1.0);
     col = mix(col, uFoam, foam);
 
-    // §4 DEEP-SEA WHITECAPS: SMALL sparse dabs on swell crests — near-absent in calm,
-    // frequent only in storm. Higher-frequency noise so they're crisp flecks, not blobs.
-    float caps = smoothstep(0.88, 0.99, vnoise(swell * 6.5)) * smoothstep(0.4, 0.7, s);
-    caps *= (0.03 + 0.55 * uWeather) * (1.0 - vOpen * 0.5);
+    // §4 DEEP-SEA WHITECAPS: SMALL sparse dabs on swell crests — ONLY in rough weather.
+    // The old 0.03 calm-weather floor put faint white flecks across the whole deep sea (a
+    // "starfield" on a real GPU, though software-GL hid it); calm water carries NO caps now.
+    float caps = smoothstep(0.90, 0.99, vnoise(swell * 6.5)) * smoothstep(0.4, 0.7, s);
+    caps *= (0.6 * uWeather * uWeather) * (1.0 - vOpen * 0.5);
     col = mix(col, uFoam, clamp(caps, 0.0, 1.0));
 
     // §5 SHORE TRANSPARENCY: the water is translucent over the beach band so the wet sand

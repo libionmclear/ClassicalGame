@@ -114,8 +114,8 @@ export function pickScatter(terrain: string, q: number, r: number, climate: Clim
   let groveMul = 1;
   if (terrain !== "marsh") {
     const gv = vnoise(q * 0.33 + 11.2, r * 0.33 + 7.7);
-    const t = Math.max(0, (gv - 0.34) / 0.42);
-    groveMul = Math.min(1.7, t * t * 1.6); // squared → crisp grove-vs-clearing contrast
+    const t = Math.max(0, (gv - 0.30) / 0.46);       // slightly lower threshold → fewer bare clearings
+    groveMul = Math.min(2.1, t * t * 1.9); // squared → crisp grove-vs-clearing contrast; DENSER groves (was 1.7/1.6, over-corrected to sparse)
   }
   if (groveMul <= 0.001) return []; // a clearing
 
@@ -128,14 +128,14 @@ export function pickScatter(terrain: string, q: number, r: number, climate: Clim
     let count = e.n * density * groveMul;
     count = Math.floor(count) + (rng() < count - Math.floor(count) ? 1 : 0);
     const canopy = CANOPY.has(e.key), rock = ROCK.has(e.key);
-    for (let i = 0; i < count && out.length < 26; i += 1) {
+    for (let i = 0; i < count && out.length < 30; i += 1) {
       const spread = canopy ? 0.32 : rock ? 0.56 : 0.5; // canopy tight; rocks strewn wider
       const ang = rng() * Math.PI * 2, rad = rng() * spread;
       const dx = Math.max(-0.82, Math.min(0.82, ax + Math.cos(ang) * rad));
       const dz = Math.max(-0.82, Math.min(0.82, az + Math.sin(ang) * rad));
-      // Size: canopy has a hierarchy (tall anchor → smaller), rocks vary widely (±28%),
-      // understory ±15%. Every instance also gets a random yaw so nothing looks stamped.
-      const scale = canopy ? (i === 0 ? 1.2 : 0.88) + rng() * 0.26
+      // Size: canopy keeps a tall-anchor hierarchy but ~15-20% SMALLER overall and with ±~30%
+      // per-instance variation (same species at different ages side by side = a real grove).
+      const scale = canopy ? (i === 0 ? 1.02 : 0.82) * (0.72 + rng() * 0.56)
         : rock ? 0.72 + rng() * 0.56
           : 0.68 + rng() * 0.3;
       out.push({ key: e.key, dx, dz, yaw: rng() * Math.PI * 2, scale });
