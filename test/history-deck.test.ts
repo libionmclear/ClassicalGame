@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { createInitialGameState, applyAction, computeCombatPreview, movementCost } from "../src/engine/index";
 import type { CreateGameConfig, GameState, Coord, Tile } from "../src/engine/types";
+import { EVENT_CARDS } from "../src/cards-data-v2.js";
 
 type Units = NonNullable<NonNullable<CreateGameConfig["map"]>["units"]>;
 type Cities = NonNullable<NonNullable<CreateGameConfig["map"]>["cities"]>;
@@ -246,4 +247,32 @@ test("playing a card is deterministic (same inputs → identical effects)", () =
   const a = play(makeState({ units: { w: { id: "w", type: "warrior", ownerId: "p1", position: { q: 1, r: 1 } } } }), "infantry+1move-3-turns");
   const b = play(makeState({ units: { w: { id: "w", type: "warrior", ownerId: "p1", position: { q: 1, r: 1 } } } }), "infantry+1move-3-turns");
   assert.deepEqual(a.activeEffects, b.activeEffects, "identical plays yield identical effect records");
+});
+
+// ---------- DATA ↔ ENGINE integrity (guards the authored deck, not a hardcoded instant) ----------
+// The per-mechanic tests above pass the `instant` string by hand. These read the SHIPPED card
+// data (cards-data-v2.js) so a typo'd or un-wired `instant`, or a half-authored card, fails CI
+// instead of shipping as a silent "isn't available yet" for a card the player owns.
+const HISTORY_DECK = (EVENT_CARDS as Array<Record<string, any>>).filter((c) => c.codex);
+
+test("the History Deck is fully authored (name, flavour, codex, an effect.instant)", () => {
+  assert.ok(HISTORY_DECK.length >= 12, `expected the full History Deck, found ${HISTORY_DECK.length} carded events with a codex`);
+  for (const c of HISTORY_DECK) {
+    assert.ok(typeof c.name === "string" && c.name.length > 3, `${c.id} needs a real name`);
+    assert.ok(typeof c.flavor === "string" && c.flavor.length > 10, `${c.id} needs flavour text`);
+    assert.ok(typeof c.codex === "string" && c.codex.length > 30, `${c.id} needs a codex entry`);
+    assert.ok(c.effect && typeof c.effect.instant === "string" && c.effect.instant.length > 0, `${c.id} needs an effect.instant`);
+  }
+});
+
+test("every History Deck card's instant is WIRED to the engine (never a silent no-op)", () => {
+  for (const c of HISTORY_DECK) {
+    const state = makeState({ techs: c.requiresTech ? [c.requiresTech] : [] });
+    let err: Error | null = null;
+    try { play(state, c.effect.instant as string); } catch (e) { err = e as Error; }
+    // A precondition error ("needs an army beside…") is fine — the card IS wired, the bare board
+    // just can't satisfy it. Only the reducer's default case reports "isn't wired", which means
+    // the DATA points at a mechanic the engine doesn't implement.
+    if (err) assert.ok(!/isn't wired/.test(err.message), `${c.id} (${c.effect.instant}) is NOT wired: ${err.message}`);
+  }
 });
