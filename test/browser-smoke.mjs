@@ -79,6 +79,9 @@ try {
   // is in frame. A genuinely dark scene has NO bright regions, so even p85 stays low.
   let p85 = -1;
   try {
+    // Let the first-frame exposure/day-brightness ramp settle before sampling, so the
+    // guard measures the LOCKED steady-state daylight, not a mid-ramp boot frame.
+    await page.waitForTimeout(800);
     const shot = await page.locator("#board3d-canvas").screenshot();
     const png = PNG.sync.read(shot);
     const lums = [];

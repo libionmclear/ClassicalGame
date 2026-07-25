@@ -6063,6 +6063,17 @@
       render();
       return us.map(function (u) { return { id: u.id, q: u.position.q, r: u.position.r }; });
     },
+    // Wound the human's units to a fraction of max HP — exercises the §3 HP-bar overlay
+    // (the bar is hidden at full HP and appears only on damage). Pass q,r to wound just
+    // the unit on one tile, leaving the rest full so "hidden at full HP" is visible too.
+    setHp: function (frac, q, r) {
+      if (!state) return null;
+      var us = Object.values(state.map.units).filter(function (u) { return u.ownerId === HUMAN_ID; });
+      if (q != null) us = us.filter(function (u) { return u.position.q === q && u.position.r === r; });
+      us.forEach(function (u) { u.hp = Math.max(1, Math.round((u.maxHp || 10) * frac)); });
+      render();
+      return us.map(function (u) { return { id: u.id, hp: u.hp, maxHp: u.maxHp, q: u.position.q, r: u.position.r }; });
+    },
     // Set the human capital's population (drives the city visual tier) — for showcasing
     // the per-level city models on the board.
     growCapital: function (pop) {

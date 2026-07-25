@@ -2133,24 +2133,46 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   function hpBarMaterial(frac: number): THREE.SpriteMaterial {
     const bucket = Math.round(Math.max(0, Math.min(1, frac)) * 20);
     if (hpBarMatCache[bucket]) return hpBarMatCache[bucket];
-    const W = 64, H = 12, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    // §3 overlay rebuild: NO dark backing plate. A slim rounded bar = coloured HP fill +
+    // a crisp self-outline (so the full length still reads) + a faint inner highlight.
+    // The empty portion is fully TRANSPARENT — never a dark quad behind the entity.
+    const W = 96, H = 18, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
     const cx = cv.getContext("2d")!;
-    // Gate 4 (UI quiet): softer backing + muted fills so the banner recedes into the scene.
-    cx.fillStyle = "rgba(18,16,12,0.55)"; cx.fillRect(0, 0, W, H);
+    const pad = 3, rad = (H - pad * 2) / 2;
+    const rr = (x: number, y: number, w: number, h: number, r: number) => {
+      const rc = Math.max(0, Math.min(r, w / 2, h / 2));
+      cx.beginPath();
+      cx.moveTo(x + rc, y); cx.arcTo(x + w, y, x + w, y + h, rc); cx.arcTo(x + w, y + h, x, y + h, rc);
+      cx.arcTo(x, y + h, x, y, rc); cx.arcTo(x, y, x + w, y, rc); cx.closePath();
+    };
     const f = bucket / 20;
-    cx.fillStyle = f > 0.6 ? "#6fa85a" : f > 0.3 ? "#c39544" : "#b25446"; // muted green/amber/red
-    const pad = 2;
-    cx.fillRect(pad, pad, Math.max(0, (W - pad * 2) * f), H - pad * 2); // fill
+    cx.clearRect(0, 0, W, H);
+    if (f > 0) { // coloured HP fill (rounded) — nothing behind it. Saturated so green/amber/
+      cx.fillStyle = f > 0.6 ? "#57ad38" : f > 0.3 ? "#e0a02f" : "#d23a29"; // red read at a glance
+      rr(pad, pad, Math.max(H - pad * 2, (W - pad * 2) * f), H - pad * 2, rad); cx.fill();
+    }
+    cx.lineWidth = 2.5; cx.strokeStyle = "rgba(0,0,0,0.78)"; // self-outline over the FULL extent
+    rr(pad, pad, W - pad * 2, H - pad * 2, rad); cx.stroke();
+    cx.lineWidth = 1; cx.strokeStyle = "rgba(255,255,255,0.16)"; // faint inner highlight (fill dominates)
+    rr(pad + 1.2, pad + 1.2, W - pad * 2 - 2.4, H - pad * 2 - 2.4, rad - 1); cx.stroke();
     const tex = new THREE.CanvasTexture(cv); tex.needsUpdate = true;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.8, depthWrite: false, depthTest: false });
+    // sizeAttenuation:false → CONSTANT on-screen size at every zoom (no distance scaling).
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, sizeAttenuation: false });
     hpBarMatCache[bucket] = mat;
     return mat;
   }
   function makeHpBar(frac: number, width: number): THREE.Sprite {
     const spr = new THREE.Sprite(hpBarMaterial(frac));
-    spr.scale.set(width, width * (12 / 64), 1);
+    spr.scale.set(width, width * (18 / 96), 1); // width is a SCREEN fraction (sizeAttenuation off)
     spr.renderOrder = 997;
     return spr;
+  }
+  // §3 shared HUD glyph: a billboarded icon/label at CONSTANT on-screen size. No dark chip
+  // or plate behind it — glyphTexture already draws a soft halo for legibility over terrain.
+  function hudGlyph(text: string, sizeFrac: number): THREE.Sprite {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(text), transparent: true, depthWrite: false, depthTest: false, sizeAttenuation: false }));
+    s.center.set(0.5, 0); s.scale.set(sizeFrac, sizeFrac, 1); s.renderOrder = 999;
+    return s;
   }
 
   // Movement gliding that survives back-to-back re-renders. render() often runs
@@ -2254,30 +2276,33 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         gfig.position.set(SIZE * 0.34, top + 0.01, SIZE * 0.5);
         holder.add(gfig);
         if (sv.garrison > 1) {
-          const gb = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture("×" + sv.garrison), transparent: true, depthWrite: false, depthTest: false }));
-          gb.center.set(0.5, 0); gb.scale.set(0.5, 0.5, 0.5); gb.position.set(SIZE * 0.34, top + 0.62, SIZE * 0.5); gb.renderOrder = 999;
+          const gb = hudGlyph("×" + sv.garrison, 0.05);
+          gb.position.set(SIZE * 0.34, top + 0.62, SIZE * 0.5);
           holder.add(gb);
         }
       }
 
+      // §3 UNIT/CITY OVERLAY (rebuilt): one shared, billboarded, constant-on-screen-size
+      // set of markers — the entity's ICON and, only when it matters, a slim HP BAR. No
+      // dark backing plates anywhere; both units and cities use the SAME components.
       if (sv.badge) {
-        const b = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(sv.badge), transparent: true, depthWrite: false, depthTest: false }));
-        b.center.set(0.5, 0); b.scale.set(0.42, 0.42, 0.42); b.position.set(ox, top + (isCity ? 1.5 : 1.05), oz); b.renderOrder = 999;
+        const b = hudGlyph(sv.badge, isCity ? 0.072 : 0.062);
+        b.position.set(ox, top + (isCity ? 1.5 : 1.05), oz);
         holder.add(b);
       }
 
-      // Health bar over every unit and city (sits over each unit in a stack). Gate 4:
-      // ~60% smaller so it reads as a marker, not a billboard.
-      if (sv.hpFrac != null) {
-        const bar = makeHpBar(sv.hpFrac, isCity ? 0.62 : 0.4);
+      // Health bar is HIDDEN AT FULL HP — it appears only on damage, so an untouched army
+      // carries no banner. Same slim, plate-free bar for units and cities.
+      if (sv.hpFrac != null && sv.hpFrac < 0.999) {
+        const bar = makeHpBar(sv.hpFrac, isCity ? 0.13 : 0.1);
         bar.position.set(ox, top + (isCity ? 1.28 : 0.86), oz);
         holder.add(bar);
       }
 
       // Army count over a stacked tile (once, on the first unit, at tile centre).
       if (stackN > 1 && (tileUnitOrd[sv.q + "," + sv.r] === 1)) {
-        const cb = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture("⚔" + stackN), transparent: true, depthWrite: false, depthTest: false }));
-        cb.center.set(0.5, 0); cb.scale.set(0.5, 0.5, 0.5); cb.position.set(0, top + 1.5, 0); cb.renderOrder = 999;
+        const cb = hudGlyph("⚔" + stackN, 0.056);
+        cb.position.set(0, top + 1.5, 0);
         holder.add(cb);
       }
 
