@@ -508,6 +508,34 @@ function squadPositions(n: number): Array<[number, number]> {
   }
   return out;
 }
+// A legion ASSEMBLES in ranks and files (wider than deep), not a milling square — front
+// rank toward -z, files closer than ranks so it reads as a battle line. The standard plants
+// at the rear centre (positive z). The whole group is then rotated to the unit's bearing.
+function formationPositions(n: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  const files = Math.max(1, Math.round(Math.sqrt(n * 1.7)));
+  const ranks = Math.ceil(n / files);
+  const sx = 0.155, sz = 0.2;
+  let i = 0;
+  for (let r = 0; r < ranks && i < n; r += 1) {
+    const inRank = Math.min(files, n - i);
+    for (let c = 0; c < inRank; c += 1) { out.push([(c - (inRank - 1) / 2) * sx, (r - (ranks - 1) / 2) * sz]); i += 1; }
+  }
+  return out;
+}
+function formationRanks(n: number): number { return Math.ceil(n / Math.max(1, Math.round(Math.sqrt(n * 1.7)))); }
+// The unit's standard (signum/vexillum): a shaft, a small banner in the civ colour, and a
+// gilt aquila cap on top — so a formation reads as "a legion", not just a clump of men.
+function buildStandard(color: string, h: number): THREE.Group {
+  const g = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, h, 6), new THREE.MeshStandardMaterial({ color: 0x5b4527, roughness: 0.85, metalness: 0 }));
+  shaft.position.y = h / 2; g.add(shaft);
+  const banner = new THREE.Mesh(new THREE.PlaneGeometry(h * 0.34, h * 0.28), new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0, side: THREE.DoubleSide, emissive: new THREE.Color(color), emissiveIntensity: 0.1 }));
+  banner.position.set(h * 0.18, h * 0.8, 0); g.add(banner);
+  const aquila = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), new THREE.MeshStandardMaterial({ color: 0xd8b45a, roughness: 0.3, metalness: 0.6 }));
+  aquila.position.y = h + 0.01; g.add(aquila);
+  return g;
+}
 // A unit is drawn as a SQUAD of small figures — the count shows its strength, so
 // a wounded unit fields fewer and a healed one more. Big single things (elephant,
 // siege, ship) stay as one, scaled a touch by health.
@@ -2256,12 +2284,22 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
           const memberH = single ? 0.85 : form === "elephant" ? 0.6 : form === "mounted" ? 0.5 : 0.4;
           const count = single ? 1 : Math.max(1, Math.round(base * Math.max(0.05, Math.min(1, frac))));
           const grp = new THREE.Group();
-          const pos = squadPositions(count);
+          const pos = formationPositions(count);
           for (let i = 0; i < count; i += 1) {
             const f = glbInstance(glb, memberH, true);
-            if (!single) { f.position.set(pos[i][0], 0, pos[i][1]); f.rotation.y = (rnd(sv.q, sv.r, i) - 0.5) * 0.6; }
+            // ranks face ONE way now (tiny ±0.09 jitter for life, not the old ±0.3 milling).
+            if (!single) { f.position.set(pos[i][0], 0, pos[i][1]); f.rotation.y = (rnd(sv.q, sv.r, i) - 0.5) * 0.18; }
             grp.add(f);
           }
+          // A land formation of a few+ plants a standard at the rear-centre (in the civ colour).
+          if (!single && count >= 3 && form !== "elephant" && form !== "mounted" && form !== "civilian") {
+            const st = buildStandard(color, memberH * 2.0);
+            st.position.set(0, 0, ((formationRanks(count) - 1) / 2) * 0.2 + 0.14);
+            grp.add(st);
+          }
+          // The whole formation faces one way — a per-unit stable bearing (armies vary, but
+          // every man in a unit is aligned). Ranks end up perpendicular to the facing.
+          if (!single) grp.rotation.y = rnd(sv.q, sv.r, 41) * Math.PI * 2;
           model = grp; scale = 1;
         } else { model = buildUnit(form, color, frac, sv.q, sv.r, sv.civ, sv.utype); scale = 1.35; }
       }
