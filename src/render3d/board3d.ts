@@ -287,6 +287,10 @@ function attackRingTexture(): THREE.Texture {
 const reachHexGeo = new THREE.CircleGeometry(0.95, 6);
 reachHexGeo.rotateX(-Math.PI / 2);
 reachHexGeo.rotateY(Math.PI / 6);
+// Full-tile pointy-top hex for the great-river water overlay (tessellates with its neighbours).
+const greatRiverHexGeo = new THREE.CircleGeometry(1.0, 6);
+greatRiverHexGeo.rotateX(-Math.PI / 2);
+greatRiverHexGeo.rotateY(Math.PI / 6);
 
 // ---- Procedural low-poly models (placeholders until real glTF art arrives) ----
 // Shared geometries (created once) — meshes are cheap, geometries/materials reused.
@@ -2058,6 +2062,18 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     // left the world ending at a hard square edge with a dark void beyond.
     if (seaMesh) { seaMesh.visible = true; seaMesh.position.y = SEA_TOP - 0.02; }
 
+    // Great-river overlay: a green flowing hex on each navigable river tile (the Nile etc.),
+    // sitting just above the generic water surface so those tiles read as a moving river.
+    while (greatRiverGroup.children.length) { const m = greatRiverGroup.children[0]; greatRiverGroup.remove(m); }
+    for (const tv of view.tiles) {
+      if (tv.t !== "great-river" || tv.v === 0) continue; // skip fogged tiles (no water-through-fog leak)
+      const c = axialToWorld(tv.q, tv.r);
+      const hex = new THREE.Mesh(greatRiverHexGeo, greatRiverMat);
+      hex.position.set(c.x, SEA_TOP + 0.012, c.z); // just above the §2 water surface
+      hex.renderOrder = 2;
+      greatRiverGroup.add(hex);
+    }
+
     // §6 climate-aware scatter, instanced on the displaced surface (replaces the old
     // procedural scatter we hid above). Rebuilt via the loop's dirty flag so it always
     // dresses around the CURRENT camera focus (one build path, distance-culled).
@@ -2495,6 +2511,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // shallow channel (below bank level), with downstream flow scrolling. No segments, no gaps.
   const riverGroup = new THREE.Group();
   scene.add(riverGroup);
+  // Great rivers (navigable TILES — the Nile/Euphrates): a distinct GREEN, flowing surface laid
+  // over the generic blue water so they read as majestic moving rivers, not more sea.
+  const greatRiverGroup = new THREE.Group();
+  scene.add(greatRiverGroup);
+  const greatRiverNormal = makeNoiseNormalMap(128, [[3, 1], [7, 0.5], [13, 0.3]], 1.3);
+  greatRiverNormal.wrapS = greatRiverNormal.wrapT = THREE.RepeatWrapping;
+  greatRiverNormal.repeat.set(1.4, 1.4);
+  const greatRiverMat = new THREE.MeshStandardMaterial({
+    color: 0x2f7d78, roughness: 0.18, metalness: 0.05, transparent: true, opacity: 0.82,
+    normalMap: greatRiverNormal, emissive: 0x0c3330, emissiveIntensity: 0.18, depthWrite: false
+  });
   const riverFlowNormal = makeNoiseNormalMap(128, [[4, 1], [9, 0.5], [16, 0.3]], 1.5);
   riverFlowNormal.wrapS = riverFlowNormal.wrapT = THREE.RepeatWrapping;
   riverFlowNormal.repeat.set(1.1, 1); // ripple bands ALONG the course (u = world arc-length)
@@ -2963,6 +2990,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     }
     riverFlowNormal.offset.x -= dt * 0.4; // §8: water visibly flows downstream (scroll along the course)
     riverFoamTex.offset.x -= dt * 0.28;   // §8: bank foam drifts downstream slightly slower than the surface
+    greatRiverNormal.offset.x -= dt * 0.14; greatRiverNormal.offset.y -= dt * 0.05; // great rivers visibly flow
     if (selRing.visible) { const m = (selRing.material as THREE.MeshBasicMaterial).map; if (m) m.rotation += dt * 0.5; } // R2.5: slow laurel spin
     if (attackGroup.children.length) { // R2.6: throb the attackable rings
       const pulse = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(hlTime * 4.5));

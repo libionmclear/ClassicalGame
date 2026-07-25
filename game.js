@@ -6063,6 +6063,14 @@
       render();
       return us.map(function (u) { return { id: u.id, q: u.position.q, r: u.position.r }; });
     },
+    // Start an authored scenario by id (e.g. "oldworld-epic") — used to reach a map that has
+    // navigable great-river TILES (the Nile etc.), which random maps omit by default.
+    startScenario: function (id) {
+      if (!isScenario(id)) return { ok: false, ids: Object.keys(SCENARIOS) };
+      if (mapSizeSelectEl) mapSizeSelectEl.value = id;
+      newGame(false);
+      return { ok: true, id: id };
+    },
     // Locate the river system (for framing the §8 river capture): edge count + the centroid
     // tile of all river edges + one endpoint, so a capture can follow a course source-to-mouth.
     riverSample: function () {
