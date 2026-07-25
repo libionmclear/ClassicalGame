@@ -1330,14 +1330,26 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const propModels = new Map<string, { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] }>();
   let propsTried = false;
   // Target heights so a stone pine reads tall and a wildflower low (world units).
+  // §2 WORLD SCALE — the scale hierarchy as config, anchored on the SOLDIER (an infantry
+  // figure is ~0.40 units tall; a city house is the reference object, soldiers ~house-height).
+  // Category bands (target world height, applied at import normalization):
+  //   TREES   1.5-2.5x soldier = 0.60-1.00 (cypress/palm tall-thin, olive low/gnarled)
+  //   SCRUB/GRASS  below soldier = 0.12-0.35
+  //   BOULDERS (common)  knee-to-shoulder = 0.18-0.26  (a rare ~soldier-height landmark comes
+  //            from the placement scale variance) — EXEMPT on mountains (boosted at scatter).
+  // Before this pass trees (0.85-1.1) and boulders (~0.34-0.5, i.e. ~soldier height) DWARFED
+  // the cities; the ensemble now reads as one coherent miniature world.
   const PROP_H: Record<string, number> = {
-    "scatter/olive": 0.85, "scatter/cypress": 1.1, "scatter/stone-pine": 1.0, "scatter/oak": 0.95,
-    "scatter/beech": 0.95, "scatter/birch": 1.0, "scatter/fir": 1.05, "scatter/date-palm": 1.0,
-    "scatter/dry-grass": 0.26, "scatter/wildflowers": 0.24, "scatter/heather-gorse": 0.3,
-    "scatter/desert-scrub": 0.34, "scatter/reeds": 0.5, "scatter/papyrus": 0.7, "scatter/fallen-trunk": 0.3,
-    "scatter/driftwood": 0.28, "scatter/rock-cluster": 0.34, "scatter/limestone-boulder": 0.4,
-    "scatter/mossy-boulder": 0.42, "scatter/rock-shard": 0.5
+    "scatter/olive": 0.68, "scatter/cypress": 0.98, "scatter/stone-pine": 0.85, "scatter/oak": 0.78,
+    "scatter/beech": 0.78, "scatter/birch": 0.8, "scatter/fir": 0.9, "scatter/date-palm": 0.9,
+    "scatter/dry-grass": 0.16, "scatter/wildflowers": 0.14, "scatter/heather-gorse": 0.2,
+    "scatter/desert-scrub": 0.2, "scatter/reeds": 0.32, "scatter/papyrus": 0.55, "scatter/fallen-trunk": 0.22,
+    "scatter/driftwood": 0.2, "scatter/rock-cluster": 0.2, "scatter/limestone-boulder": 0.24,
+    "scatter/mossy-boulder": 0.24, "scatter/rock-shard": 0.26
   };
+  // §2 exemption: mountain rock shards / cliff-scale props stay MASSIVE (mountains dwarf all).
+  const MOUNTAIN_ROCK_SCALE = 2.6;
+  const isRockProp = (key: string): boolean => /rock|boulder|shard/.test(key);
   // Gate 2 material tints (multiply the baked map). The Meshy olive bakes a near-white
   // canopy; pull it to the silver-green of the approved 2D olive.
   // R2.3: the approved foliage GLBs bake a saturated candy-green canopy. Clamp EVERY
@@ -1433,10 +1445,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       if (isBeach(tv.q, tv.r)) dens *= 0.2;             // sandy beach band stays mostly open
       const places = pickScatter(tv.t, tv.q, tv.r, climateOf((tv as { region?: string }).region), dens, riverTiles.has(tv.q + "," + tv.r));
       if (!places.length) continue;
+      const mtnRock = tv.t === "mountains" ? MOUNTAIN_ROCK_SCALE : 1; // §2 exemption
       for (const p of places) {
         if (total >= HARD_CAP) break;
         let arr = byKey.get(p.key); if (!arr) { arr = []; byKey.set(p.key, arr); }
-        arr.push({ x: c.x + p.dx, z: c.z + p.dz, yaw: p.yaw, scale: p.scale }); total += 1;
+        const sc = isRockProp(p.key) ? p.scale * mtnRock : p.scale;
+        arr.push({ x: c.x + p.dx, z: c.z + p.dz, yaw: p.yaw, scale: sc }); total += 1;
       }
     }
     for (const [key, places] of byKey) {
