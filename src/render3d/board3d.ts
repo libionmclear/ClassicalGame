@@ -1410,7 +1410,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     "scatter/stone-pine": 0x55763a,
     "scatter/cypress": 0x4f7038,
     "scatter/fir": 0x53743a,
-    "scatter/date-palm": 0x82934c
+    "scatter/date-palm": 0x82934c,
+    // Dark-tree bug (Round D): these green wetland plants were NOT tinted, so the white-tree
+    // emissive-kill above stripped their green and left a near-black albedo (the dark "tree"
+    // beside rivers). Tint them green like the canopies so no foliage renders black.
+    "scatter/papyrus": 0x869a4e,
+    "scatter/reeds": 0x6f8a48
   };
   function normalizeProp(scene0: THREE.Object3D, key: string): { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] } | null {
     return normalizeGLB(scene0, PROP_H[key] ?? 0.4);
