@@ -291,6 +291,11 @@ reachHexGeo.rotateY(Math.PI / 6);
 const greatRiverHexGeo = new THREE.CircleGeometry(1.0, 6);
 greatRiverHexGeo.rotateX(-Math.PI / 2);
 greatRiverHexGeo.rotateY(Math.PI / 6);
+// §7b city cohesion: a hexagonal paved rim (kerb) that frames a settlement's hex — dresses the
+// platform edge so the city doesn't cut hard into the terrain. Sits just outside the model footprint.
+const cityApronGeo = new THREE.RingGeometry(0.76, 1.0, 6, 1);
+cityApronGeo.rotateX(-Math.PI / 2);
+cityApronGeo.rotateY(Math.PI / 6);
 
 // ---- Procedural low-poly models (placeholders until real glTF art arrives) ----
 // Shared geometries (created once) — meshes are cheap, geometries/materials reused.
@@ -2326,6 +2331,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       model.position.set(ox, top + (isCity ? 0.02 : 0.01), oz);
       holder.add(model);
 
+      // §7b cohesion: frame a settlement with a paved stone rim (kerb) so its hex edge reads as
+      // a laid urban boundary, not a hard cut into the grass.
+      if (isCity) {
+        const apron = new THREE.Mesh(cityApronGeo, cityApronMat);
+        apron.position.set(ox, top + 0.016, oz);
+        apron.renderOrder = 1;
+        holder.add(apron);
+      }
+
       const shadow = new THREE.Mesh(shadowGeo, shadowMat);
       shadow.rotation.x = -Math.PI / 2;
       shadow.position.set(ox, top + 0.02, oz);
@@ -2522,6 +2536,19 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     color: 0x2f7d78, roughness: 0.18, metalness: 0.05, transparent: true, opacity: 0.82,
     normalMap: greatRiverNormal, emissive: 0x0c3330, emissiveIntensity: 0.18, depthWrite: false
   });
+  // §7b city apron: a warm limestone paving band with grout lines + darker kerb edges, tiled
+  // around the ring so the rim reads as laid stone framing the settlement.
+  const cityApronTex = (() => {
+    const W = 64, H = 16, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const cx = cv.getContext("2d")!;
+    cx.fillStyle = "#dccdaa"; cx.fillRect(0, 0, W, H);                         // pale limestone paving
+    for (let x = 0; x < W; x += 8) { cx.fillStyle = "rgba(120,98,66,0.7)"; cx.fillRect(x, 0, 1.6, H); } // grout between flagstones
+    for (let x = 4; x < W; x += 8) { cx.fillStyle = "rgba(255,252,242,0.35)"; cx.fillRect(x, 3, 3, H - 6); } // stone highlight
+    cx.fillStyle = "rgba(86,68,44,0.65)"; cx.fillRect(0, 0, W, 2.4); cx.fillRect(0, H - 2.4, W, 2.4);   // darker inner/outer kerb
+    const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(22, 1); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const cityApronMat = new THREE.MeshStandardMaterial({ map: cityApronTex, roughness: 0.92, metalness: 0, color: 0xffffff });
   const riverFlowNormal = makeNoiseNormalMap(128, [[4, 1], [9, 0.5], [16, 0.3]], 1.5);
   riverFlowNormal.wrapS = riverFlowNormal.wrapT = THREE.RepeatWrapping;
   riverFlowNormal.repeat.set(1.1, 1); // ripple bands ALONG the course (u = world arc-length)
