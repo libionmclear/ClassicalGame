@@ -2363,9 +2363,13 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       // §3 UNIT/CITY OVERLAY (rebuilt): one shared, billboarded, constant-on-screen-size
       // set of markers — the entity's ICON and, only when it matters, a slim HP BAR. No
       // dark backing plates anywhere; both units and cities use the SAME components.
+      // B1.4: HUG the entity. A unit's badge floated +1.05 above the tile — for the many
+      // unit types with no GLB (procedural fallback is short) that projects to a big screen
+      // gap when zoomed in, reading as an icon DETACHED over empty ground. Seat unit markers
+      // just above the figures (~0.6); cities keep a higher offset (their models are tall).
       if (sv.badge) {
         const b = hudGlyph(sv.badge, isCity ? 0.072 : 0.062);
-        b.position.set(ox, top + (isCity ? 1.5 : 1.05), oz);
+        b.position.set(ox, top + (isCity ? 1.4 : 0.62), oz);
         holder.add(b);
       }
 
@@ -2373,14 +2377,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       // carries no banner. Same slim, plate-free bar for units and cities.
       if (sv.hpFrac != null && sv.hpFrac < 0.999) {
         const bar = makeHpBar(sv.hpFrac, isCity ? 0.13 : 0.1);
-        bar.position.set(ox, top + (isCity ? 1.28 : 0.86), oz);
+        bar.position.set(ox, top + (isCity ? 1.2 : 0.5), oz);
         holder.add(bar);
       }
 
       // Army count over a stacked tile (once, on the first unit, at tile centre).
       if (stackN > 1 && (tileUnitOrd[sv.q + "," + sv.r] === 1)) {
         const cb = hudGlyph("⚔" + stackN, 0.056);
-        cb.position.set(0, top + 1.5, 0);
+        cb.position.set(0, top + 0.9, 0);
         holder.add(cb);
       }
 
