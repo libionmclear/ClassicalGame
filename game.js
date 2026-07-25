@@ -6063,6 +6063,21 @@
       render();
       return us.map(function (u) { return { id: u.id, q: u.position.q, r: u.position.r }; });
     },
+    // Locate the river system (for framing the §8 river capture): edge count + the centroid
+    // tile of all river edges + one endpoint, so a capture can follow a course source-to-mouth.
+    riverSample: function () {
+      if (!state || !state.map.rivers) return null;
+      var eds = [];
+      for (var rk in state.map.rivers) {
+        if (!state.map.rivers[rk]) continue;
+        var parts = rk.split("|"); if (parts.length !== 2) continue;
+        var a = parts[0].split(",").map(Number), b = parts[1].split(",").map(Number);
+        eds.push({ q: a[0], r: a[1], nq: b[0], nr: b[1] });
+      }
+      if (!eds.length) return null;
+      var sx = 0, sy = 0; eds.forEach(function (e) { sx += (e.q + e.nq) / 2; sy += (e.r + e.nr) / 2; });
+      return { count: eds.length, mid: { q: Math.round(sx / eds.length), r: Math.round(sy / eds.length) }, first: { q: eds[0].q, r: eds[0].r } };
+    },
     // Wound the human's units to a fraction of max HP — exercises the §3 HP-bar overlay
     // (the bar is hidden at full HP and appears only on damage). Pass q,r to wound just
     // the unit on one tile, leaving the rest full so "hidden at full HP" is visible too.

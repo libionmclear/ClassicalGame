@@ -2449,11 +2449,39 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   scene.add(riverGroup);
   const riverFlowNormal = makeNoiseNormalMap(128, [[4, 1], [9, 0.5], [16, 0.3]], 1.5);
   riverFlowNormal.wrapS = riverFlowNormal.wrapT = THREE.RepeatWrapping;
-  riverFlowNormal.repeat.set(14, 1); // ripple bands ALONG the course (u = along the tube)
+  riverFlowNormal.repeat.set(1.1, 1); // ripple bands ALONG the course (u = world arc-length)
   const riverFlowMat = new THREE.MeshStandardMaterial({
     color: 0x3f6f86, roughness: 0.2, metalness: 0.06, transparent: true, opacity: 0.92,
-    normalMap: riverFlowNormal, emissive: 0x0a2942, emissiveIntensity: 0.22
+    normalMap: riverFlowNormal, emissive: 0x0a2942, emissiveIntensity: 0.22, side: THREE.DoubleSide,
+    depthWrite: false
   });
+  // §4 (WATER-SPEC §8): a flowing tapered RIBBON, not a faceted tube. Bank foam + wet-earth
+  // margin dress the course; a scrolling foam strip that concentrates at the two banks (v→0/1)
+  // and breaks into streaks along u sells motion without a solid white line.
+  function makeFoamStripTex(): THREE.Texture {
+    const W = 128, H = 32, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const cx = cv.getContext("2d")!; cx.clearRect(0, 0, W, H);
+    for (const yb of [0, H - 2]) {
+      for (let x = 0; x < W; x += 1) {
+        const s = 0.5 + 0.5 * Math.sin(x * 0.19 + yb) + 0.3 * Math.sin(x * 0.53 + yb * 2);
+        const a = Math.max(0, Math.min(1, (s - 0.72) * 2.0)); // sparser, delicate streaks (not a solid edge)
+        cx.fillStyle = "rgba(255,255,255," + (a * 0.7).toFixed(3) + ")"; cx.fillRect(x, yb, 1, 2);
+      }
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+  const riverFoamTex = makeFoamStripTex();
+  riverFoamTex.wrapS = riverFoamTex.wrapT = THREE.RepeatWrapping; riverFoamTex.repeat.set(1.4, 1);
+  const riverFoamMat = new THREE.MeshBasicMaterial({ color: 0xeff7f8, alphaMap: riverFoamTex, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
+  const riverBankMat = new THREE.MeshStandardMaterial({ color: 0x51402c, roughness: 1, metalness: 0, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }); // moist-earth strip (§8.7)
+  // Soft round foam burst for rapids (§8.5) — a radial white splash at steep drops.
+  const riverFoamDotTex = (() => {
+    const S = 48, cv = document.createElement("canvas"); cv.width = cv.height = S;
+    const cx = cv.getContext("2d")!; const g = cx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    g.addColorStop(0, "rgba(255,255,255,0.95)"); g.addColorStop(0.5, "rgba(240,250,252,0.4)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    cx.fillStyle = g; cx.fillRect(0, 0, S, S); return new THREE.CanvasTexture(cv);
+  })();
+  const riverFoamDotMat = new THREE.MeshBasicMaterial({ map: riverFoamDotTex, transparent: true, opacity: 0.5, depthWrite: false });
   // Trace the river edge-set into continuous polylines (each edge consumed once; tributaries
   // meet at a shared junction so they read as one system). Leaves (sources/mouths) start first.
   function chainRivers(edges: EdgeView[] | undefined): Array<Array<{ q: number; r: number }>> {
@@ -2482,23 +2510,77 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     }
     return chains;
   }
+  // Flat TAPERED ribbon following centreline `pts` (world, y ~terrain height). halfW(i) gives
+  // the half-width at sample i; yEps lifts it a hair over the ground. uv u = arc-length (world
+  // units, drives flow/foam scroll + tiling), v = 0..1 across the channel.
+  function ribbonGeo(pts: THREE.Vector3[], halfW: (i: number) => number, yEps: number): THREE.BufferGeometry {
+    const n = pts.length;
+    const position = new Float32Array(n * 2 * 3), uv = new Float32Array(n * 2 * 2);
+    const idx: number[] = []; let arc = 0;
+    for (let i = 0; i < n; i += 1) {
+      const p = pts[Math.max(0, i - 1)], q = pts[Math.min(n - 1, i + 1)];
+      let tx = q.x - p.x, tz = q.z - p.z; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+      const nx = -tz, nz = tx; // perpendicular in the XZ plane
+      if (i > 0) arc += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+      const hw = halfW(i), cy = pts[i].y + yEps, li = i * 6, ri = li + 3;
+      position[li] = pts[i].x + nx * hw; position[li + 1] = cy; position[li + 2] = pts[i].z + nz * hw;
+      position[ri] = pts[i].x - nx * hw; position[ri + 1] = cy; position[ri + 2] = pts[i].z - nz * hw;
+      const ui = i * 4; uv[ui] = arc; uv[ui + 1] = 1; uv[ui + 2] = arc; uv[ui + 3] = 0;
+    }
+    for (let i = 0; i < n - 1; i += 1) { const a = i * 2, b = a + 1, c = a + 2, d = a + 3; idx.push(a, c, b, b, c, d); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(position, 3));
+    g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  }
   function buildRiverMesh(view: BoardView, hAt: (q: number, r: number) => number): void {
     while (riverGroup.children.length) { const m = riverGroup.children[0] as THREE.Mesh; riverGroup.remove(m); m.geometry.dispose(); }
     const cityTiles = new Set(view.sprites.filter((s) => s.kind === "city").map((s) => s.q + "," + s.r));
     for (const chain of chainRivers(view.rivers)) {
-      const pts: THREE.Vector3[] = [];
+      const raw: THREE.Vector3[] = [];
       for (const c of chain) {
         if (cityTiles.has(c.q + "," + c.r)) continue; // route around/under the city platform
         const w = axialToWorld(c.q, c.r);
-        pts.push(new THREE.Vector3(w.x, hAt(c.q, c.r) - 0.05, w.z)); // sunk below the bank
+        raw.push(new THREE.Vector3(w.x, hAt(c.q, c.r), w.z));
       }
-      if (pts.length < 2) continue;
-      const curve = new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5);
-      const tub = Math.max(10, (pts.length - 1) * 8);
-      const geo = new THREE.TubeGeometry(curve, tub, 0.15, 6, false);
-      const mesh = new THREE.Mesh(geo, riverFlowMat);
-      mesh.renderOrder = 1;
-      riverGroup.add(mesh);
+      if (raw.length < 2) continue;
+      const curve = new THREE.CatmullRomCurve3(raw, false, "catmullrom", 0.5);
+      const N = Math.max(24, (raw.length - 1) * 10);
+      const pts = curve.getSpacedPoints(N); // evenly-spaced samples, y follows terrain
+      const m = pts.length - 1;
+      // Taper (§8.4): rivers run DOWNHILL, so the lower end is the mouth. Width grows 0→1 source→mouth.
+      const mouthAtEnd = pts[m].y <= pts[0].y;
+      const halfW = (i: number): number => {
+        const t = i / m, d = mouthAtEnd ? t : 1 - t;   // 0 at source → 1 at mouth
+        const w = 0.05 + 0.12 * d;                      // narrow spring → broad mouth
+        const fan = Math.max(0, (d - 0.88) / 0.12);     // mouth fan widening (§8.6), capped
+        return w + fan * fan * 0.13;
+      };
+      // Layered by height: wet-earth bank (widest, lowest) → water → bank foam (top).
+      const earth = new THREE.Mesh(ribbonGeo(pts, (i) => halfW(i) * 1.7 + 0.05, 0.02), riverBankMat); earth.renderOrder = 1;
+      const water = new THREE.Mesh(ribbonGeo(pts, (i) => halfW(i), 0.05), riverFlowMat); water.renderOrder = 2;
+      const foam = new THREE.Mesh(ribbonGeo(pts, (i) => halfW(i) * 1.06, 0.062), riverFoamMat); foam.renderOrder = 3;
+      riverGroup.add(earth, water, foam);
+      // Rapids (§8.5): a small foam burst at a genuine elevation STEP — a steep drop that is
+      // also spaced from the last one, so rapids are occasional accents, not a pearl-string
+      // down every steadily-descending reach.
+      let lastRapidArc = -99, arcAcc = 0;
+      for (let i = 1; i <= m; i += 1) {
+        const ds = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z) || 1;
+        arcAcc += ds;
+        if ((pts[i - 1].y - pts[i].y) / ds > 0.24 && arcAcc - lastRapidArc > 1.6) {
+          lastRapidArc = arcAcc;
+          const s = halfW(i) * 1.6, dot = new THREE.Mesh(new THREE.PlaneGeometry(s, s), riverFoamDotMat);
+          dot.rotation.x = -Math.PI / 2; dot.position.set(pts[i].x, pts[i].y + 0.07, pts[i].z); dot.renderOrder = 4;
+          riverGroup.add(dot);
+        }
+      }
+      // Mouth fan foam bar (§8.6): a soft splash across the widened mouth where it meets the sea.
+      const mi = mouthAtEnd ? m : 0, s = halfW(mi);
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(s * 1.7, s * 1.1), riverFoamDotMat);
+      bar.rotation.x = -Math.PI / 2; bar.position.set(pts[mi].x, pts[mi].y + 0.07, pts[mi].z); bar.renderOrder = 4;
+      riverGroup.add(bar);
     }
   }
 
@@ -2826,6 +2908,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       skyMat.uniforms.topColor.value.lerp(new THREE.Color(0xe6ecf2), boost);
     }
     riverFlowNormal.offset.x -= dt * 0.4; // §8: water visibly flows downstream (scroll along the course)
+    riverFoamTex.offset.x -= dt * 0.28;   // §8: bank foam drifts downstream slightly slower than the surface
     if (selRing.visible) { const m = (selRing.material as THREE.MeshBasicMaterial).map; if (m) m.rotation += dt * 0.5; } // R2.5: slow laurel spin
     if (attackGroup.children.length) { // R2.6: throb the attackable rings
       const pulse = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(hlTime * 4.5));
