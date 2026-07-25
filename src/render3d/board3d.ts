@@ -39,16 +39,20 @@ function cityStyleFor(civ?: string): string {
   return (civ && alias[civ]) || civ || "rome";
 }
 
+// Legibility (terrain-legibility blocker): a DISTINCT palette so every land type reads apart
+// at a glance — three separate greens (yellow-grass / lush-valley / dark-forest) and three
+// separate uplands (ochre hills / olive-grey highlands / cool-grey mountains), not one wash.
+// Kept naturalistic; the per-hex value jitter below adds texture. Legend chips mirror these.
 const TERRAIN_COLOR: Record<string, number> = {
-  plains: 0x7c8a4f,
-  valley: 0x8aa354,
-  forest: 0x33553a,
-  hills: 0x86744f,
-  highlands: 0x7d7258,
-  mountains: 0x746a5b,
-  desert: 0xc6a86a,
-  coast: 0x3f7f9c,
-  sea: 0x2f5177
+  plains: 0x9aa84e,     // warm yellow-grass
+  valley: 0x5f9640,     // lush saturated green (fertile lowland)
+  forest: 0x2d5030,     // deep forest green
+  hills: 0xa87c40,      // warm ochre-brown (clearly brown, not green)
+  highlands: 0x87896a,  // muted olive-grey upland
+  mountains: 0x6c675e,  // cool grey stone
+  desert: 0xd8bd78,     // bright warm sand
+  coast: 0x46a0c4,      // bright shallow cyan
+  sea: 0x2a4a72         // deep blue
 };
 // Five terraced elevation levels (~0.2 apart) so the land reads as an even staircase
 // you can climb to a peak: L1 plains → L2 forest → L3 hills → L4 highlands → L5

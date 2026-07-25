@@ -272,15 +272,19 @@
     coast: "〰️",
     sea: "🌊"
   };
+  // Mirror the board's DISTINCT terrain palette (board3d TERRAIN_COLOR) so the legend chips
+  // read as clearly different — three greens, three uplands, sand, two blues — not five near-
+  // identical olives. Keep these in sync with TERRAIN_COLOR.
   const TERRAIN_SWATCH = {
-    plains: "#6f7d47",
-    valley: "#7d9749",
-    forest: "#33553a",
-    hills: "#7a6a4a",
-    highlands: "#726650",
-    desert: "#b79860",
-    coast: "#3f7387",
-    sea: "#2f4f77"
+    plains: "#9aa84e",
+    valley: "#5f9640",
+    forest: "#2d5030",
+    hills: "#a87c40",
+    highlands: "#87896a",
+    mountains: "#6c675e",
+    desert: "#d8bd78",
+    coast: "#46a0c4",
+    sea: "#2a4a72"
   };
   const WEATHER_INFO = {
     clear: { icon: "☀️", label: "clear" },
