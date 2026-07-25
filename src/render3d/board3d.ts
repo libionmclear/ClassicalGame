@@ -2421,8 +2421,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     strikes.push({ objs: [ring, core], mats: [ringMat, coreMat], t: 0, dur: 0.5 });
   }
 
-  const borderGeo = new THREE.BoxGeometry(SIZE * 1.06, 0.035, 0.055); // §4: a THIN ribbon (~40% of the old 0.14 tube), laid flat and hugging the terrain
-  const borderMat = new THREE.MeshBasicMaterial();
+  const borderGeo = new THREE.BoxGeometry(SIZE * 1.12, 0.035, 0.055); // §4: a THIN ribbon (~40% of the old 0.14 tube), laid flat; 1.12 (was 1.06) overlaps neighbours at the vertices so the loop reads continuous
+  // depthTest:false — the relief terrain is CACHED and rises above the ribbon on any slope,
+  // which was CLIPPING segments into disconnected dashes. Draw the border as a ground decal
+  // that is never occluded by the terrain (same rule as the selection/reachable decals).
+  const borderMat = new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, transparent: true });
   let borderMesh: THREE.InstancedMesh | null = null;
   function drawBorders(view: BoardView): void {
     if (borderMesh) {
@@ -2456,6 +2459,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.renderOrder = 2; // draw over terrain/water (paired with depthTest:false) so no segment is clipped
     borderGroup.add(mesh);
     borderMesh = mesh;
   }
