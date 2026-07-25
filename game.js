@@ -2550,6 +2550,14 @@
     if (window.__forceWeather) skyWx = window.__forceWeather; // dev: pin the sky for grade screenshots
     updateSoundscape(skyWx, tiles);
     const view = { tiles: tiles, sprites: sprites, borders: borders, districts: districts, civColors: CIV_COLORS, rivers: rivers, roads: roads, weather: skyWx, turn: state.turn };
+    // Turn-1 readability (B1.3): pulse a beacon on the human capital so the player can FIND
+    // their small, low-contrast starting city — the "click your city" moment. Clears the
+    // instant a city is selected (they've found it) and after the opening turn.
+    if (state.turn <= 1 && !selectedCityId) {
+      const hc = Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID && c.isCapital) ||
+        Object.values(state.map.cities).find((c) => c.ownerId === HUMAN_ID);
+      if (hc) view.beacon = { q: hc.position.q, r: hc.position.r, color: CIV_COLORS[HUMAN_ID] || "#e2c15a" };
+    }
     // R2.6: reachable hexes tint toward the selected unit's civ colour.
     if (selUnit) view.selColor = CIV_COLORS[selUnit.ownerId] || null;
     // §2c: the ordered hover path + per-step cost marks (chevron/ford/attrition) for decals.

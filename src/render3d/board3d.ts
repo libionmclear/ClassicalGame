@@ -121,6 +121,8 @@ export interface BoardView {
    *  of turns; night falls; weather dims on top). */
   turn?: number;
   weather?: string; // overall sky mood: clear | rain | storm | fog | heat
+  /** B1.3 turn-1 readability: a pulsing beacon on the human capital so the player can find it. */
+  beacon?: { q: number; r: number; color: string } | null;
 }
 
 export interface BoardController {
@@ -1573,6 +1575,35 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   selRing.visible = false;
   { const m = (selRing.material as THREE.MeshBasicMaterial).map; if (m) m.center.set(0.5, 0.5); }
   scene.add(selRing);
+
+  // B1.3 capital beacon: a soft pillar of light + an expanding ground ring so the player can
+  // FIND their small, low-contrast starting city on turn 1. Pulses in the frame loop; the view
+  // supplies the target (and clears it once a city is selected / after the opening turn).
+  const beaconGroup = new THREE.Group();
+  beaconGroup.visible = false;
+  scene.add(beaconGroup);
+  const beaconBeam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.1, 0.3, 3.4, 20, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xe2c15a, transparent: true, opacity: 0.26, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })
+  );
+  beaconBeam.position.y = 1.7;
+  beaconGroup.add(beaconBeam);
+  const beaconRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.66, 0.82, 40).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xe2c15a, transparent: true, opacity: 0.6, depthWrite: false, depthTest: false })
+  );
+  beaconRing.renderOrder = 5;
+  beaconGroup.add(beaconRing);
+  function updateBeacon(view: BoardView): void {
+    if (!view.beacon) { beaconGroup.visible = false; return; }
+    const b = view.beacon, w = axialToWorld(b.q, b.r);
+    const y = terrainHeightAt ? terrainHeightAt(w.x, w.z) : groundY("plains", w.x, w.z);
+    beaconGroup.position.set(w.x, y + 0.02, w.z);
+    const col = new THREE.Color(b.color);
+    (beaconBeam.material as THREE.MeshBasicMaterial).color.copy(col);
+    (beaconRing.material as THREE.MeshBasicMaterial).color.copy(col);
+    beaconGroup.visible = true;
+  }
   function updateSelRing(view: BoardView): void {
     // The selected unit/city tile is flagged h===3 by the client.
     let sel: TileView | undefined;
@@ -2549,10 +2580,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   const cityApronTex = (() => {
     const W = 64, H = 16, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
     const cx = cv.getContext("2d")!;
-    cx.fillStyle = "#dccdaa"; cx.fillRect(0, 0, W, H);                         // pale limestone paving
-    for (let x = 0; x < W; x += 8) { cx.fillStyle = "rgba(120,98,66,0.7)"; cx.fillRect(x, 0, 1.6, H); } // grout between flagstones
-    for (let x = 4; x < W; x += 8) { cx.fillStyle = "rgba(255,252,242,0.35)"; cx.fillRect(x, 3, 3, H - 6); } // stone highlight
-    cx.fillStyle = "rgba(86,68,44,0.65)"; cx.fillRect(0, 0, W, 2.4); cx.fillRect(0, H - 2.4, W, 2.4);   // darker inner/outer kerb
+    // B1.3(b): a DARKER warm-stone kerb (was pale limestone) so it frames the tan vicus with
+    // contrast — the city reads as a distinct paved place, not more tan ground.
+    cx.fillStyle = "#8a7038"; cx.fillRect(0, 0, W, H);                         // warm mid-stone paving
+    for (let x = 0; x < W; x += 8) { cx.fillStyle = "rgba(54,42,26,0.8)"; cx.fillRect(x, 0, 1.6, H); } // dark grout between flagstones
+    for (let x = 4; x < W; x += 8) { cx.fillStyle = "rgba(224,206,164,0.3)"; cx.fillRect(x, 3, 3, H - 6); } // stone highlight
+    cx.fillStyle = "rgba(40,30,18,0.7)"; cx.fillRect(0, 0, W, 2.4); cx.fillRect(0, H - 2.4, W, 2.4);   // dark inner/outer kerb
     const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(22, 1); t.colorSpace = THREE.SRGBColorSpace;
     return t;
   })();
@@ -3027,6 +3060,12 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     riverFoamTex.offset.x -= dt * 0.28;   // §8: bank foam drifts downstream slightly slower than the surface
     greatRiverNormal.offset.x -= dt * 0.14; greatRiverNormal.offset.y -= dt * 0.05; // great rivers visibly flow
     if (selRing.visible) { const m = (selRing.material as THREE.MeshBasicMaterial).map; if (m) m.rotation += dt * 0.5; } // R2.5: slow laurel spin
+    if (beaconGroup.visible) { // B1.3: expanding ground ring + a gently pulsing beam
+      const rp = (hlTime * 0.7) % 1, rs = 0.66 + rp * 2.4;
+      beaconRing.scale.set(rs, rs, 1);
+      (beaconRing.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - rp);
+      (beaconBeam.material as THREE.MeshBasicMaterial).opacity = 0.18 + 0.14 * (0.5 + 0.5 * Math.sin(hlTime * 3));
+    }
     if (attackGroup.children.length) { // R2.6: throb the attackable rings
       const pulse = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(hlTime * 4.5));
       for (const ring of attackGroup.children) { const r = ring as THREE.Mesh; if (r.visible) { (r.material as THREE.MeshBasicMaterial).opacity = pulse; const s = 1.5 + 0.12 * Math.sin(hlTime * 4.5); r.scale.set(s, s, 1); } }
@@ -3056,6 +3095,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       placeDistricts(view);
       placeMarkers(view);
       updateSelRing(view);
+      updateBeacon(view);
       updateAttackRings(view);
       updateReachHexes(view);
       updateHoverMarks(view);
