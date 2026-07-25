@@ -2680,12 +2680,17 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   function buildRiverMesh(view: BoardView, hAt: (q: number, r: number) => number): void {
     while (riverGroup.children.length) { const m = riverGroup.children[0] as THREE.Mesh; riverGroup.remove(m); m.geometry.dispose(); }
     const cityTiles = new Set(view.sprites.filter((s) => s.kind === "city").map((s) => s.q + "," + s.r));
+    const waterTiles = new Set(view.tiles.filter((t) => t.t === "sea" || t.t === "coast" || t.t === "great-river").map((t) => t.q + "," + t.r));
+    const NB6 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+    const atWater = (q: number, r: number): boolean => waterTiles.has(q + "," + r) || NB6.some(([dq, dr]) => waterTiles.has((q + dq) + "," + (r + dr)));
     for (const chain of chainRivers(view.rivers)) {
       const raw: THREE.Vector3[] = [];
+      const rawTiles: Array<{ q: number; r: number }> = [];
       for (const c of chain) {
         if (cityTiles.has(c.q + "," + c.r)) continue; // route around/under the city platform
         const w = axialToWorld(c.q, c.r);
         raw.push(new THREE.Vector3(w.x, hAt(c.q, c.r), w.z));
+        rawTiles.push({ q: c.q, r: c.r });
       }
       if (raw.length < 2) continue;
       const curve = new THREE.CatmullRomCurve3(raw, false, "catmullrom", 0.5);
@@ -2720,11 +2725,18 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
           riverGroup.add(dot);
         }
       }
-      // Mouth fan foam bar (§8.6): a soft splash across the widened mouth where it meets the sea.
-      const mi = mouthAtEnd ? m : 0, s = halfW(mi);
-      const bar = new THREE.Mesh(new THREE.PlaneGeometry(s * 1.7, s * 1.1), riverFoamDotMat);
-      bar.rotation.x = -Math.PI / 2; bar.position.set(pts[mi].x, pts[mi].y + 0.07, pts[mi].z); bar.renderOrder = 4;
-      riverGroup.add(bar);
+      // Mouth fan foam bar (§8.6): a soft splash across the widened mouth ONLY where the river
+      // truly meets the sea. An inland dead-end must NOT sprout a bright white foam blob — a
+      // river ending open on land is a MAP-DATA problem (B2.7: terminate into a lake/sea),
+      // so here we simply render nothing at a landlocked terminus rather than a white puck.
+      const mi = mouthAtEnd ? m : 0;
+      const mouthTile = rawTiles[mouthAtEnd ? rawTiles.length - 1 : 0];
+      if (mouthTile && atWater(mouthTile.q, mouthTile.r)) {
+        const s = halfW(mi);
+        const bar = new THREE.Mesh(new THREE.PlaneGeometry(s * 1.7, s * 1.1), riverFoamDotMat);
+        bar.rotation.x = -Math.PI / 2; bar.position.set(pts[mi].x, pts[mi].y + 0.07, pts[mi].z); bar.renderOrder = 4;
+        riverGroup.add(bar);
+      }
     }
   }
 
