@@ -1594,6 +1594,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
   const spriteGroup = new THREE.Group();
   scene.add(spriteGroup);
+  // F(iii): per-entity HUD markers (badges/counts/bars) are constant on-screen size, so when
+  // the camera pulls FAR back they stay big and collide with each other and the End Turn button.
+  // Track them and fade them out past a zoom threshold (you can't act precisely at that range).
+  const hudSprites: THREE.Sprite[] = [];
 
   // R2.5: the rotating civ-colour selection ring. A flat laurel-ring decal that lies on the
   // ground under the selected unit/city (depthTest off so it never clips through relief),
@@ -2284,9 +2288,10 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     return mat;
   }
   function makeHpBar(frac: number, width: number): THREE.Sprite {
-    const spr = new THREE.Sprite(hpBarMaterial(frac));
+    const spr = new THREE.Sprite(hpBarMaterial(frac).clone()); // clone so per-sprite opacity (zoom fade) doesn't touch the shared cache
     spr.scale.set(width, width * (18 / 96), 1); // width is a SCREEN fraction (sizeAttenuation off)
     spr.renderOrder = 997;
+    hudSprites.push(spr);
     return spr;
   }
   // §3 shared HUD glyph: a billboarded icon/label at CONSTANT on-screen size. No dark chip
@@ -2294,6 +2299,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   function hudGlyph(text: string, sizeFrac: number): THREE.Sprite {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTexture(text), transparent: true, depthWrite: false, depthTest: false, sizeAttenuation: false }));
     s.center.set(0.5, 0); s.scale.set(sizeFrac, sizeFrac, 1); s.renderOrder = 999;
+    hudSprites.push(s);
     return s;
   }
 
@@ -2306,6 +2312,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   let unitMotion: Record<string, Motion> = {};
   function placeSprites(view: BoardView): void {
     spriteGroup.clear();
+    hudSprites.length = 0; // F(iii): rebuilt each render; the loop fades them by zoom
     mixers = [];
     const liveIds = new Set<string>();
     // Fan out units that share a tile so a stacked "army" reads as a cluster.
@@ -3109,6 +3116,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       beaconRing.scale.set(rs, rs, 1);
       (beaconRing.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - rp);
       (beaconBeam.material as THREE.MeshBasicMaterial).opacity = 0.18 + 0.14 * (0.5 + 0.5 * Math.sin(hlTime * 3));
+    }
+    if (hudSprites.length) { // F(iii): fade constant-size unit/city markers as the camera pulls back
+      const cd = camera.position.distanceTo(controls.target);
+      const hudFade = 1 - Math.max(0, Math.min(1, (cd - 42) / 26)); // full ≤42u, gone by ~68u
+      for (let i = 0; i < hudSprites.length; i += 1) {
+        const s = hudSprites[i];
+        s.visible = hudFade > 0.03;
+        (s.material as THREE.SpriteMaterial).opacity = hudFade;
+      }
     }
     if (attackGroup.children.length) { // R2.6: throb the attackable rings
       const pulse = 0.45 + 0.4 * (0.5 + 0.5 * Math.sin(hlTime * 4.5));
