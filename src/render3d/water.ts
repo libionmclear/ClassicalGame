@@ -7,13 +7,14 @@ import { axialToWorld, SIZE } from "./terrain";
 
 // §2 colour anchors, sampled from the reference paintings.
 const WET_SAND = new THREE.Color(0xe2c179); // pale warm sand through shallow water
-// Round B: toned so the shallow shelf is a SUBTLE coast band, not a bright mint rim that bloom
-// blows into a UI-selection glow; and DEEP converges onto the reflective sea-plane colour
-// (board3d seaMesh 0x24446a) so the painted map-water blends into the open ocean with no
-// stair-step seam. (Full reflective-everywhere unification is the pending real-GPU step.)
-const SHALLOW  = new THREE.Color(0x5c9ea0); // muted teal shelf (was bright mint 0x8fd8b8)
-const AQUA     = new THREE.Color(0x2f7a9a); // mid blue-teal body (was neon 0x2fb0cf)
-const DEEP     = new THREE.Color(0x264a72); // matches the reflective sea plane → seamless
+// The GOOD shallow→deep gradient (restored). The glow was the reflective sea PLANE blooming, not
+// these colours — so keep them bright and let the whole ocean read like the coastal water: a
+// turquoise shelf near land deepening to rich blue. The seaMesh (open ocean) is retinted to DEEP
+// so the map-water and the ocean are one continuous colour; glare is tamed on the plane's
+// reflection only (board3d envMapIntensity), NOT by darkening these.
+const SHALLOW  = new THREE.Color(0x7fd4c4); // bright turquoise shelf near the shore
+const AQUA     = new THREE.Color(0x2fa8c8); // mid aquamarine body
+const DEEP     = new THREE.Color(0x2a5bb0); // rich lapis blue
 const FOAM     = new THREE.Color(0xeef0e6); // §4 soft WARM white — never pure #FFFFFF
 
 export interface WaterOpts {
@@ -106,10 +107,10 @@ const FRAG = /* glsl */`
     // shows through and the coastline reads as a soft gradient, not a hard opaque line —
     // ramping to fully opaque by the time it's genuinely deep. Foam stays opaque so the
     // wave line still reads.
-    // Deep map-water is only PARTLY opaque now (was 1.0) so the reflective sea plane beneath
-    // shows through — the map-water reflects like the open ocean instead of reading as a flat
-    // dark rectangle floating on a bright reflective sea (the two-mode seam).
-    float alpha = mix(0.32, 0.55, smoothstep(0.0, 0.24, s));
+    // Shallow water is translucent so the wet-sand beach shows through; deep water is nearly
+    // opaque so it SHOWS the rich painted blue (not the darker plane beneath). This is what got
+    // darkened before by dropping the deep alpha — restored.
+    float alpha = mix(0.4, 0.92, smoothstep(0.0, 0.24, s));
     alpha = max(alpha, foam);
     gl_FragColor = vec4(col, alpha);
   }
@@ -130,7 +131,7 @@ export function buildWaterSurface(opts: WaterOpts): { mesh: THREE.Mesh; tick: (t
   const segZ = Math.max(1, Math.min(300, Math.round(d * 2.2)));
   const nx = segX + 1, nz = segZ + 1;
 
-  const SHORE_RANGE = 3.0; // world units over which shallow→deep plays out — TIGHTER (was 5.0) so the shallow band hugs the coast instead of glowing far out to sea
+  const SHORE_RANGE = 4.5; // world units over which the shallow→deep gradient plays out (a broad, readable coastal shelf)
   const pos = new Float32Array(nx * nz * 3);
   const aShore = new Float32Array(nx * nz);
   const aOpen = new Float32Array(nx * nz);

@@ -51,8 +51,8 @@ const TERRAIN_COLOR: Record<string, number> = {
   highlands: 0x87896a,  // muted olive-grey upland
   mountains: 0x6c675e,  // cool grey stone
   desert: 0xd8bd78,     // bright warm sand
-  coast: 0x3c8098,      // muted shallow teal (was bright cyan 0x46a0c4 → glowed as a rim under bloom)
-  sea: 0x2a4a72         // deep blue
+  coast: 0x4bb0c8,      // bright natural shallow (the good coastal colour — the "glow" was the reflective PLANE, not this)
+  sea: 0x2a5bb0         // rich blue, matching the water DEEP + the open-ocean plane
 };
 // Five terraced elevation levels (~0.2 apart) so the land reads as an even staircase
 // you can climb to a peak: L1 plains → L2 forest → L3 hills → L4 highlands → L5
@@ -1129,7 +1129,7 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
 
   const seaMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(6000, 6000),
-    new THREE.MeshStandardMaterial({ color: 0x24446a, roughness: 0.35, metalness: 0.15 })
+    new THREE.MeshStandardMaterial({ color: 0x2a5bb0, roughness: 0.35, metalness: 0.15 }) // matches the water DEEP colour so the open ocean is the SAME rich blue as the coastal water — no dark band, no seam
   );
   seaMesh.rotation.x = -Math.PI / 2;
   // THE sea surface. It sits at sea level (a hair under the tint hexes) and runs
@@ -1149,9 +1149,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     waterNormal.repeat.set(220, 220);
     seaMat.normalMap = waterNormal;
     seaMat.normalScale = new THREE.Vector2(0.32, 0.32);
-    seaMat.roughness = 0.4;       // rougher → a soft sheen, not a mirror that blooms the sun to a white blowout
+    seaMat.roughness = 0.46;      // a soft sheen, not a mirror — the rich blue base shows, the sky adds a glint (no white blowout)
     seaMat.metalness = 0.05;
-    seaMat.envMapIntensity = 0.95; // was 1.4 — dimmer so the sky reflection stays below the bloom threshold (but not so dim the sea reads black)
+    seaMat.envMapIntensity = 0.6; // low so the reflection is a sheen ON the blue, never a glare that hides the colour
   }
 
   // ---- Sky weather: a soft radial texture reused for the sun disc and clouds ---
