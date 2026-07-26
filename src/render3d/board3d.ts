@@ -243,6 +243,9 @@ function shadowTexture(): THREE.Texture {
   return shadowTex;
 }
 const shadowGeo = new THREE.PlaneGeometry(1, 1);
+// Round E grounding: a flat (ground-lying) blob-shadow quad for scatter props, instanced.
+const scatterShadowGeo = new THREE.PlaneGeometry(1, 1); scatterShadowGeo.rotateX(-Math.PI / 2);
+const SCATTER_NO_SHADOW = /grass|wildflower|heather/; // ground-cover casts no meaningful shadow
 
 // R2.5: the selection ring — a laurel-segmented annulus on transparent, drawn WHITE so it
 // can be tinted to any civ colour at runtime and spun (rotate the texture) as a decal that
@@ -1338,6 +1341,8 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
   // §6 climate-aware scatter on the relief: promoted prop models, instanced per tile.
   const reliefScatter = new THREE.Group();
   scene.add(reliefScatter);
+  // Round E: shared material for the instanced blob shadows under scatter props.
+  const scatterShadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false, opacity: 0.5 });
   // §7 hex-grid overlay — thin dashed tessera lines draped on the terrain surface, low
   // opacity so it reads as a subtle grid, never a chessboard. Rebuilt + distance-culled
   // with the scatter (follows the camera).
@@ -1502,15 +1507,19 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         arr.push({ x: c.x + p.dx, z: c.z + p.dz, yaw: p.yaw, scale: sc }); total += 1;
       }
     }
+    // Round E grounding: collect a blob shadow under each prop that has real volume (trees,
+    // rocks, trunks — not ground cover), built as ONE instanced mesh so it stays cheap.
+    const shadowData: Array<{ x: number; y: number; z: number; s: number }> = [];
     for (const [key, places] of byKey) {
       const model = propModels.get(key);
       if (!model) continue;
       const inst = new THREE.InstancedMesh(model.geo, model.mat, places.length);
       inst.name = key.replace("scatter/", "");         // one instanced batch per prop type (§6)
       // Gate 1: scatter does NOT cast/receive real shadows — 60 props × 27k verts would
-      // dominate the shadow pass. GTAO (post-FX) supplies contact darkening instead.
+      // dominate the shadow pass. Cheap instanced BLOB shadows below ground them instead.
       inst.castShadow = false; inst.receiveShadow = false;
       const propH = (PROP_H[key] ?? 0.4);
+      const shadowed = !SCATTER_NO_SHADOW.test(key);
       for (let i = 0; i < places.length; i += 1) {
         const p = places[i];
         // Item 1: seat on the MESH height (not the analytic surface, which has sub-grid
@@ -1521,9 +1530,22 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         _iq.setFromAxisAngle(_scUp, p.yaw);
         _iv.set(p.x, y, p.z); _isc.setScalar(p.scale);
         inst.setMatrixAt(i, _im.compose(_iv, _iq, _isc));
+        if (shadowed) shadowData.push({ x: p.x, y: surfY, z: p.z, s: propH * p.scale });
       }
       inst.instanceMatrix.needsUpdate = true;
       reliefScatter.add(inst);
+    }
+    if (shadowData.length) {
+      const sh = new THREE.InstancedMesh(scatterShadowGeo, scatterShadowMat, shadowData.length);
+      sh.name = "scatter-shadows"; sh.renderOrder = 0; sh.castShadow = false; sh.receiveShadow = false;
+      const idn = new THREE.Quaternion();
+      for (let i = 0; i < shadowData.length; i += 1) {
+        const d = shadowData[i], size = d.s * 1.35 + 0.14; // footprint ~ the prop's width
+        _iv.set(d.x, d.y + 0.02, d.z); _isc.set(size, 1, size);
+        sh.setMatrixAt(i, _im.compose(_iv, idn, _isc));
+      }
+      sh.instanceMatrix.needsUpdate = true;
+      reliefScatter.add(sh);
     }
   }
   // Promoted terrain textures (slope-rock, alpine-snow, cliff-strata, mountain-scree),
