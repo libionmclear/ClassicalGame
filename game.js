@@ -6108,6 +6108,23 @@
     // Wound the human's units to a fraction of max HP — exercises the §3 HP-bar overlay
     // (the bar is hidden at full HP and appears only on damage). Pass q,r to wound just
     // the unit on one tile, leaving the rest full so "hidden at full HP" is visible too.
+    // Place a tile improvement (e.g. "pasture") near the capital to check its render.
+    setImprovement: function (imp, q, r) {
+      if (!state) return null;
+      var t;
+      if (q != null) { t = state.map.tiles[q + "," + r]; }
+      else {
+        var cap = Object.values(state.map.cities).filter(function (c) { return c.ownerId === HUMAN_ID; })[0];
+        if (!cap) return null;
+        var NB = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+        for (var i = 0; i < NB.length; i++) {
+          var nq = cap.position.q + NB[i][0], nr = cap.position.r + NB[i][1], tt = state.map.tiles[nq + "," + nr];
+          if (tt && tt.terrain !== "sea" && tt.terrain !== "coast" && !tt.improvement) { t = tt; q = nq; r = nr; break; }
+        }
+      }
+      if (!t) return null; t.improvement = imp; render();
+      return { q: q, r: r, imp: imp };
+    },
     setHp: function (frac, q, r) {
       if (!state) return null;
       var us = Object.values(state.map.units).filter(function (u) { return u.ownerId === HUMAN_ID; });
