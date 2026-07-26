@@ -59,7 +59,10 @@ test("flows smoothly between hexes — no cliffs across a plains→mountain seam
   assert.ok(maxStep < 0.15, `slope is continuous (max step ${maxStep.toFixed(3)})`);
 });
 
-test("blends biome colour by the same kernel", () => {
+test("per-hex land fill: a hex keeps its own colour, softening only toward neighbours", () => {
+  // Round A (terrain legibility): COLOUR is a tight, land-only per-hex fill (height still uses the
+  // wide smooth blend). So a hex's own colour dominates its centre — distinct fills, not one wash —
+  // and softens only in a narrow band toward an adjacent LAND hex.
   const cells = allPlains();
   const at = (q: number, r: number): TileSample | undefined => {
     const t = cells[`${q},${r}`];
@@ -67,8 +70,11 @@ test("blends biome colour by the same kernel", () => {
     return { elev: elevationOf(t), r: q === 0 && r === 0 ? 1 : 0, g: 0, b: 0 };
   };
   const c = axialToWorld(0, 0);
-  const s = sampleSurface(c.x, c.z, at);
-  assert.ok(s.r > 0.4 && s.r < 1.0, "the centre's colour dominates but neighbours soften it");
+  const centre = sampleSurface(c.x, c.z, at);
+  assert.ok(centre.r > 0.9, "the hex's own colour dominates its centre (a distinct fill, not a wash)");
+  const n = axialToWorld(1, 0);
+  const mid = sampleSurface((c.x + n.x) / 2, (c.z + n.z) / 2, at);
+  assert.ok(mid.r < centre.r, "the fill softens toward an adjacent land hex (land-to-land blend)");
 });
 
 test("off-map samples fall back to sea level", () => {
