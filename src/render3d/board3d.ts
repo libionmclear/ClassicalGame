@@ -2314,6 +2314,11 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     spriteGroup.clear();
     hudSprites.length = 0; // F(iii): rebuilt each render; the loop fades them by zoom
     mixers = [];
+    // B2.5: terrain lookup so a coastal city can be nudged inland off the water edge.
+    const terrainByKey = new Map<string, string>();
+    for (const tv of view.tiles) terrainByKey.set(tv.q + "," + tv.r, tv.t);
+    const isWaterT = (q: number, r: number): boolean => { const t = terrainByKey.get(q + "," + r); return t === undefined || t === "sea" || t === "coast" || t === "great-river"; };
+    const NB6c = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
     const liveIds = new Set<string>();
     // Fan out units that share a tile so a stacked "army" reads as a cluster.
     const tileUnitCount: Record<string, number> = {};
@@ -2334,6 +2339,15 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
         const ord = tileUnitOrd[tk] = (tileUnitOrd[tk] || 0);
         tileUnitOrd[tk] = ord + 1;
         if (stackN > 1) { const p = squadPositions(stackN)[ord] || [0, 0]; ox = p[0] * 2.4; oz = p[1] * 2.4; }
+      }
+      // B2.5 siting: nudge a COASTAL city INLAND (away from its water neighbours) so its
+      // platform sits fully on land with the §6b shoreline in front — never overhanging the sea.
+      if (isCity) {
+        let ix = 0, iz = 0, iw = 0;
+        for (const n of NB6c) {
+          if (isWaterT(sv.q + n[0], sv.r + n[1])) { const nw = axialToWorld(sv.q + n[0], sv.r + n[1]); ix += w.x - nw.x; iz += w.z - nw.z; iw += 1; }
+        }
+        if (iw > 0 && iw < 6) { const l = Math.hypot(ix, iz) || 1; ox += (ix / l) * 0.18; oz += (iz / l) * 0.18; }
       }
 
       // Prefer real glTF art if the conventional file exists; else the procedural
