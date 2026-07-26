@@ -106,7 +106,10 @@ const FRAG = /* glsl */`
     // shows through and the coastline reads as a soft gradient, not a hard opaque line —
     // ramping to fully opaque by the time it's genuinely deep. Foam stays opaque so the
     // wave line still reads.
-    float alpha = mix(0.30, 1.0, smoothstep(0.0, 0.24, s));
+    // Deep map-water is only PARTLY opaque now (was 1.0) so the reflective sea plane beneath
+    // shows through — the map-water reflects like the open ocean instead of reading as a flat
+    // dark rectangle floating on a bright reflective sea (the two-mode seam).
+    float alpha = mix(0.32, 0.55, smoothstep(0.0, 0.24, s));
     alpha = max(alpha, foam);
     gl_FragColor = vec4(col, alpha);
   }

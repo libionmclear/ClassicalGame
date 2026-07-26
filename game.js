@@ -283,7 +283,7 @@
     highlands: "#87896a",
     mountains: "#6c675e",
     desert: "#d8bd78",
-    coast: "#46a0c4",
+    coast: "#3c8098",
     sea: "#2a4a72"
   };
   const WEATHER_INFO = {

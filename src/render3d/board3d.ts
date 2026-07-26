@@ -51,7 +51,7 @@ const TERRAIN_COLOR: Record<string, number> = {
   highlands: 0x87896a,  // muted olive-grey upland
   mountains: 0x6c675e,  // cool grey stone
   desert: 0xd8bd78,     // bright warm sand
-  coast: 0x46a0c4,      // bright shallow cyan
+  coast: 0x3c8098,      // muted shallow teal (was bright cyan 0x46a0c4 → glowed as a rim under bloom)
   sea: 0x2a4a72         // deep blue
 };
 // Five terraced elevation levels (~0.2 apart) so the land reads as an even staircase
@@ -550,7 +550,10 @@ function buildStandard(color: string, h: number): THREE.Group {
   shaft.position.y = h / 2; g.add(shaft);
   const banner = new THREE.Mesh(new THREE.PlaneGeometry(h * 0.34, h * 0.28), new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0, side: THREE.DoubleSide, emissive: new THREE.Color(color), emissiveIntensity: 0.1 }));
   banner.position.set(h * 0.18, h * 0.8, 0); g.add(banner);
-  const aquila = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), new THREE.MeshStandardMaterial({ color: 0xd8b45a, roughness: 0.3, metalness: 0.6 }));
+  // NB: metalness must stay LOW — the scene envMap is only a faint sheen (0.6), so a metallic
+  // sphere reflects the dark environment and renders as a BLACK ORB floating over the legion.
+  // Diffuse gold + a little emissive reads as gold on any GPU without needing a bright envMap.
+  const aquila = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), new THREE.MeshStandardMaterial({ color: 0xd8b45a, roughness: 0.5, metalness: 0.1, emissive: 0x4a3410, emissiveIntensity: 0.5 }));
   aquila.position.y = h + 0.01; g.add(aquila);
   return g;
 }
@@ -1144,9 +1147,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     waterNormal.repeat.set(220, 220);
     seaMat.normalMap = waterNormal;
     seaMat.normalScale = new THREE.Vector2(0.32, 0.32);
-    seaMat.roughness = 0.22;
-    seaMat.metalness = 0.1;
-    seaMat.envMapIntensity = 1.4;
+    seaMat.roughness = 0.4;       // rougher → a soft sheen, not a mirror that blooms the sun to a white blowout
+    seaMat.metalness = 0.05;
+    seaMat.envMapIntensity = 0.95; // was 1.4 — dimmer so the sky reflection stays below the bloom threshold (but not so dim the sea reads black)
   }
 
   // ---- Sky weather: a soft radial texture reused for the sun disc and clouds ---
@@ -1412,9 +1415,9 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
     "scatter/olive": 0x8a9a5c,
     "scatter/oak": 0x63813e,
     "scatter/beech": 0x6f8a46,
-    "scatter/stone-pine": 0x55763a,
-    "scatter/cypress": 0x4f7038,
-    "scatter/fir": 0x53743a,
+    "scatter/stone-pine": 0x5f8342,
+    "scatter/cypress": 0x5a8040,
+    "scatter/fir": 0x5f8347,
     "scatter/date-palm": 0x82934c,
     // Dark-tree bug (Round D): these green wetland plants were NOT tinted, so the white-tree
     // emissive-kill above stripped their green and left a near-black albedo (the dark "tree"
@@ -1502,9 +1505,14 @@ export function createBoard(canvas: HTMLCanvasElement): BoardController {
       const mtnRock = tv.t === "mountains" ? MOUNTAIN_ROCK_SCALE : 1; // §2 exemption
       for (const p of places) {
         if (total >= HARD_CAP) break;
+        const px = c.x + p.dx, pz = c.z + p.dz;
+        // Don't let a prop's in-hex offset spill it onto an adjacent WATER tile (props floating
+        // out in a lake). Reverse the axial map and drop any prop that lands on a water hex.
+        const pr = Math.round(pz / (1.5 * SIZE)), pq = Math.round(px / (SIZE * Math.sqrt(3)) - pr / 2);
+        if (waterKeys.has(pq + "," + pr)) continue;
         let arr = byKey.get(p.key); if (!arr) { arr = []; byKey.set(p.key, arr); }
         const sc = isRockProp(p.key) ? p.scale * mtnRock : p.scale;
-        arr.push({ x: c.x + p.dx, z: c.z + p.dz, yaw: p.yaw, scale: sc }); total += 1;
+        arr.push({ x: px, z: pz, yaw: p.yaw, scale: sc }); total += 1;
       }
     }
     // Round E grounding: collect a blob shadow under each prop that has real volume (trees,
