@@ -3262,6 +3262,11 @@
         const move = current.id === HUMAN_ID
           ? '<span class="ti-move ti-you">your move</span>'
           : '<span class="ti-move">' + (current.civ || current.id) + " moving…</span>";
+        // Border is gold by default; RED is reserved for the closing turns (a real warning),
+        // not shown just because the player's civ colour happens to be red.
+        const turnsLeft = state.turnLimit ? state.turnLimit - state.turn : Infinity;
+        const low = state.turnLimit && turnsLeft <= Math.max(5, Math.round(state.turnLimit * 0.12));
+        turnIndicatorEl.className = "turn-indicator" + (low ? " ti-low" : "");
         turnIndicatorEl.innerHTML =
           '<span class="ti-civ" style="color:' + activeColor + '">' + (current.civ || current.id) +
           "</span> · Turn " + nOf + move;
@@ -3662,14 +3667,16 @@
     ttLinkPaths = frag;
   }
 
+  // Resource names unified to Latin (Populus / Frumentum / Opera / Denarii / Impensa / Scientia)
+  // — no more half-Latin, half-English HUD. Keys match the display labels used in renderHud.
   const RES_TITLES = {
     Populus: "Populus — your people. Cities grow as they bank food.",
-    Food: "Food — net per turn after your army's upkeep (1 food per soldier beyond a free garrison of one per city). A surplus grows your cities; a deficit (red) stalls growth until you feed or shrink the army.",
-    "Labor/turn": "Labor — production made across all your cities each turn. It is NOT a shared pool: every city banks its OWN labor and builds only from that, so select a city to see what it has and how long its work will take.",
+    Frumentum: "Frumentum (grain) — net food per turn after your army's upkeep (1 per soldier beyond a free garrison of one per city). A surplus grows your cities; a deficit (red) stalls growth until you feed or shrink the army.",
+    Opera: "Opera (labour) — production made across all your cities each turn. It is NOT a shared pool: every city banks its OWN labour and builds only from that, so select a city to see what it has and how long its work will take.",
     Denarii: "Denarii — a shared treasury from markets and trade; pays upkeep and can rush-buy.",
     Scientia: "Scientia — learning. A shared pool that accrues each turn and buys techs.",
     Doctrinae: "Doctrinae — technologies you have mastered.",
-    Upkeep: "Upkeep — gold your standing army costs every turn (each unit has a maintenance cost). It is already subtracted from your Denarii income; a bigger army means a smaller treasury."
+    Impensa: "Impensa (upkeep) — gold your standing army costs every turn (each unit has a maintenance cost). It is already subtracted from your Denarii income; a bigger army means a smaller treasury."
   };
 
   function renderHud() {
@@ -3691,12 +3698,12 @@
     // resource color (§2 — the HUD teaches the color code, panels reuse it).
     const resources = [
       { ico: "ic-people", key: "pop", val: pop, lbl: "Populus", delta: null },
-      { ico: "ic-wheat", key: "food", val: (netFood >= 0 ? "+" : "") + netFood + "/t", lbl: "Food", delta: null, warn: netFood < 0 },
+      { ico: "ic-wheat", key: "food", val: (netFood >= 0 ? "+" : "") + netFood + "/t", lbl: "Frumentum", delta: null, warn: netFood < 0 },
       // Labor is per-city, not a shared pool — show the empire's output RATE, not
       // a banked total (which read as spendable and confused players).
-      { ico: "ic-hammer", key: "production", val: (inc.production || 0) + "/t", lbl: "Labor", delta: null },
+      { ico: "ic-hammer", key: "production", val: (inc.production || 0) + "/t", lbl: "Opera", delta: null },
       { ico: "ic-coin", key: "gold", val: rome.gold, lbl: "Denarii", delta: inc.gold },
-      { ico: "ic-shield", key: "upkeep", val: "−" + upkeep + "/t", lbl: "Upkeep", delta: null, warn: upkeep > 0 && (inc.gold || 0) < 0, title: "Army upkeep — gold each unit costs to maintain per turn (" + upkeep + " total)." },
+      { ico: "ic-shield", key: "upkeep", val: "−" + upkeep + "/t", lbl: "Impensa", delta: null, warn: upkeep > 0 && (inc.gold || 0) < 0, title: "Army upkeep — gold each unit costs to maintain per turn (" + upkeep + " total)." },
       { ico: "ic-flask", key: "science", val: rome.science, lbl: "Scientia", delta: inc.science }
     ];
     resourceBarEl.innerHTML = resources
